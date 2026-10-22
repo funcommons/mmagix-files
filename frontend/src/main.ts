@@ -112,8 +112,11 @@ const boot = bootApp({
     // 配置注入的非 lazy 插件：启动即载（v1.2 起单文件模式同支持——内存文件独立区的应用命中来源）；
     // lazy 插件经 ensureApps 在打开链未命中时触发（loader 幂等去重）
     if (cfg.mode === 'workspace' || cfg.mode === 'file') {
+      // file 模式（一百四十二番宿主移植令「默认所有插件都要加载」）: 插件全量预载——
+      // lazy 语义让位「打开方式」切换器的全量命中面; ensureApps 兜底链保留不动。
+      // workspace 模式维持 lazy===false 既有语义。
       for (const p of cfg.plugins ?? []) {
-        if (p.lazy === false) void pluginLoader.load(p)
+        if (cfg.mode === 'file' || p.lazy === false) void pluginLoader.load(p)
       }
       return {
         ensureApps: async (entry, opts) => {
