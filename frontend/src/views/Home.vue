@@ -31,8 +31,6 @@ import { FcButton, FcDrawer, FcPopover, FcSectionCard, FcSegmented, toast } from
 import { usePreferenceStore } from '@/store/preference'
 import { BOOT_KEY } from '@/boot'
 import { SdkError } from '@/sdk/errorCodes'
-import type { AppDefinition } from '@/sdk/types'
-import type { FileRef } from '@/apps/registry'
 import { setupWorkspace } from '@/files/setup'
 import { createPreview } from '@/files/preview'
 import { isMemKey, memDelete, setMemFileOpener } from '@/files/mem-store'
@@ -100,20 +98,6 @@ function basenameOf(url: string): string {
 }
 const fileName = fileConfig ? (fileConfig.name ?? basenameOf(fileConfig.source.url)) : ''
 
-// 一百四十二番宿主移植令: file 模式应用切换器——registry 全量命中应用（注册序）,
-// 多应用才出切换器; 切换=preview.open({appId}) 重渲染（工作台「打开方式」同链）
-const fileApps = ref<AppDefinition[]>([])
-const fileAppId = ref('')
-function refreshFileApps() {
-  if (!fileConfig || !boot || !boot.ok) return
-  const fileRef: FileRef = { name: fileName, size: 0 }
-  fileApps.value = boot.handle.registry.listMatches(fileRef)
-  fileAppId.value = fileApps.value[0]?.id ?? ''
-}
-function switchFileApp(id: string) {
-  fileAppId.value = id
-  void preview?.open({ key: fileName, name: fileName, size: 0, isDir: false }, { appId: id })
-}
 /** 单文件模式：无壳（无 header/卡片包裹）——文件名与编辑态由应用自渲染（Univer/md 工具栏等）。
  *  无源装载（source.url=''，v1.2 容器模式）：boot 不自动打开，舞台留白等 uploadFiles */
 const fileSourceUrl = fileConfig ? fileConfig.source.url.trim() : ''
@@ -639,8 +623,8 @@ onMounted(() => {
     })
     // 无源装载（url=''）不自动打开——boot 后舞台留白等 uploadFiles（防内存文件加载时源文件闪现）
     if (fileSourceUrl) {
-      void preview.open({ key: fileName, name: fileName, size: 0, isDir: false })
-      refreshFileApps()
+      void preview.open({ key: fileName, name: fileName, size: 0, isDir: false },
+        fileConfig.appId ? { appId: fileConfig.appId } : undefined)
     }
   }
 })
@@ -1005,14 +989,6 @@ if (ws) {
     <!-- ③ file：单文件预览（F2：registry 按 name 解析默认应用渲染）。
          v1.2 无壳：无 header/无卡片包裹——4px 内边距铺满视口，文件名/编辑态由应用自渲染 -->
     <div v-else-if="fileConfig" class="file-view-host">
-      <div v-if="fileApps.length > 1" class="file-view-host__switch">
-        <span class="file-view-host__switch-label">{{ t('files.open-with') }}</span>
-        <select class="file-view-host__switch-select" :value="fileAppId"
-          :aria-label="t('files.open-with')" data-testid="file-app-switch"
-          @change="switchFileApp(($event.target as HTMLSelectElement).value)">
-          <option v-for="a in fileApps" :key="a.id" :value="a.id">{{ t(a.label ?? a.id) }}</option>
-        </select>
-      </div>
       <div ref="previewEl" class="ws__preview-host" />
     </div>
 

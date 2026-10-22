@@ -116,6 +116,9 @@ export interface SingleFileConfig {
   /** 只读=无 save 段；可写=有 save 段 */
   save?: FileSave
   name?: string
+  /** 可选：指定打开应用（registry id）——缺省=按扩展名默认解析（注册序第一个命中）。
+   *  一百四十二番宿主移植: 预览头「打开方式」切换器由宿主驱动, 经本位换装应用。 */
+  appId?: string
   appearance?: AppearanceConfig
   features?: Record<string, boolean>
   /** 可选：宿主 origin 白名单；缺省时装配层从 document.referrer 推导（§4.1b origin 校验同工作台） */
