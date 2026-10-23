@@ -1022,7 +1022,9 @@ if (ws) {
   }
 
   /* 嵌入态自然流（宿主同源自动高度, 滚动权交宿主面板单滚动——双滚条拆除）:
-     不锁视口高/不内部滚动, 文档随内容撑高, 宿主量 scrollHeight 撑 iframe */
+     不锁视口高/不内部滚动, 文档随内容撑高, 宿主量 scrollHeight 撑 iframe。
+     舞台 70vh 实高底座: 编辑器（Monaco 需确定实高测量, C1 口径）与 srcdoc 净化框
+     （absolute 根不贡献高度）在自然流下塌缩防御——块流应用（md 渲染）照常撑高。 */
   &.is-file.is-embed {
     height: auto;
     min-height: 0;
@@ -1030,11 +1032,13 @@ if (ws) {
 
     .file-view-host .ws__preview-host {
       overflow: visible;
-      flex: 0 0 auto;
 
+      /* 舞台确定实高 70vh（Monaco 创建测量/html 净化框 absolute 根依赖实高）;
+         overflow visible → 块流应用（md 渲染）超界内容照常绘制并计入文档 scrollHeight,
+         宿主量高撑 iframe——单滚动不受扰 */
       :deep(.mmf-preview-stage) {
-        flex: 0 0 auto;
-        min-height: 0;
+        height: 70vh;
+        overflow: visible;
       }
     }
   }
