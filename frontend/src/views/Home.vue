@@ -97,6 +97,9 @@ function basenameOf(url: string): string {
   }
 }
 const fileName = fileConfig ? (fileConfig.name ?? basenameOf(fileConfig.source.url)) : ''
+/** 嵌入态判定（一百四十二番终形: 宿主同源自动高度——iframe 内 self!==top 时文件页自然流,
+ *  不锁 100vh/不内部滚动, 内容撑高文档由宿主量高; 独立窗（self===top）维持视口滚动形态 */
+const isEmbeddedFile = fileConfig ? window.self !== window.top : false
 
 /** 单文件模式：无壳（无 header/卡片包裹）——文件名与编辑态由应用自渲染（Univer/md 工具栏等）。
  *  无源装载（source.url=''，v1.2 容器模式）：boot 不自动打开，舞台留白等 uploadFiles */
@@ -798,7 +801,7 @@ if (ws) {
 </script>
 
 <template>
-  <div class="home-page" :class="{ 'is-workspace': ws, 'is-file': fileConfig }">
+  <div class="home-page" :class="{ 'is-workspace': ws, 'is-file': fileConfig, 'is-embed': isEmbeddedFile }">
     <!-- ① boot 失败：配置错误卡（保留 M0） -->
     <FcSectionCard v-if="boot && !boot.ok" class="home-hero" padding="lg">
       <h1 class="home-hero__title">{{ t('boot.config-error') }}</h1>
@@ -1016,6 +1019,24 @@ if (ws) {
     height: 100vh;
     min-height: 768px;
     padding: 4px;
+  }
+
+  /* 嵌入态自然流（宿主同源自动高度, 滚动权交宿主面板单滚动——双滚条拆除）:
+     不锁视口高/不内部滚动, 文档随内容撑高, 宿主量 scrollHeight 撑 iframe */
+  &.is-file.is-embed {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+
+    .file-view-host .ws__preview-host {
+      overflow: visible;
+      flex: 0 0 auto;
+
+      :deep(.mmf-preview-stage) {
+        flex: 0 0 auto;
+        min-height: 0;
+      }
+    }
   }
 
   &.is-workspace {
