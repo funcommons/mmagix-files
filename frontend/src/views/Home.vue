@@ -1033,11 +1033,13 @@ if (ws) {
     .file-view-host .ws__preview-host {
       overflow: visible;
 
-      /* 舞台确定实高 70vh（Monaco 创建测量/html 净化框 absolute 根依赖实高）;
-         overflow visible → 块流应用（md 渲染）超界内容照常绘制并计入文档 scrollHeight,
-         宿主量高撑 iframe——单滚动不受扰 */
+      /* 舞台确定实高 calc(100vh - 12px)（用户令「都要 100vh」拍板为 -12px 变体:
+         编辑器满幅近乎无空白; Monaco 创建测量/html 净化框 absolute 根依赖实高）。
+         -12px 兼拆 vh 反馈环——舞台恒比 iframe 视口矮 12px, scrollHeight≤视口-12,
+         宿主量高=舞台 scrollHeight+12 收敛于定值（生长方向不存在）; overflow visible
+         → 块流应用（md 渲染）超界内容照常绘制并计入舞台 scrollHeight */
       :deep(.mmf-preview-stage) {
-        height: 70vh;
+        height: calc(100vh - 12px);
         overflow: visible;
       }
     }
