@@ -264,6 +264,13 @@ export function renderEditor(
       if (!disposed && editor === ed && ed.getText() === snapshot) clearDirty()
     } catch (err) {
       console.warn('MD_SAVE_ERR', String(err)?.slice(0, 200))
+      // 可见化出口（宿主可写域补口）: ctx 带 notifyAppError 即上报宿主 bus 'error'
+      // （凭据拒 4002/4003 → 宿主换签重载; 其余码 → 宿主 toast）
+      const sdkErr = err as { code?: unknown; message?: unknown } | null
+      ctx.notifyAppError?.({
+        code: typeof sdkErr?.code === 'number' ? sdkErr.code : 0,
+        message: typeof sdkErr?.message === 'string' ? sdkErr.message : String(err),
+      })
     } finally {
       saving = false
     }

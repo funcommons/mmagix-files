@@ -270,6 +270,8 @@ export interface AppCtx {
   theme: Record<string, string>
   /** 可选能力：媒体直链（S3=预签名 URL / url source=原始 GET URL）——渲染器用 <video src> 拿浏览器原生 Range */
   getMediaUrl?(key: string): string
+  /** 可选能力：应用级故障上报 → 宿主 bus 'error' 事件（保存链失败/凭据拒等——渲染器静默吞错的可见化出口, 宿主据此 toast/换签重载） */
+  notifyAppError?(err: { code: number; message: string }): void
 }
 
 export type AppAction = 'preview' | 'edit' | 'open-with'

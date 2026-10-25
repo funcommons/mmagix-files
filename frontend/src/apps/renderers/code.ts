@@ -574,7 +574,14 @@ export const codeEditorRenderer: AppDefinition['renderer'] = async (
       dirty = false
     } catch (err) {
       if (isWriteDenied(err)) enterReadonly()
-      // 其余失败：保持 dirty（beforeDispose 仍会拦），不误报已保存；错误由调用链感知
+      // 其余失败：保持 dirty（beforeDispose 仍会拦），不误报已保存
+      // 可见化出口（一百四十二番追补·宿主可写域补口）：ctx 带 notifyAppError 即上报宿主
+      // bus 'error'（凭据拒 4002/4003 → 宿主换签重载; 其余码 → 宿主 toast）
+      const sdkErr = err as { code?: unknown; message?: unknown } | null
+      ctx.notifyAppError?.({
+        code: typeof sdkErr?.code === 'number' ? sdkErr.code : 0,
+        message: typeof sdkErr?.message === 'string' ? sdkErr.message : String(err),
+      })
     } finally {
       saving = false
       syncBar()

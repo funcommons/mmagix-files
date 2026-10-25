@@ -574,6 +574,10 @@ onMounted(() => {
         ws.stores.tree.applyChange(payload)
         bootHandle.bus.emit('fileChanged', payload)
       },
+      // 应用级故障出口（渲染失败/保存链失败——宿主 toast/换签; 契约 §六 error 事件第二源）
+      notifyAppError: (err) => {
+        bootHandle.bus.emit('error', err)
+      },
       ensureApps: bootHandle.ensureApps,
       canDownload: features.value.download !== false,
       // Lane H1：open 链接管容器 → tab 归位 + activeKey 同步（预览 tab 条数据源）
@@ -620,6 +624,10 @@ onMounted(() => {
       // Lane F3（JSSDK §四）：file 模式 save 回写成功 → fileChanged(put) 外发宿主（无树可维护）。
       notifyFileChanged: (payload) => {
         bootHandle.bus.emit('fileChanged', payload)
+      },
+      // 应用级故障出口（渲染失败/保存链失败——宿主 toast/换签重载; 契约 §六 error 事件第二源）
+      notifyAppError: (err) => {
+        bootHandle.bus.emit('error', err)
       },
       ensureApps: bootHandle.ensureApps,
       canDownload: features.value.download !== false,

@@ -51,6 +51,8 @@ export interface PreviewOptions {
   t: (key: string, params?: Record<string, unknown>) => string
   theme: Record<string, string>
   notifyFileChanged: (payload: { key: string; action: 'put' | 'delete' | 'rename'; from?: string }) => void
+  /** 应用级故障出口（缺省=不上报）: 渲染失败/保存链失败 → 宿主 bus 'error'（toast/换签重载） */
+  notifyAppError?: (err: { code: number; message: string }) => void
   /** 下载处理器（fallback/错误节点下载钮用；缺省=提示文案 only） */
   onDownload?: (entry: S3ObjectSummary) => void
   /** lazy 插件触发（registry 未命中时先加载配置插件再重解析一次；契约：lazy 默认开、首匹配才 import） */
@@ -104,6 +106,8 @@ type RenderOutcome = { status: 'ok'; instance: AppInstance | null } | { status: 
 export function createPreview(opts: PreviewOptions): PreviewHandle {
   const { container, registry, datasource, t, theme, notifyFileChanged, onDownload, ensureApps, confirmLargeFile, onOpened } =
     opts
+  /** 应用级故障出口（缺省=不上报——渲染器 ctx 不带 notifyAppError 键, 探测回落静默） */
+  const notifyAppError = opts.notifyAppError
   /** 下载门：缺省 true；fallback 与错误节点下载钮共用 */
   const canDownload = opts.canDownload !== false
   let instance: AppInstance | null = null
@@ -406,6 +410,8 @@ export function createPreview(opts: PreviewOptions): PreviewHandle {
       notifyFileChanged,
       // 媒体直链能力透传（s3=presigned URL / url source=原始 URL；缺省不带，渲染器探测回落 Blob）
       ...(datasource.getMediaUrl ? { getMediaUrl: (key: string) => datasource.getMediaUrl!(key) } : {}),
+      // 应用级故障出口透传（宿主接 bus 'error'——toast/换签重载; 缺省不带）
+      ...(notifyAppError ? { notifyAppError: (err: { code: number; message: string }) => notifyAppError!(err) } : {}),
     })
     const el = document.createElement('div')
     el.className = 'mmf-preview-stage'
@@ -432,6 +438,12 @@ export function createPreview(opts: PreviewOptions): PreviewHandle {
     if (outcome.status === 'failed') {
       container.innerHTML = ''
       renderErrorNode(entry, errMessage(outcome.error), openOpts)
+      // 渲染失败上报宿主（源 401/403 → SdkError 4002/4003——宿主据此换签重载; 其余码 toast）
+      const sdkErr = outcome.error as { code?: unknown; message?: unknown } | null
+      notifyAppError?.({
+        code: typeof sdkErr?.code === 'number' ? sdkErr.code : 0,
+        message: typeof sdkErr?.message === 'string' ? sdkErr.message : errMessage(outcome.error),
+      })
       return
     }
     instance = outcome.instance
