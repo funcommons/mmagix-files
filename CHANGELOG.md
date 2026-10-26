@@ -12,6 +12,12 @@
   `clientProtocol.test.ts` 双侧比对（挂 frontend 套件）。单测 21 例（消息泵 harness：
   握手/call-reply/超时/终态/节流/重装坑全链）。
 
+### 变更
+
+- **doc/ppt 下载兜底定向提示**：旧版 Office 二进制（.doc/.ppt）打开时由泛化「暂无应用」升级为
+  文件名 + 原因 + 转存建议定向文案（另存 .docx/.pptx 再上传即可在线查看）；其余未知类型保持泛化
+  文案。词典 `files.preview-fallback-doc/ppt`（中/英）。
+
 ## [1.1.0] — 2026-10-26
 
 主题：**统一编辑工具栏 + html-viewer**。协议无破坏性变更，v1.0.0 接入方升级无感（纯应用层增强）。

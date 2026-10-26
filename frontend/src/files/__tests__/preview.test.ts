@@ -114,6 +114,23 @@ describe('向后兼容（open/clear/current 既有语义不变）', () => {
     expect(onDownload).toHaveBeenCalledWith(A)
   })
 
+  it('fallback 定向提示：doc/ppt 出文件名+转存建议文案；未知扩展名保持泛化文案', async () => {
+    const { container, preview } = makePreview(makeRegistry(), { onDownload: vi.fn() })
+    await preview.open({ key: 'd/旧文档.doc', name: '旧文档.doc', size: 1, isDir: false })
+    let wrap = container.querySelector('.mmf-preview-fallback')!
+    expect(wrap.querySelector('.mmf-preview-fallback__name')?.textContent).toBe('旧文档.doc')
+    expect(wrap.textContent).toContain('files.preview-fallback-doc')
+
+    await preview.open({ key: 'd/旧演示.ppt', name: '旧演示.ppt', size: 1, isDir: false })
+    wrap = container.querySelector('.mmf-preview-fallback')!
+    expect(wrap.textContent).toContain('files.preview-fallback-ppt')
+
+    await preview.open({ key: 'd/x.unknown', name: 'x.unknown', size: 1, isDir: false })
+    wrap = container.querySelector('.mmf-preview-fallback')!
+    expect(wrap.textContent).toContain('files.preview-fallback')
+    expect(wrap.textContent).not.toContain('preview-fallback-doc')
+  })
+
   it('切换文件：旧实例先 dispose，容器替换为新内容', async () => {
     const inst = instanceOf()
     const app = renderApp('app1', inst)

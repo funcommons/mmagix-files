@@ -190,11 +190,23 @@ export function createPreview(opts: PreviewOptions): PreviewHandle {
     wrap.appendChild(btn)
   }
 
+  /** 已知不可预览类型的定向提示（旧版 Office 二进制纯前端无成熟解析——给出转存建议而非泛化文案） */
+  const FALLBACK_HINTS: Record<string, string> = {
+    doc: 'files.preview-fallback-doc',
+    ppt: 'files.preview-fallback-ppt',
+  }
+
   function renderFallback(entry: S3ObjectSummary): void {
     const wrap = document.createElement('div')
     wrap.className = 'mmf-preview-fallback'
+    const name = document.createElement('p')
+    name.className = 'mmf-preview-fallback__name'
+    name.textContent = entry.name
+    wrap.appendChild(name)
+    const ext = entry.name.includes('.') ? (entry.name.split('.').pop() ?? '').toLowerCase() : ''
+    const hintKey = FALLBACK_HINTS[ext]
     const tip = document.createElement('p')
-    tip.textContent = t('files.preview-fallback')
+    tip.textContent = hintKey ? t(hintKey) : t('files.preview-fallback')
     wrap.appendChild(tip)
     appendDownloadButton(wrap, entry)
     container.appendChild(wrap)
