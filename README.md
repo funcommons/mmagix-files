@@ -48,7 +48,7 @@ on("fileChanged", (p) => console.log(p.key));
 |---|---|---|
 | 整站构建 | `frontend/` → `pnpm build` | 部署到任意静态托管（filesBase） |
 | 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [`documents/releases/v1.1.0-plugin-sri.json`](documents/releases/v1.1.0-plugin-sri.json) |
-| 宿主侧客户端 | demo 内 `useMmagixFilesClient` 参考实现 | v1.1 起抽独立 npm 包 |
+| 宿主侧客户端 | npm 包 [`@mmagix/files-client`](frontend/packages/files-client/)（Vue 入口 `/vue`） | 零依赖 postMessage 封装；demo 经 vite alias 消费同一份源码 |
 
 ## 文档
 

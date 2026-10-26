@@ -4,7 +4,13 @@
 
 ## [Unreleased]
 
-（空）
+### 新增
+
+- **宿主侧客户端 npm 包 `@mmagix/files-client`**：`useMmagixFilesClient` 从 demo 抽出为独立包
+  （零运行时依赖；核心 `createMmagixFilesHost` 框架无关 + Vue 组合式层 `/vue` 双入口，ESM+d.ts，
+  vue 为可选 peer）。demo 经 vite alias 消费同一份源码（零安装验证）；协议漂移哨兵
+  `clientProtocol.test.ts` 双侧比对（挂 frontend 套件）。单测 21 例（消息泵 harness：
+  握手/call-reply/超时/终态/节流/重装坑全链）。
 
 ## [1.1.0] — 2026-10-26
 
@@ -52,8 +58,6 @@
 
 - 单元测试 1412 通过（98 文件）；vue-tsc/eslint 零错误
 - E2E：统一工具栏 12/12（code+flow 双应用链路）+ 十应用截图取证（内置 2+插件 5+三态+偏差存档）
-
-## [1.0.0] — 2026-10-22
 
 ## [1.0.0] — 2026-10-22
 
