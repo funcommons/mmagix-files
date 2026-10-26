@@ -86,6 +86,7 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
   let draftEl: HTMLElement | null = null
   let dirty = false
   let disposed = false
+  let saving = false // 保存防重入（renderBadge 读它驱动簇 busy——必须先于首次 renderBadge() 声明，TDZ 前车）
   let tool: 'rect' | 'text' | 'ink' | 'sign' = 'rect'
   let color = COLORS[0]
   const anns: Annotation[] = []
@@ -632,7 +633,6 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
   renderBadge()
 
   // ── 保存链（压平写回原字节 + 表单值应用/flatten） ──
-  let saving = false
   const save = async (): Promise<void> => {
     if (disposed || saving) return
     // 幂等守卫：压平后 anns/表单已清——重复触发不得再写一遍空内容覆盖成果
