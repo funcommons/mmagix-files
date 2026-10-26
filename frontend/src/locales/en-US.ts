@@ -236,6 +236,11 @@ export default {
     'code-language': 'Language',
     'code-readonly': 'Read-only',
     'code-dirty': 'Unsaved',
+    // Unified edit toolbar cluster (all editable apps; dirty = red dot on save, no "unsaved" text)
+    'edt-save': 'Save',
+    'edt-undo': 'Undo',
+    'edt-redo': 'Redo',
+    'edt-reset': 'Reset (discard unsaved changes)',
     'code-menu-cut': 'Cut',
     'code-menu-copy': 'Copy',
     'code-menu-paste': 'Paste',

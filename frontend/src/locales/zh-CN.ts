@@ -236,6 +236,11 @@ export default {
     'code-language': '语言',
     'code-readonly': '只读',
     'code-dirty': '未保存',
+    // —— 统一编辑钮簇（一百四十三番：内置+插件共用；dirty=保存钮红点，无「未保存」文字）——
+    'edt-save': '保存',
+    'edt-undo': '撤销',
+    'edt-redo': '重做',
+    'edt-reset': '重置（放弃未保存修改）',
     'code-menu-cut': '剪切',
     'code-menu-copy': '复制',
     'code-menu-paste': '粘贴',

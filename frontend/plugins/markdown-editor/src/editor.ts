@@ -1,14 +1,21 @@
 /**
  * CodeMirror 6 装配：basicSetup + markdown 语法 + 折行 + Mod-S 保存钩子 + 变更回调。
  * 单文件内联可行（纯 JS 无 worker）；仅亮色主题（宿主暗色联动=后续项，不阻塞交付）。
+ * 统一编辑钮簇（一百四十三番）出口：undo/redo（@codemirror/commands 命令直调）+ setText（重置链）。
  */
 import { basicSetup, EditorView } from 'codemirror'
 import { markdown } from '@codemirror/lang-markdown'
+import { redo, undo } from '@codemirror/commands'
 import { EditorState, Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 
 export interface EditorHandle {
   getText(): string
+  /** 全量替换正文（重置链；dispatch 入 history 可撤销，docChanged 照常触发） */
+  setText(t: string): void
+  /** 撤销/重做（返回命令是否命中；空栈 no-op=false） */
+  undo(): boolean
+  redo(): boolean
   focus(): void
   getScrollTop(): number
   setScrollTop(px: number): void
@@ -50,6 +57,9 @@ export function createEditor(
   })
   return {
     getText: () => view.state.doc.toString(),
+    setText: (t) => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: t } }),
+    undo: () => undo(view),
+    redo: () => redo(view),
     focus: () => view.focus(),
     getScrollTop: () => view.scrollDOM.scrollTop,
     setScrollTop: (px: number) => {

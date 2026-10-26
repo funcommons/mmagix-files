@@ -3,8 +3,10 @@
  * 设计正本：《documents/流程图应用设计（Mermaid+X6）.md》V1.0 §四/§四.3
  *
  * 能力面：
- *  - 工具栏：图标钮 + hover hint（保存/撤销/重做/缩放体系 −%＋适应/1:1/形状下拉/连线/删除/导出 SVG/
- *    未保存·只读徽标）；hint 走 root 级共享浮层（工具栏 overflow-x:auto 会裁剪 CSS 伪元素气泡）
+ *  - 工具栏：统一编辑钮簇（保存红点｜撤销 重做 重置，shared/editToolbar 唯一样式源——一百四十三番：
+ *    dirty=保存钮红点，「未保存」文字徽标废弃；重置=恢复打开时内容，快照入撤销栈可反悔回取）
+ *    + 图标钮 hover hint（缩放体系 −%＋适应/1:1/形状下拉/连线/删除/导出 SVG/只读徽标）；
+ *    hint 走 root 级共享浮层（工具栏 overflow-x:auto 会裁剪 CSS 伪元素气泡）
  *  - 形状下拉：5 类语义模板（开始·过程·判定·输入输出·结束，预设色板）收敛为单钮下拉
  *  - 选中效果：X6 boundary 工具（主色虚线包围盒），节点/边一致；点空白清除
  *  - 多行文本：属性面板 label 为 textarea；节点内 textWrap 换行；序列化经 `\n` 转义序列保持源单行
@@ -35,12 +37,12 @@ import {
 } from '../flow-model'
 import { MERMAID_MAX_BYTES } from '../builtins'
 import { formatBytes } from '../../files/format'
+import { createEditToolbar } from '../../shared/editToolbar'
 import type { AppCtx, AppDefinition, AppInstance, DisposeReason } from '../../sdk/types'
 
 const TOO_LARGE_KEY = 'app.mermaid-too-large'
 const LOAD_FAIL_KEY = 'app.mermaid-load-fail'
 const UNSAVED_KEY = 'app.code-unsaved'
-const DIRTY_KEY = 'app.code-dirty'
 const READONLY_KEY = 'app.code-readonly'
 
 /** 位置持久化通道：meta 块伪节点 `%% meta: _layout {"positions":{…}}`（mermaid 注释透传，渲染无关数据） */
@@ -74,9 +76,6 @@ const icon = (paths: string): string =>
   `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`
 
 const ICONS = {
-  save: icon('<path d="M3.5 3.5h7l2 2v7h-9z"/><path d="M5.5 3.5v3h4v-3"/><rect x="5.5" y="9" width="5" height="3.5"/>'),
-  undo: icon('<path d="M3.5 6.5h6a3.5 3.5 0 0 1 0 7H7"/><path d="M6 4 3.5 6.5 6 9"/>'),
-  redo: icon('<path d="M12.5 6.5h-6a3.5 3.5 0 0 0 0 7H9"/><path d="M10 4l2.5 2.5L10 9"/>'),
   zoomOut: icon('<circle cx="7.5" cy="7.5" r="4"/><path d="M10.8 10.8 13.5 13.5"/><path d="M5.8 7.5h3.4"/>'),
   zoomIn: icon('<circle cx="7.5" cy="7.5" r="4"/><path d="M10.8 10.8 13.5 13.5"/><path d="M5.8 7.5h3.4"/><path d="M7.5 5.8v3.4"/>'),
   fit: icon('<path d="M2.5 5.5v-3h3"/><path d="M10.5 2.5h3v3"/><path d="M13.5 10.5v3h-3"/><path d="M5.5 13.5h-3v-3"/>'),
@@ -148,7 +147,6 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
 .mmagic-flow__zoom{flex:none;font-size:12px;color:var(--app-text-secondary,#666);min-width:40px;text-align:center}
 .mmagic-flow__dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid rgba(0,0,0,.2);flex:none}
 .mmagic-flow__badge{margin-left:auto;font-size:12px;padding:1px 8px;border-radius:999px}
-.mmagic-flow__badge.is-dirty{background:var(--el-color-warning-light-9,#fdf6ec);color:var(--el-color-warning-dark-2,#b88230)}
 .mmagic-flow__badge.is-readonly{background:var(--app-bg-muted,#f5f5f5);color:var(--app-text-secondary,#666)}
 .mmagic-flow__badge:empty{display:none}
 .mmagic-flow__tip{position:absolute;z-index:30;pointer-events:none;opacity:0;transition:opacity .12s;
@@ -218,6 +216,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
 
   // ── 状态面 ──
   let dirty = false
+  let saving = false
   let readonly = false
   let selectedNode: string | null = null
   let selectedEdge = -1
@@ -289,7 +288,6 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   } | null = null
 
   const editBtns: HTMLButtonElement[] = []
-  const histBtns: HTMLButtonElement[] = []
   const sep = (): HTMLDivElement => {
     const s = document.createElement('div')
     s.className = 'sep'
@@ -321,7 +319,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   }
 
   /** 图标钮：icon + hint 文字（data-tip/title/aria-label 三通道） */
-  const iconBtn = (svg: string, tipKey: string, testid: string, onClick: () => void, opts?: { editOnly?: boolean; history?: boolean; text?: string }): HTMLButtonElement => {
+  const iconBtn = (svg: string, tipKey: string, testid: string, onClick: () => void, opts?: { editOnly?: boolean; text?: string }): HTMLButtonElement => {
     const b = document.createElement('button')
     b.type = 'button'
     b.innerHTML = svg
@@ -339,7 +337,6 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
       b.dataset.editOnly = '1'
       editBtns.push(b)
     }
-    if (opts?.history) histBtns.push(b)
     b.addEventListener('click', onClick)
     bindTip(b)
     bar.appendChild(b)
@@ -347,9 +344,14 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   }
 
   // ── 徽标/闸 ──
+  // dirty 只走统一钮簇保存钮红点（一百四十三番）；徽标仅剩只读文案
   function renderBadge(): void {
-    badge.className = `mmagic-flow__badge${dirty ? ' is-dirty' : ''}${readonly ? ' is-readonly' : ''}`
-    badge.textContent = readonly ? ctx.t(READONLY_KEY) : dirty ? ctx.t(DIRTY_KEY) : ''
+    badge.className = `mmagic-flow__badge${readonly ? ' is-readonly' : ''}`
+    badge.textContent = readonly ? ctx.t(READONLY_KEY) : ''
+    toolbar.setDirty(dirty)
+    toolbar.setBusy(saving || readonly)
+    toolbar.setReadonly(readonly)
+    toolbar.setHistory(undoStack.length > 0, redoStack.length > 0)
   }
   function applyEdits(): void {
     for (const b of editBtns) b.disabled = readonly
@@ -383,8 +385,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     syncHistBtns()
   }
   function syncHistBtns(): void {
-    undoBtn.disabled = undoStack.length === 0
-    redoBtn.disabled = redoStack.length === 0
+    toolbar.setHistory(undoStack.length > 0, redoStack.length > 0)
   }
   /** 从模型 meta 通道恢复位置缓存（init / 撤销重做回放共用；无 pos 的节点落 dagre 兜底） */
   function hydrateLayout(): void {
@@ -581,12 +582,21 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     return menu
   }
 
-  // ── 工具栏装配 ──
-  iconBtn(ICONS.save, 'app.flow-save', 'flow-save', () => void save())
-  const undoBtn = iconBtn(ICONS.undo, 'app.flow-undo', 'flow-undo', () => undo(), { history: true, editOnly: true })
-  const redoBtn = iconBtn(ICONS.redo, 'app.flow-redo', 'flow-redo', () => redo(), { history: true, editOnly: true })
-  undoBtn.disabled = true
-  redoBtn.disabled = true
+  // ── 工具栏装配：统一编辑钮簇（保存红点｜撤销 重做 重置——一百四十三番，样式唯源 shared/editToolbar）
+  //    testid 透传保留 flow-* 口径（E2E 历史脚本稳定）；重置=恢复打开时内容，快照入撤销栈可反悔回取
+  const toolbar = createEditToolbar(
+    { save: ctx.t('app.edt-save'), undo: ctx.t('app.edt-undo'), redo: ctx.t('app.edt-redo'), reset: ctx.t('app.edt-reset') },
+    { onSave: () => void save(), onUndo: () => undo(), onRedo: () => redo(), onReset: resetToSaved },
+  )
+  for (const [act, tid] of [
+    ['save', 'flow-save'],
+    ['undo', 'flow-undo'],
+    ['redo', 'flow-redo'],
+    ['reset', 'flow-reset'],
+  ] as const) {
+    toolbar.el.querySelector<HTMLButtonElement>(`[data-act="${act}"]`)!.dataset.testid = tid
+  }
+  bar.appendChild(toolbar.el)
   sep()
   iconBtn(ICONS.zoomOut, 'app.flow-zoom-out', 'flow-zoom-out', () => zoomBy(0.8))
   zoomLabel = document.createElement('span')
@@ -691,21 +701,36 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     }
   }
 
-  // ── 保存链（code.ts 同口径） ──
+  // ── 保存链（code.ts 同口径；saving 闸防重入→保存钮禁用可视） ──
   async function save(): Promise<void> {
-    if (readonly || !dirty) return
+    if (readonly || !dirty || saving) return
+    saving = true
+    renderBadge()
     syncLayout() // 位置缓存兜底同步（拖拽/新增路径已实时写入）
     const value = serializeFlowchart(model)
     try {
       await ctx.putObject(file.key, new Blob([value], { type: 'text/plain;charset=utf-8' }))
       ctx.notify('saved', { key: file.key })
       dirty = false
-      renderBadge()
     } catch (err) {
       console.warn('FLOW_SAVE_ERR', String(err)?.slice(0, 200), (err as { code?: number })?.code)
       if ((err as { code?: number }).code === 4305) setReadonly()
       // 瞬时失败：保持 dirty（未保存的内容仍可重试）
+    } finally {
+      saving = false
+      renderBadge()
     }
+  }
+
+  /** 重置：放弃未保存修改恢复打开时内容。先快照入撤销栈（可反悔回取），再重解析+全量重建。 */
+  function resetToSaved(): void {
+    if (readonly || !dirty || restoring) return
+    snapshot()
+    model = parseFlowchart(text)
+    hydrateLayout()
+    rebuildAll()
+    dirty = false
+    renderBadge()
   }
   const onKeydown = (ev: KeyboardEvent): void => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {

@@ -11,12 +11,16 @@ import '@univerjs/preset-sheets-core/lib/index.css'
 import '@univerjs/preset-docs-core/lib/index.css'
 import { workbookSnapshotToXlsxBlob, xlsxToWorkbookSnapshot } from './xlsx'
 import { docSnapshotToUniver, docxToDocSnapshot, univerDocToDocxBlob } from './docx'
+import { createEditToolbar } from '../../../src/shared/editToolbar'
 
 const MAX_BYTES = 20 * 1024 * 1024
 let rootSeqCounter = 0 // 实例唯一类序号（模块级：多 tab 同时开 docx/xlsx 时样式作用域互不污染）
 
 interface UniverHandle {
   getBodyForSave: () => Record<string, unknown>
+  /** 撤销/重做（FUniver facade 命令；返回是否命中） */
+  undo: () => Promise<boolean>
+  redo: () => Promise<boolean>
   dispose: () => void
 }
 
@@ -57,6 +61,8 @@ async function mountSheets(container: HTMLElement, snapshot: Record<string, unkn
   wireMutations(univerAPI, onMutation)
   return {
     getBodyForSave: () => (univerAPI.getActiveWorkbook()?.save() ?? {}) as Record<string, unknown>,
+    undo: () => univerAPI.undo(),
+    redo: () => univerAPI.redo(),
     dispose: () => univerAPI.dispose(),
   }
 }
@@ -78,6 +84,8 @@ async function mountDocs(container: HTMLElement, docSnapshot: Record<string, unk
       const snap = (doc?.save?.() ?? {}) as { body?: Record<string, unknown> }
       return snap.body ?? {}
     },
+    undo: () => univerAPI.undo(),
+    redo: () => univerAPI.redo(),
     dispose: () => univerAPI.dispose(),
   }
 }
@@ -95,14 +103,20 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
   const bar = document.createElement('div')
   bar.style.cssText =
     'position:absolute;top:0;left:10px;z-index:30;display:flex;align-items:center;gap:8px;height:40px;font-size:12px;color:#666;pointer-events:none'
-  const saveBtn = document.createElement('button')
-  saveBtn.type = 'button'
-  saveBtn.textContent = ctx.t('app.flow-save')
-  saveBtn.style.cssText =
-    'padding:2px 10px;font-size:12px;cursor:pointer;border:1px solid #e5e7eb;border-radius:6px;background:rgba(255,255,255,.9);color:#374151;pointer-events:auto'
-  const badge = document.createElement('span')
-  badge.style.cssText = 'pointer-events:auto'
-  bar.append(saveBtn, badge)
+  // 统一编辑钮簇（一百四十三番：保存红点｜撤销 重做 重置——样式唯源 shared/editToolbar，构建期内联）。
+  // undo/redo 走 FUniver facade 命令；重置=按打开时字节整体重挂（保真边界：Univer 无批量 revert 通道）。
+  // 徽标通道取消：dirty 一律=保存钮红点，「未保存」文字废弃
+  const toolbarCtl = createEditToolbar(
+    { save: ctx.t('app.edt-save'), undo: ctx.t('app.edt-undo'), redo: ctx.t('app.edt-redo'), reset: ctx.t('app.edt-reset') },
+    {
+      onSave: () => void save(),
+      onUndo: () => void univer.undo(),
+      onRedo: () => void univer.redo(),
+      onReset: () => void remountOriginal(),
+    },
+  )
+  toolbarCtl.el.style.cssText = 'pointer-events:auto'
+  bar.appendChild(toolbarCtl.el)
   const container = document.createElement('div')
   // 灰底（WPS/Word 观感）：Univer 画布纸外区域是透明的，灰底由容器透出——白纸浮于灰底，纸界清晰
   container.style.cssText = 'flex:1;min-height:0;position:relative;background:#d8d8d8'
@@ -120,7 +134,7 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
   // sheets 不做此覆盖——表格空白格依赖 canvas 白底兜底，透明化会让灰底透进单元格区
   const compact = document.createElement('style')
   compact.textContent = `
-.mmu-univer-root-${rootSeq} header { display:flex !important; flex-direction:row !important; align-items:center !important; padding-left:96px; }
+.mmu-univer-root-${rootSeq} header { display:flex !important; flex-direction:row !important; align-items:center !important; padding-left:150px; }
 .mmu-univer-root-${rootSeq} header > div:nth-child(1) { flex:none; }
 .mmu-univer-root-${rootSeq} header > div:nth-child(2) { flex:1 1 auto; min-width:0; }
 ${isDocx ? `
@@ -131,48 +145,68 @@ ${isDocx ? `
   document.head.appendChild(compact)
 
   const markDirty = () => {
-    badge.textContent = ctx.t('app.code-dirty')
-    badge.style.color = '#b88230'
+    dirty = true
+    toolbarCtl.setDirty(true)
   }
   const clearDirty = () => {
-    badge.textContent = ''
+    dirty = false
+    toolbarCtl.setDirty(false)
   }
   let dirty = false
   let disposed = false
+  let saving = false
+  const onMutation = (): void => {
+    if (!disposed) markDirty()
+  }
 
-  const univer = await (isDocx
-    ? mountDocs(container, docSnapshotToUniver(await docxToDocSnapshot(bytes)), () => {
-        if (!disposed) {
-          dirty = true
-          markDirty()
-        }
-      })
-    : mountSheets(container, xlsxToWorkbookSnapshot(bytes), () => {
-        if (!disposed) {
-          dirty = true
-          markDirty()
-        }
-      }))
+  let univer = await (isDocx
+    ? mountDocs(container, docSnapshotToUniver(await docxToDocSnapshot(bytes)), onMutation)
+    : mountSheets(container, xlsxToWorkbookSnapshot(bytes), onMutation))
 
   // 布局稳定后通知一次 resize：单行化 CSS 合并 ribbon 行会改变容器宽度，
   // Univer 的纸张/网格定位在初始化时计算，不重排会残留旧偏移（纸右缘出界）
   setTimeout(() => window.dispatchEvent(new Event('resize')), 350)
 
   const save = async (): Promise<void> => {
-    if (disposed) return
+    if (disposed || saving || !dirty) return
+    saving = true
+    toolbarCtl.setBusy(true)
     try {
       const blob = isDocx
         ? await univerDocToDocxBlob(univer.getBodyForSave() as never, file.name)
         : workbookSnapshotToXlsxBlob(univer.getBodyForSave())
       await ctx.putObject(file.key, blob)
       ctx.notify('saved', { key: file.key })
-      dirty = false
       clearDirty()
     } catch (err) {
       console.warn('UNIVER_SAVE_ERR', String(err)?.slice(0, 200))
+    } finally {
+      saving = false
+      toolbarCtl.setBusy(false)
     }
   }
-  saveBtn.addEventListener('click', () => void save())
+
+  /** 重置：按打开时字节整体重挂（丢弃全部未保存修改；Univer 无批量 revert 通道，重挂=唯一权威回滚） */
+  let remounting = false
+  async function remountOriginal(): Promise<void> {
+    if (disposed || remounting || !dirty) return
+    remounting = true
+    toolbarCtl.setBusy(true)
+    try {
+      univer.dispose()
+      container.textContent = ''
+      if (isDocx) container.appendChild(hbarCover)
+      univer = await (isDocx
+        ? mountDocs(container, docSnapshotToUniver(await docxToDocSnapshot(bytes)), onMutation)
+        : mountSheets(container, xlsxToWorkbookSnapshot(bytes), onMutation))
+      clearDirty()
+    } catch (err) {
+      console.warn('UNIVER_REMOUNT_ERR', String(err)?.slice(0, 200))
+    } finally {
+      remounting = false
+      toolbarCtl.setBusy(false)
+    }
+  }
   const onKey = (ev: KeyboardEvent): void => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
       ev.preventDefault()

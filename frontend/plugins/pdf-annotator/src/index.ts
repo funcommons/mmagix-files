@@ -10,6 +10,7 @@ import { PDFDocument } from 'pdf-lib'
 import { flattenAnnotations, smoothPoints } from './exporter'
 import { applyFormValuesAndFlatten, hasXFA, inspectFields, type FieldInfo } from './form'
 import { mergeAnnotations, parseSidecar, sidecarKeyOf, toSidecar } from './sidecar'
+import { createEditToolbar } from '../../../src/shared/editToolbar'
 import type { Annotation, HostCtx, HostFile, HostInstance, HostSdk } from './types'
 
 pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker()
@@ -109,6 +110,10 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
     // 404=无 sidecar；其余错误不阻断
   }
 
+  // 重置基线（打开时的标注/表单态快照；压平保存后基线翻空——烙印进 PDF 的内容不再以覆盖层回滚）
+  const initialAnns: Annotation[] = JSON.parse(JSON.stringify(anns)) as Annotation[]
+  const initialValues: Record<string, string | boolean> = JSON.parse(JSON.stringify(formValues))
+
   // ── 表单面（§4.4 P2）：XFA 整链禁用；字段定位为覆盖层控件 ──
   const xfa = hasXFA(pdfLibDoc)
   const fields: FieldInfo[] = xfa ? [] : inspectFields(pdfLibDoc)
@@ -128,15 +133,34 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
   el.appendChild(root)
 
   const countLabel = document.createElement('span')
+  // 统一编辑钮簇（一百四十三番：保存红点｜撤销 重做 重置——样式唯源 shared/editToolbar，构建期内联）。
+  // 徽标只剩 XFA/标注计数信息；dirty 一律=保存钮红点，「未保存」文字废弃
+  const toolbarCtl = createEditToolbar(
+    {
+      save: `${ctx.t('app.edt-save')}（压平合并）`,
+      undo: ctx.t('app.edt-undo'),
+      redo: ctx.t('app.edt-redo'),
+      reset: ctx.t('app.edt-reset'),
+    },
+    {
+      onSave: () => void save(),
+      onUndo: () => undo(),
+      onRedo: () => redo(),
+      onReset: () => resetToSaved(),
+    },
+  )
+  bar.appendChild(toolbarCtl.el)
   const markDirty = (): void => {
     dirty = true
     renderBadge()
   }
   const renderBadge = (): void => {
     countLabel.textContent = anns.length > 0 ? `标注 ${anns.length}` : ''
-    if (dirty) {
-      badge.textContent = `${ctx.t('app.code-dirty')} · ${anns.length}`
-    } else if (xfa) {
+    toolbarCtl.setDirty(dirty)
+    toolbarCtl.setBusy(saving)
+    toolbarCtl.setHistory(undoStack.length > 0, redoStack.length > 0)
+    if (dirty) return // dirty 只走保存钮红点（一百四十三番）
+    if (xfa) {
       badge.textContent = 'XFA 表单：填写链禁用（仅标注）'
       badge.style.color = '#b88230'
     } else if (anns.length > 0 || sidecarInfo) {
@@ -148,9 +172,15 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
     }
   }
 
+  const redoStack: Annotation[][] = []
+  const syncHist = (): void => {
+    toolbarCtl.setHistory(undoStack.length > 0, redoStack.length > 0)
+  }
+
   const pushUndo = (): void => {
     undoStack.push(JSON.parse(JSON.stringify(anns)))
     if (undoStack.length > 50) undoStack.shift()
+    redoStack.length = 0 // 新分支：旧重做线作废
   }
   const rerenderAnns = (pageNo: number): void => {
     const box = pages[pageNo - 1]
@@ -162,6 +192,48 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
     }
   }
   const rerenderAll = (): void => pages.forEach((_, i) => rerenderAnns(i + 1))
+
+  /** 撤销（快照栈，上限 50）：当前态推重做栈；恢复后保持 dirty（历史内容≠保存态） */
+  function undo(): void {
+    const prev = undoStack.pop()
+    if (!prev) return
+    redoStack.push(JSON.parse(JSON.stringify(anns)))
+    anns.length = 0
+    anns.push(...prev)
+    selected = null
+    rerenderAll()
+    markDirty()
+    syncHist()
+  }
+  /** 重做（撤销的对偶） */
+  function redo(): void {
+    const next = redoStack.pop()
+    if (!next) return
+    undoStack.push(JSON.parse(JSON.stringify(anns)))
+    anns.length = 0
+    anns.push(...next)
+    selected = null
+    rerenderAll()
+    markDirty()
+    syncHist()
+  }
+  /** 重置：回到打开时标注/表单态（历史栈清空；压平保存后基线=空覆盖层） */
+  function resetToSaved(): void {
+    if (disposed || saving || !dirty) return
+    undoStack.length = 0
+    redoStack.length = 0
+    anns.length = 0
+    anns.push(...(JSON.parse(JSON.stringify(initialAnns)) as Annotation[]))
+    for (const k of Object.keys(formValues)) delete formValues[k]
+    Object.assign(formValues, JSON.parse(JSON.stringify(initialValues)))
+    selected = null
+    rerenderAll()
+    renderFormControls()
+    dirty = false
+    toolbarCtl.setDirty(false)
+    syncHist()
+    renderBadge()
+  }
 
   const annEl = (ann: Annotation, box: PageBox): HTMLElement => {
     const s = box.scale
@@ -250,19 +322,9 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
     })
     bar.appendChild(dot)
   }
-  mkBtn('撤销', () => {
-    const prev = undoStack.pop()
-    if (!prev) return
-    anns.length = 0
-    anns.push(...prev)
-    selected = null
-    rerenderAll()
-    markDirty()
-  }, false)
   mkBtn('导出标注层', () => void exportSidecar(), false)
   mkBtn('导入标注层', () => fileInput.click(), false)
   mkBtn('下载副本', () => downloadCopy(), false)
-  const saveBtn = mkBtn(ctx.t('app.flow-save') + '（压平合并）', () => void save(), false)
   bar.appendChild(badge)
   bar.appendChild(countLabel)
 
@@ -576,6 +638,7 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
     // 幂等守卫：压平后 anns/表单已清——重复触发不得再写一遍空内容覆盖成果
     if (!dirty && anns.length === 0 && Object.keys(formValues).length === 0) return
     saving = true
+    toolbarCtl.setBusy(true)
     try {
       const bytes = await flattenAnnotations(originalBytes, anns)
       // 表单值应用 + 外观压平（在标注之后、save 之前——同一份重建文档上执行）
@@ -599,15 +662,20 @@ async function render(el: HTMLElement, file: HostFile, ctx: HostCtx): Promise<Ho
       countLabel.textContent = ''
       anns.length = 0
       undoStack.length = 0
+      redoStack.length = 0
+      // 烙印后基线翻空：重置不得把已烙进 PDF 的覆盖层快照滚回来
+      initialAnns.length = 0
+      for (const k of Object.keys(initialValues)) delete initialValues[k]
       for (const k of Object.keys(formValues)) delete formValues[k]
       renderFormControls()
+      syncHist()
     } catch (err) {
       console.warn('PDFANN_SAVE_ERR', String(err)?.slice(0, 200))
     } finally {
       saving = false
+      toolbarCtl.setBusy(false)
     }
   }
-  saveBtn.addEventListener('click', () => void save())
   const onKey = (ev: KeyboardEvent): void => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
       ev.preventDefault()

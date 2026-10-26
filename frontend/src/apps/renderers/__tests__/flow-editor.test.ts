@@ -228,11 +228,17 @@ describe('flow-editor 渲染器', () => {
     expect(graph.cells.has('edge-1')).toBe(true)
     expect(el.querySelector('.mmagic-flow__canvas')).not.toBeNull()
 
-    // 图标工具栏：保存钮内嵌 svg + hint（data-tip/title 双通道）
+    // 统一编辑钮簇：保存/撤销/重做/重置 四钮就位（testid 透传保留 flow-* 口径），保存钮内嵌 svg
+    const cluster = el.querySelector('.mmx-edt')!
+    expect(cluster.querySelectorAll('[data-act]').length).toBe(4)
+    for (const act of ['save', 'undo', 'redo', 'reset'] as const) {
+      const b = el.querySelector<HTMLButtonElement>(`[data-act="${act}"]`)!
+      expect(b.dataset.testid).toBe(`flow-${act}`)
+      expect(b.title).toBe(`T:app.edt-${act}`)
+    }
     const saveBtn = el.querySelector<HTMLButtonElement>('[data-testid="flow-save"]')!
     expect(saveBtn.querySelector('svg')).not.toBeNull()
-    expect(saveBtn.dataset.tip).toBe('T:app.flow-save')
-    expect(saveBtn.title).toBe('T:app.flow-save')
+    expect(saveBtn.title).toBe('T:app.edt-save')
     // 形状下拉钮存在（5 色点模板收敛为单钮）
     expect(el.querySelector('[data-testid="flow-shape-btn"]')).not.toBeNull()
 
@@ -375,6 +381,29 @@ describe('flow-editor 渲染器', () => {
     inst.dispose()
   })
 
+  it('重置：dirty 下点击恢复打开时内容（快照入撤销栈可反悔）+ 红点清零；干净态禁用', async () => {
+    const ctx = makeCtx()
+    const el = document.createElement('div')
+    const inst = (await flowEditorRenderer(el, FILE, ctx)) as AppInstance
+    const resetBtn = el.querySelector<HTMLButtonElement>('[data-act="reset"]')!
+    expect(resetBtn.disabled).toBe(true) // 初始干净态无可重置
+
+    addShape(el, 'process') // 弄脏（新增节点 n0）
+    expect(resetBtn.disabled).toBe(false)
+    expect(el.querySelector('[data-act="save"]')?.classList.contains('is-dirty')).toBe(true)
+    resetBtn.click()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(el.querySelector('[data-act="save"]')?.classList.contains('is-dirty')).toBe(false)
+    expect(resetBtn.disabled).toBe(true)
+    // 内容回原文（不再含新增节点）；beforeDispose 干净放行
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(ctx.putObject).not.toHaveBeenCalled() // 干净态 Ctrl+S 不写链
+    expect(inst.beforeDispose?.()).toBe(true)
+    inst.dispose()
+  })
+
   it('保存钮：点击 → putObject；导出 SVG：toSVG 产物触发下载', async () => {
     const ctx = makeCtx()
     const el = document.createElement('div')
@@ -513,7 +542,9 @@ describe('flow-editor 渲染器', () => {
     }
     graph.posOf['A'] = { x: 300, y: 210 }
     graph.emit('node:moved', { node: { id: 'A' } })
-    expect(el.querySelector('.mmagic-flow__badge')?.textContent).toContain('code-dirty')
+    // dirty 只走保存钮红点（「未保存」文字徽标废弃）；重置钮解锁
+    expect(el.querySelector('[data-act="save"]')?.classList.contains('is-dirty')).toBe(true)
+    expect(el.querySelector<HTMLButtonElement>('[data-act="reset"]')!.disabled).toBe(false)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
     await new Promise((r) => setTimeout(r, 0))
     const text = await (ctx.putObject.mock.calls.at(-1)![1] as Blob).text()

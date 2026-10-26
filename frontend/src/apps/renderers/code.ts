@@ -4,9 +4,11 @@
  *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）+ AppInstance 生命周期。
  * 链路：5MB 先判（file.size，超限不拉字节流）→ ctx.getObject → Blob.text() →
  *       monaco.editor.create（动态 import，绝不入主 bundle）→ dirty 跟踪 → Ctrl/Cmd+S 保存链。
- * 工具栏（26px 紧凑条，ghost 图标钮口径同工作台 ws-toolbar__act：透明底/hover bg-muted/CSS 变量取色）：
- *       保存/撤销/重做/格式化（编辑类，只读态隐藏）/查找/字号±/语言切换（按扩展名自动识别，可手切）/
- *       状态徽标（未保存·只读）。快捷键：Ctrl/Cmd+S 保存（既有链）；Ctrl/Cmd+F 查找（actions.find，
+ * 工具栏（26px 紧凑条）：统一编辑钮簇（保存｜撤销 重做 重置——shared/editToolbar 唯一样式源，
+ *       一百四十三番口径：dirty=保存钮右上角红点，「未保存」文字徽标废弃）+ 格式化/查找/字号±/
+ *       语言切换（按扩展名自动识别，可手切）/状态徽标（只读锁）。编辑类钮只读态隐藏。
+ *       重置=恢复打开时内容（最后保存态），executeEdits 入 undo 栈可撤销取回。
+ *       快捷键：Ctrl/Cmd+S 保存（既有链）；Ctrl/Cmd+F 查找（actions.find，
  *       捕获阶段拦截统一走本渲染器，浏览器默认页内查找不触发）；Ctrl/Cmd+Z/Y 由 monaco 原生接管（不拦）。
  * 只读两态：
  *       静态——file.size 超限：不建 editor，出只读提示（showTooLargeTip，无工具栏）；
@@ -32,6 +34,7 @@ import type { editor as monacoEditorNS } from 'monaco-editor'
 import { CODE_MAX_BYTES } from '../builtins'
 import { ERROR_CODES } from '../../sdk/errorCodes'
 import { formatBytes } from '../../files/format'
+import { createEditToolbar } from '../../shared/editToolbar'
 import { buildMonacoTheme, isDarkHost, observeHostTheme, readHostThemeVars } from './code-theme'
 import type { AppCtx, AppDefinition, AppInstance, DisposeReason } from '../../sdk/types'
 
@@ -54,16 +57,17 @@ const UNSAVED_KEY = 'app.code-unsaved'
 
 /** 工具栏文案 i18n key（词典 app.* 段；title/aria-label 共用，e2e/单测按 data-act 定位） */
 const EDITOR_LABEL_KEY = 'app.code-editor'
-const SAVE_KEY = 'app.code-save'
-const UNDO_KEY = 'app.code-undo'
-const REDO_KEY = 'app.code-redo'
 const FORMAT_KEY = 'app.code-format'
 const FIND_KEY = 'app.code-find'
 const FONT_INC_KEY = 'app.code-font-inc'
 const FONT_DEC_KEY = 'app.code-font-dec'
 const LANG_KEY = 'app.code-language'
 const READONLY_KEY = 'app.code-readonly'
-const DIRTY_KEY = 'app.code-dirty'
+/** 统一编辑钮簇文案（app.edt-*：内置+插件共用词典段；dirty 红点口径废除「未保存」文字徽标） */
+const EDT_SAVE_KEY = 'app.edt-save'
+const EDT_UNDO_KEY = 'app.edt-undo'
+const EDT_REDO_KEY = 'app.edt-redo'
+const RESET_KEY = 'app.edt-reset'
 
 /** monaco 内建 action id（getAction 触发；format 无格式化器时 monaco 静默提示，不抛错） */
 const ACTION_FORMAT = 'editor.action.formatDocument'
@@ -199,14 +203,11 @@ const BAR_CSS = `
 .mmagic-code-bar__btn:hover:not(:disabled) { background: var(--app-bg-muted); color: var(--app-text-primary); }
 .mmagic-code-bar__btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .mmagic-code-bar__btn[hidden] { display: none; }
-.mmagic-code-bar__btn.is-dirty { color: var(--app-text-primary); }
-.mmagic-code-bar__btn.is-dirty::after { content: ''; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; border-radius: 50%; background: var(--app-color-warning, var(--el-color-warning, #e6a23c)); }
 .mmagic-code-bar__sep { width: 1px; height: 14px; margin: 0 4px; flex: none; background: var(--app-separator, rgba(127, 127, 127, 0.18)); }
 .mmagic-code-bar__lang { height: 28px; max-width: 140px; margin: 0 2px; padding: 0 4px; border: 1px solid transparent; border-radius: var(--app-radius-button, 6px); background: var(--app-bg-card, #fff); color: var(--app-text-secondary); font-size: 12px; cursor: pointer; }
 .mmagic-code-bar__lang:hover { background: var(--app-bg-muted); color: var(--app-text-primary); }
 .mmagic-code-bar__lang:focus-visible { outline: 1px solid var(--app-separator, rgba(127, 127, 127, 0.3)); }
 .mmagic-code-bar__status { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 0 4px; font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }
-.mmagic-code-bar__status.is-dirty { color: var(--app-color-warning, var(--el-color-warning, #e6a23c)); }
 .mmagic-code-bar__status:empty { display: none; }
 .mmagic-code-stage { flex: 1 1 auto; min-height: 0; }
 .mmagic-code-ctxmenu { position: fixed; z-index: 10000; min-width: 190px; padding: 4px; background: var(--app-bg-card, #fff); border: 1px solid var(--app-separator, rgba(127, 127, 127, 0.25)); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); }
@@ -494,11 +495,18 @@ export const codeEditorRenderer: AppDefinition['renderer'] = async (
   /** 监听统一 AbortController：dispose 一并摘除（键鼠/下拉全量） */
   const ac = new AbortController()
 
-  // 6) 工具栏构建：保存 | 撤销 重做 | 格式化 | 查找 | 语言 | A− A+ …… 状态徽标
-  //    编辑类（保存/撤销/重做/格式化）带 data-edit-only——只读闩锁时隐藏（契约 R5-4）
-  const saveBtn = barButton('save', ctx.t(SAVE_KEY), { icon: 'ri-save-line', editOnly: true })
-  const undoBtn = barButton('undo', ctx.t(UNDO_KEY), { icon: 'ri-arrow-go-back-line', editOnly: true })
-  const redoBtn = barButton('redo', ctx.t(REDO_KEY), { icon: 'ri-arrow-go-forward-line', editOnly: true })
+  // 6) 工具栏构建：统一编辑钮簇（保存红点｜撤销 重做 重置——一百四十三番口径，样式唯源 shared/editToolbar）
+  //    + 格式化 | 查找 | 语言 | A− A+ …… 状态徽标（只读锁；「未保存」文字徽标废弃→保存钮红点）
+  //    编辑类（簇内四钮/格式化）只读闩锁时隐藏（契约 R5-4）
+  const toolbar = createEditToolbar(
+    { save: ctx.t(EDT_SAVE_KEY), undo: ctx.t(EDT_UNDO_KEY), redo: ctx.t(EDT_REDO_KEY), reset: ctx.t(RESET_KEY) },
+    {
+      onSave: () => void save(),
+      onUndo: () => editor.trigger(TRIGGER_SOURCE, 'undo', undefined),
+      onRedo: () => editor.trigger(TRIGGER_SOURCE, 'redo', undefined),
+      onReset: resetToSaved,
+    },
+  )
   const formatBtn = barButton('format', ctx.t(FORMAT_KEY), { icon: 'ri-magic-line', editOnly: true })
   const findBtn = barButton('find', ctx.t(FIND_KEY), { icon: 'ri-search-line' })
   const fontDecBtn = barButton('font-dec', ctx.t(FONT_DEC_KEY), { text: 'A−' })
@@ -524,23 +532,23 @@ export const codeEditorRenderer: AppDefinition['renderer'] = async (
   sep1.className = 'mmagic-code-bar__sep'
   const sep2 = document.createElement('span')
   sep2.className = 'mmagic-code-bar__sep'
-  bar.append(saveBtn, sep1, undoBtn, redoBtn, formatBtn, sep2, findBtn, langSel, fontDecBtn, fontIncBtn, status)
+  bar.append(toolbar.el, sep1, formatBtn, sep2, findBtn, langSel, fontDecBtn, fontIncBtn, status)
 
-  /** 状态 → 工具栏同步（单口径出口；每次状态翻转全量刷一遍，量小无性能面） */
+  /** 状态 → 工具栏同步（单口径出口；每次状态翻转全量刷一遍，量小无性能面）。
+   *  dirty 只走保存钮红点（setDirty），「未保存」文字徽标口径退役（一百四十三番） */
   function syncBar(): void {
     for (const btn of bar.querySelectorAll<HTMLButtonElement>('[data-edit-only]')) {
       btn.hidden = readonlyMode
     }
-    saveBtn.disabled = saving || readonlyMode
-    saveBtn.classList.toggle('is-dirty', dirty && !readonlyMode)
+    toolbar.setReadonly(readonlyMode)
+    toolbar.setBusy(saving || readonlyMode)
+    toolbar.setDirty(dirty && !readonlyMode)
+    const model = editor.getModel()
+    toolbar.setHistory(model?.canUndo() ?? false, model?.canRedo() ?? false)
     bar.classList.toggle('is-readonly', readonlyMode)
     if (readonlyMode) {
-      status.classList.remove('is-dirty')
       status.innerHTML = '<i class="ri-lock-line"></i>'
       status.appendChild(document.createTextNode(ctx.t(READONLY_KEY)))
-    } else if (dirty) {
-      status.classList.add('is-dirty')
-      status.textContent = ctx.t(DIRTY_KEY)
     } else {
       status.textContent = ''
     }
@@ -598,16 +606,32 @@ export const codeEditorRenderer: AppDefinition['renderer'] = async (
     editor.updateOptions({ fontSize })
   }
 
-  // 10) dirty 跟踪：任何内容变化（含格式化）→ 未保存徽标 + 保存钮圆点
+  // 10) dirty 跟踪：任何内容变化（含格式化/undo/redo）→ 保存钮红点；reset 的程序化改写不入 dirty
+  //     （suppressDirty 闸：executeEdits 同步触发 onDidChangeModelContent，先标记后复位）
+  let suppressDirty = false
   editor.onDidChangeModelContent(() => {
+    if (suppressDirty) return
     dirty = true
     syncBar()
   })
 
-  // 11) 工具栏接线（signal 统一注册，dispose 随 ac.abort 全量摘除）
-  saveBtn.addEventListener('click', () => void save(), { signal: ac.signal })
-  undoBtn.addEventListener('click', () => editor.trigger(TRIGGER_SOURCE, 'undo', undefined), { signal: ac.signal })
-  redoBtn.addEventListener('click', () => editor.trigger(TRIGGER_SOURCE, 'redo', undefined), { signal: ac.signal })
+  /** 重置：放弃未保存修改，恢复到打开时内容（最后保存态）。dirty 才有意义；
+   *  可撤销——executeEdits 入 undo 栈，reset 后 Ctrl+Z 可取回未保存内容（dirty 随内容变化复归） */
+  function resetToSaved(): void {
+    if (saving || readonlyMode || !dirty) return
+    const model = editor.getModel()
+    if (!model) return
+    suppressDirty = true
+    try {
+      editor.executeEdits('mmagic-reset', [{ range: model.getFullModelRange(), text }])
+    } finally {
+      suppressDirty = false
+    }
+    dirty = false
+    syncBar()
+  }
+
+  // 11) 工具栏接线（signal 统一注册，dispose 随 ac.abort 全量摘除；簇内四钮回调在 §6 createEditToolbar）
   formatBtn.addEventListener('click', () => void doFormat(), { signal: ac.signal })
   findBtn.addEventListener('click', () => runAction(ACTION_FIND), { signal: ac.signal })
   fontIncBtn.addEventListener('click', () => nudgeFont(1), { signal: ac.signal })

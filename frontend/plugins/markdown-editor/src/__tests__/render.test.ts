@@ -30,6 +30,9 @@ interface FakeEditorRecord {
   handle: {
     __text: string
     getText: Mock
+    setText: Mock
+    undo: Mock
+    redo: Mock
     focus: Mock
     getScrollTop: Mock
     setScrollTop: Mock
@@ -46,6 +49,11 @@ vi.mock('../editor', () => ({
     const handle = {
       __text: opts.text,
       getText: vi.fn(() => handle.__text),
+      setText: vi.fn((t: string) => {
+        handle.__text = t
+      }),
+      undo: vi.fn(() => true),
+      redo: vi.fn(() => true),
       focus: vi.fn(),
       getScrollTop: vi.fn(() => 42), // 非 0 值，可区分「真读了」与「默认 0」
       setScrollTop: vi.fn(),
@@ -167,12 +175,16 @@ describe('DOM 骨架', () => {
     const editorPane = editorPaneOf(el)
     expect(editorPane).toBeTruthy()
     expect(el.querySelector('[data-mm-preview]')).toBeTruthy()
-    // 保存钮：内联 SVG 图标 + label/title 走 i18n 通道（title 额外带快捷键提示）
+    // 统一编辑钮簇：四钮就位（data-mm-* testid 透传），保存钮内联 SVG + i18n title（app.edt-* 口径）
+    for (const act of ['save', 'undo', 'redo', 'reset'] as const) {
+      const b = el.querySelector<HTMLButtonElement>(`[data-mm-${act}]`)
+      expect(b, `缺 data-mm-${act} 钮`).toBeTruthy()
+      expect(b!.dataset.act).toBe(act)
+      expect(b!.querySelector('svg')).toBeTruthy()
+      expect(b!.title).toBe(ctx.t(`app.edt-${act}`))
+    }
     const save = saveBtnOf(el)
-    expect(save.getAttribute('aria-label')).toBe(ctx.t('app.flow-save'))
-    expect(save.title).toBe(`${ctx.t('app.flow-save')} (Ctrl+S)`)
-    expect(save.querySelector('svg')).toBeTruthy()
-    // 布局：保存钮居左、形态切换组居右（seg 在 save 之后的文档位置）
+    // 布局：编辑钮簇居左、形态切换组居右（seg 在簇之后的文档位置）
     const seg = el.querySelector('.mm-md-modes') as HTMLElement
     expect(seg).toBeTruthy()
     expect(save.compareDocumentPosition(seg) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
@@ -252,12 +264,13 @@ describe('保存链', () => {
     const { el, ctx, rec } = mount()
     rec.handle.getText.mockReturnValue('# x')
 
-    // 先置脏：徽标非空
+    // 先置脏：保存钮红点（「未保存」文字徽标废弃）+ 重置解锁
     rec.opts.onChange()
-    const badge = el.querySelector('.mm-md-dirty') as HTMLElement
-    expect(badge.textContent).not.toBe('')
+    const save = saveBtnOf(el)
+    expect(save.classList.contains('is-dirty')).toBe(true)
+    expect((el.querySelector('[data-mm-reset]') as HTMLButtonElement).disabled).toBe(false)
 
-    saveBtnOf(el).click()
+    save.click()
     await flush()
     expect(ctx.putObject).toHaveBeenCalledTimes(1)
     const [key, blob, contentType] = ctx.putObject.mock.calls[0] as [string, Blob, string]
@@ -269,41 +282,72 @@ describe('保存链', () => {
     await expect(blob.text()).resolves.toBe('# x')
     expect(ctx.notify).toHaveBeenCalledTimes(1)
     expect(ctx.notify).toHaveBeenCalledWith('saved', { key: 'docs/hello.md' })
-    // 保存成功 → 脏徽标清空
-    expect(badge.textContent).toBe('')
+    // 保存成功 → 红点清
+    expect(save.classList.contains('is-dirty')).toBe(false)
+    expect((el.querySelector('[data-mm-reset]') as HTMLButtonElement).disabled).toBe(true)
 
     // clean 后再点：幂等，不再写
-    saveBtnOf(el).click()
+    save.click()
     await flush()
     expect(ctx.putObject).toHaveBeenCalledTimes(1)
   })
 
-  it('putObject reject → 不上抛（仅告警）、徽标保持脏态、notify 不发、可重试', async () => {
+  it('putObject reject → 不上抛（仅告警）、红点保持、notify 不发、可重试', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { el, ctx, rec } = mount()
     ctx.putObject.mockRejectedValueOnce(new Error('boom'))
     rec.opts.onChange()
-    const badge = el.querySelector('.mm-md-dirty') as HTMLElement
+    const save = saveBtnOf(el)
 
-    saveBtnOf(el).click()
+    save.click()
     await flush()
     // 不上抛（走到这里即未抛出）；失败走 console.warn
     expect(ctx.putObject).toHaveBeenCalledTimes(1)
     expect(ctx.notify).not.toHaveBeenCalled()
-    expect(badge.textContent).not.toBe('')
+    expect(save.classList.contains('is-dirty')).toBe(true)
     expect(warnSpy).toHaveBeenCalled()
 
     // 脏态保留 → 再点重试成功
-    saveBtnOf(el).click()
+    save.click()
     await flush()
     expect(ctx.putObject).toHaveBeenCalledTimes(2)
     expect(ctx.notify).toHaveBeenCalledTimes(1)
-    expect(badge.textContent).toBe('')
+    expect(save.classList.contains('is-dirty')).toBe(false)
+  })
+})
+
+// ───────────────────────── 统一编辑钮簇（撤销/重做/重置） ─────────────────────────
+
+describe('统一编辑钮簇', () => {
+  it('undo/redo 钮直调 CM 命令；重置=恢复打开时内容+红点清+重置自锁；干净态重置禁用', async () => {
+    const { el, ctx, rec, inst } = mount({ text: '# t' })
+
+    // 干净态：重置禁用；undo/redo 可点（直调命令，空栈 no-op 由 CM 兜底）
+    const resetBtn = el.querySelector('[data-mm-reset]') as HTMLButtonElement
+    expect(resetBtn.disabled).toBe(true)
+    ;(el.querySelector('[data-mm-undo]') as HTMLButtonElement).click()
+    ;(el.querySelector('[data-mm-redo]') as HTMLButtonElement).click()
+    expect(rec.handle.undo).toHaveBeenCalledTimes(1)
+    expect(rec.handle.redo).toHaveBeenCalledTimes(1)
+
+    // 弄脏 → 重置解锁；点击 → setText 恢复原文 + 红点清 + 不写桶
+    rec.opts.onChange() // 置脏
+    expect(resetBtn.disabled).toBe(false)
+    expect((el.querySelector('[data-mm-save]') as HTMLButtonElement).classList.contains('is-dirty')).toBe(true)
+    resetBtn.click()
+    await flush()
+    expect(rec.handle.setText).toHaveBeenCalledWith('# t')
+    expect((el.querySelector('[data-mm-save]') as HTMLButtonElement).classList.contains('is-dirty')).toBe(false)
+    expect(resetBtn.disabled).toBe(true)
+    expect(ctx.putObject).not.toHaveBeenCalled()
+    // beforeDispose 干净放行（同步 true，不弹确认）
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    expect(inst.beforeDispose?.('close')).toBe(true)
+    expect(confirmSpy).not.toHaveBeenCalled()
   })
 })
 
 // ───────────────────────── beforeDispose（未保存确认） ─────────────────────────
-
 describe('beforeDispose 未保存确认', () => {
   it('dirty + confirm=false → false（Promise 形态）', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)

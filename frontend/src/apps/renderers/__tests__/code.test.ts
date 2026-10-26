@@ -32,7 +32,16 @@ interface FakeModel {
   dispose: ReturnType<typeof vi.fn>
   getLanguageId: ReturnType<typeof vi.fn>
   getValue: ReturnType<typeof vi.fn>
-  getFullModelRange: ReturnType<typeof vi.fn>
+  /** 全模型范围（重置用例直调取比较基准；签名具体化避免 Mock 联合类型不可调用 TS2348） */
+  getFullModelRange: () => {
+    startLineNumber: number
+    startColumn: number
+    endLineNumber: number
+    endColumn: number
+  }
+  /** undo/redo 可用性（统一钮簇 setHistory 数据源；用例可定向改写模拟历史栈态） */
+  canUndo: ReturnType<typeof vi.fn>
+  canRedo: ReturnType<typeof vi.fn>
 }
 
 /** fake editor 最小面（与 monaco 被测调用点一一对应） */
@@ -86,6 +95,8 @@ const monacoMock = vi.hoisted((): {
         endLineNumber: 1,
         endColumn: value.length + 1,
       })),
+      canUndo: vi.fn(() => false),
+      canRedo: vi.fn(() => false),
     }
     const actions: Record<string, FakeAction> = {}
     const editor: FakeEditor = {
@@ -213,11 +224,18 @@ function btn(el: HTMLElement, act: string): HTMLButtonElement {
   return b
 }
 
-/** 状态徽标（未保存/只读） */
+/** 状态徽标（只读锁；「未保存」文字已废→保存钮红点，见一百四十三番口径） */
 function statusEl(el: HTMLElement): HTMLElement {
   const s = el.querySelector<HTMLElement>('.mmagic-code-bar__status')
   if (!s) throw new Error('工具栏缺状态徽标')
   return s
+}
+
+/** 统一编辑钮簇根节点（保存红点/只读隐藏的契约载体） */
+function clusterEl(el: HTMLElement): HTMLElement {
+  const c = el.querySelector<HTMLElement>('.mmagic-code-bar .mmx-edt')
+  if (!c) throw new Error('工具栏缺统一编辑钮簇')
+  return c
 }
 
 let confirmSpy: ReturnType<typeof vi.fn>
@@ -531,12 +549,13 @@ describe('codeEditorRenderer：工具栏渲染与文案', () => {
     inst.dispose()
   })
 
-  it('钮位与 i18n 文案：保存/撤销/重做/格式化（编辑类）+ 查找/字号±（视图类），title=aria-label 同键', async () => {
+  it('钮位与 i18n 文案：簇内保存/撤销/重做/重置 + 格式化（编辑类）+ 查找/字号±（视图类），title=aria-label 同键', async () => {
     const { el, inst } = await render()
     const cases: Array<[string, string]> = [
-      ['save', 'i18n:app.code-save'],
-      ['undo', 'i18n:app.code-undo'],
-      ['redo', 'i18n:app.code-redo'],
+      ['save', 'i18n:app.edt-save'],
+      ['undo', 'i18n:app.edt-undo'],
+      ['redo', 'i18n:app.edt-redo'],
+      ['reset', 'i18n:app.edt-reset'],
       ['format', 'i18n:app.code-format'],
       ['find', 'i18n:app.code-find'],
       ['font-inc', 'i18n:app.code-font-inc'],
@@ -547,8 +566,10 @@ describe('codeEditorRenderer：工具栏渲染与文案', () => {
       expect(b.title).toBe(label)
       expect(b.getAttribute('aria-label')).toBe(label)
     }
-    // 编辑类带 data-edit-only 标记（只读闩锁按它隐藏）
-    expect(btn(el, 'save').dataset.editOnly).toBe('true')
+    // 簇内四钮带 data-edit 标记 + 内联 SVG（统一簇契约，只读按 is-readonly 整簇隐藏）
+    expect(clusterEl(el).querySelectorAll('[data-edit="true"]').length).toBe(4)
+    expect(btn(el, 'save').querySelector('svg')).not.toBeNull()
+    // 编辑类 format 带 data-edit-only 标记（只读闩锁按它隐藏）
     expect(btn(el, 'format').dataset.editOnly).toBe('true')
     expect(btn(el, 'find').dataset.editOnly).toBeUndefined() // 视图类：只读态保留
     inst.dispose()
@@ -565,11 +586,12 @@ describe('codeEditorRenderer：工具栏渲染与文案', () => {
     inst.dispose()
   })
 
-  it('初始干净态：状态徽标为空，保存钮可点、无 dirty 圆点', async () => {
+  it('初始干净态：状态徽标为空，保存钮可点、无红点，重置禁用（干净态无可重置）', async () => {
     const { el, inst } = await render()
     expect(statusEl(el).textContent).toBe('')
     expect(btn(el, 'save').disabled).toBe(false)
     expect(btn(el, 'save').classList.contains('is-dirty')).toBe(false)
+    expect(btn(el, 'reset').disabled).toBe(true)
     inst.dispose()
   })
 })
@@ -587,16 +609,49 @@ describe('codeEditorRenderer：工具栏动作', () => {
     inst.dispose()
   })
 
-  it('dirty 流转：内容变化→徽标「未保存」+保存钮圆点；保存成功→双清', async () => {
+  it('dirty 流转：内容变化→保存钮红点（「未保存」文字徽标废弃）+重置解锁；保存成功→双清', async () => {
     const { el, editor, inst } = await render()
     editor.listeners[0]!()
-    expect(statusEl(el).textContent).toBe('i18n:app.code-dirty')
-    expect(statusEl(el).classList.contains('is-dirty')).toBe(true)
+    expect(statusEl(el).textContent).toBe('')
     expect(btn(el, 'save').classList.contains('is-dirty')).toBe(true)
+    expect(btn(el, 'reset').disabled).toBe(false)
     btn(el, 'save').click()
     await flush()
     expect(statusEl(el).textContent).toBe('')
     expect(btn(el, 'save').classList.contains('is-dirty')).toBe(false)
+    expect(btn(el, 'reset').disabled).toBe(true)
+    inst.dispose()
+  })
+
+  it('重置：dirty 下点击恢复打开时内容并清 dirty（beforeDispose 放行）；干净态禁用不动作', async () => {
+    const { el, editor, inst } = await render({ text: TEXT })
+    editor.setValue('const changed = true\n')
+    editor.listeners[0]!() // 弄脏（fake setValue 不触发监听，手动拍一拍）
+    expect(btn(el, 'reset').disabled).toBe(false)
+    // 全模型范围须点击前取：mock 的 getFullModelRange 随当前 value 动态变，
+    // 点击后 fake executeEdits 已把 value 复位成 TEXT，再取就是恢复态的范围（比较基准漂移）
+    const fullRange = editor.getModel().getFullModelRange()
+    btn(el, 'reset').click()
+    expect(editor.executeEdits).toHaveBeenCalledWith('mmagic-reset', [
+      { range: fullRange, text: TEXT },
+    ])
+    expect(editor.getValue()).toBe(TEXT) // fake executeEdits 落盘通道：恢复原文
+    expect(btn(el, 'save').classList.contains('is-dirty')).toBe(false)
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(inst.beforeDispose()).toBe(true) // 干净态同步放行
+    inst.dispose()
+  })
+
+  it('历史可用性：model.canUndo/canRedo → 簇内撤销/重做禁用联动', async () => {
+    const { el, editor, inst } = await render()
+    const model = editor.getModel()
+    expect(btn(el, 'undo').disabled).toBe(true) // 初始空历史
+    expect(btn(el, 'redo').disabled).toBe(true)
+    model.canUndo.mockReturnValue(true)
+    model.canRedo.mockReturnValue(true)
+    editor.listeners[0]!() // 内容变化触发 syncBar
+    expect(btn(el, 'undo').disabled).toBe(false)
+    expect(btn(el, 'redo').disabled).toBe(false)
     inst.dispose()
   })
 
@@ -618,6 +673,12 @@ describe('codeEditorRenderer：工具栏动作', () => {
 
   it('撤销/重做：editor.trigger("mmagic-code-bar", "undo"/"redo")', async () => {
     const { el, editor, inst } = await render()
+    // 簇内撤销/重做钮随历史栈态禁用（初始空历史=disabled，见「历史可用性」用例，
+    // jsdom 对 disabled 钮不派发 click）——先造历史可用态再点
+    const model = editor.getModel()
+    model.canUndo.mockReturnValue(true)
+    model.canRedo.mockReturnValue(true)
+    editor.listeners[0]!() // 内容变化触发 syncBar → setHistory 联动解锁
     btn(el, 'undo').click()
     btn(el, 'redo').click()
     expect(editor.trigger).toHaveBeenCalledWith('mmagic-code-bar', 'undo', undefined)
@@ -705,9 +766,9 @@ describe('codeEditorRenderer：运行期只读闩锁', () => {
     await flush()
 
     expect(editor.updateOptions).toHaveBeenCalledWith({ readOnly: true })
-    expect(btn(el, 'save').hidden).toBe(true)
-    expect(btn(el, 'undo').hidden).toBe(true)
-    expect(btn(el, 'redo').hidden).toBe(true)
+    // 簇内四钮只读整簇隐藏（is-readonly + data-edit 的 CSS 契约）
+    expect(clusterEl(el).classList.contains('is-readonly')).toBe(true)
+    expect(clusterEl(el).querySelectorAll('[data-edit="true"]').length).toBe(4)
     expect(btn(el, 'format').hidden).toBe(true)
     expect(btn(el, 'find').hidden).toBe(false) // 视图类：只读态保留
     const sel = el.querySelector<HTMLSelectElement>('.mmagic-code-bar__lang')!
@@ -752,8 +813,8 @@ describe('codeEditorRenderer：运行期只读闩锁', () => {
     await flush()
 
     expect(editor.updateOptions).not.toHaveBeenCalledWith({ readOnly: true })
-    expect(btn(el, 'save').hidden).toBe(false)
-    expect(statusEl(el).textContent).toBe('i18n:app.code-dirty') // dirty 保持
+    expect(btn(el, 'save').disabled).toBe(false)
+    expect(statusEl(el).textContent).toBe('') // dirty 只走保存钮红点（文字徽标废弃）
     expect(btn(el, 'save').classList.contains('is-dirty')).toBe(true)
 
     confirmSpy.mockReturnValue(false)

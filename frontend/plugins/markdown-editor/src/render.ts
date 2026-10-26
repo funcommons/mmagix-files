@@ -11,6 +11,7 @@ import { createEditor, EditorHandle } from './editor'
 import { renderMarkdown } from './md'
 import { renderMermaidBlocks } from './mermaid'
 import { isMdMode, readStoredMode, resolveInitialMode, writeStoredMode } from './options'
+import { createEditToolbar } from '../../../src/shared/editToolbar'
 import type { HostCtx, HostFile, HostInstance, MdEditorOptions, MdMode } from './types'
 
 const DEBOUNCE_MS = 400
@@ -41,8 +42,6 @@ const MODE_ICONS: Record<MdMode, string> = {
   split: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
   preview: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/>',
 }
-const SAVE_ICON =
-  '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/>'
 
 /**
  * 插件级样式：全部钉在 .mm-md-* 命名空间下（同类多实例共享同一份——样式恒等，无串扰面）。
@@ -158,21 +157,29 @@ export function renderEditor(
   const spacer = document.createElement('div')
   spacer.style.cssText = 'flex:1 1 auto;min-width:0'
 
-  const badge = document.createElement('span')
-  badge.className = 'mm-md-dirty'
-  badge.style.cssText = 'font-size:12px'
+  // 统一编辑钮簇（一百四十三番：保存红点｜撤销 重做 重置——样式唯源 shared/editToolbar，构建期内联）。
+  // testid 透传保留 data-mm-* 口径（E2E/单测历史脚本稳定）；undo/redo 直调 CM6 命令，reset 见 resetToSaved
+  const toolbarCtl = createEditToolbar(
+    { save: ctx.t('app.edt-save'), undo: ctx.t('app.edt-undo'), redo: ctx.t('app.edt-redo'), reset: ctx.t('app.edt-reset') },
+    {
+      onSave: () => void save(),
+      onUndo: () => void editor?.undo(),
+      onRedo: () => void editor?.redo(),
+      onReset: () => resetToSaved(),
+    },
+  )
+  const clusterBtn = (act: string, tid: string): HTMLButtonElement => {
+    const b = toolbarCtl.el.querySelector<HTMLButtonElement>(`[data-act="${act}"]`)!
+    b.setAttribute(tid, '1')
+    return b
+  }
+  clusterBtn('save', 'data-mm-save')
+  clusterBtn('undo', 'data-mm-undo')
+  clusterBtn('redo', 'data-mm-redo')
+  clusterBtn('reset', 'data-mm-reset')
 
-  const saveBtn = document.createElement('button')
-  saveBtn.type = 'button'
-  saveBtn.setAttribute('data-mm-save', '1')
-  saveBtn.appendChild(svgIcon(SAVE_ICON))
-  saveBtn.title = `${ctx.t('app.flow-save')} (Ctrl+S)`
-  saveBtn.setAttribute('aria-label', ctx.t('app.flow-save'))
-  saveBtn.style.cssText =
-    'border:1px solid #e5e7eb;border-radius:6px;background:rgba(255,255,255,.9);color:#374151;width:30px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0'
-
-  // 布局（用户口径：交换位置）：保存钮居左（含脏徽标），形态切换图标组居右
-  toolbar.append(saveBtn, badge, spacer, seg)
+  // 布局（用户口径）：编辑钮簇居左，形态切换图标组居右
+  toolbar.append(toolbarCtl.el, spacer, seg)
 
   const body = document.createElement('div')
   body.className = 'mm-md-body'
@@ -241,14 +248,14 @@ export function renderEditor(
   }
 
   // ── 保存链 ────────────────────────────────────────────────
+  // dirty 只走统一钮簇保存钮红点（一百四十三番），「未保存」文字徽标废弃
   const markDirty = (): void => {
     dirty = true
-    badge.textContent = ctx.t('app.code-dirty')
-    badge.style.color = '#b88230'
+    toolbarCtl.setDirty(true)
   }
   const clearDirty = (): void => {
     dirty = false
-    badge.textContent = ''
+    toolbarCtl.setDirty(false)
   }
   const save = async (): Promise<void> => {
     // 幂等双闸：未变更不写；在途不重入（CM keymap 与窗口级监听可能双触发）
@@ -257,6 +264,7 @@ export function renderEditor(
     // 保存起点快照：await 直传 RTT 期间的增量输入不得被误标已保存（P1——否则关 tab 无确认，增量静默丢失）
     const snapshot = ed.getText()
     saving = true
+    toolbarCtl.setBusy(true)
     try {
       await ctx.putObject(file.key, new Blob([snapshot], { type: 'text/markdown' }), 'text/markdown; charset=utf-8')
       ctx.notify('saved', { key: file.key })
@@ -273,9 +281,21 @@ export function renderEditor(
       })
     } finally {
       saving = false
+      toolbarCtl.setBusy(false)
     }
   }
-  saveBtn.addEventListener('click', () => void save())
+
+  /** 重置：放弃未保存修改恢复打开时内容（CM dispatch 入 history 可撤销；onChange 里 preview 照常重渲） */
+  const resetToSaved = (): void => {
+    if (disposed || saving || !dirty || !editor) return
+    suppressDirty = true
+    try {
+      editor.setText(text)
+    } finally {
+      suppressDirty = false
+    }
+    clearDirty()
+  }
   // 注意：keydown 监听在编辑器创建成功后才挂 el（捕获级、作用域=本实例容器）——
   // P2：createEditor 抛错时 instance 不返回、dispose 无人调，先挂 window 会孤儿化（全局 Ctrl+S 被吞）；
   // P3：window 级在多实例并存时会互相触发保存，容器级与内置 code.ts 同口径（save 本身幂等双闸兜底重入）
@@ -312,11 +332,13 @@ export function renderEditor(
   }
 
   // 编辑器装配（正文已在手——getObject 由 index.ts 外层先取）
+  // suppressDirty：resetToSaved 的程序化改写不入 dirty，但预览管线照常重渲（scheduleRender 不抑制）
+  let suppressDirty = false
   editor = createEditor(editorHost, {
     text,
     onSave: () => void save(),
     onChange: () => {
-      markDirty()
+      if (!suppressDirty) markDirty()
       scheduleRender()
     },
   })

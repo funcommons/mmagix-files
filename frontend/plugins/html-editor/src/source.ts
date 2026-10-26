@@ -1,9 +1,10 @@
 /**
  * CodeMirror 6 源码编辑器封装（md 插件 editor.ts 同口径：basicSetup + Mod-S 钩子 + 变更回调），
- * 语法换 html 高亮。
+ * 语法换 html 高亮。统一编辑钮簇（一百四十三番）出口：undo/redo（CM 命令直调）。
  */
 import { basicSetup, EditorView } from 'codemirror'
 import { html } from '@codemirror/lang-html'
+import { redo, undo } from '@codemirror/commands'
 import { EditorState, Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 
@@ -11,6 +12,9 @@ export interface SourceHandle {
   getText(): string
   /** 三态交接：可视编辑态的 HTML 写回源码视图（整文档重排后或片段） */
   setText(text: string): void
+  /** 撤销/重做（返回命令是否命中；空栈 no-op=false） */
+  undo(): boolean
+  redo(): boolean
   focus(): void
   dispose(): void
 }
@@ -51,6 +55,8 @@ export function createSourceEditor(
     setText: (text) => {
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
     },
+    undo: () => undo(view),
+    redo: () => redo(view),
     focus: () => view.focus(),
     dispose: () => view.destroy(),
   }

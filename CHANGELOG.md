@@ -6,6 +6,34 @@
 
 ### 新增
 
+- **统一编辑工具栏（内置+可编辑插件全量）**：所有可编辑应用左上角统一 `[保存｜撤销 重做 重置]`
+  图标钮簇（新共享源码 `src/shared/editToolbar.ts`——唯一样式源：ghost 图标钮 + CSS token 取色 +
+  内联 SVG 零字体依赖；宿主编译入 bundle、插件构建期各自内联拷贝）。**dirty 状态一律=保存钮右上角
+  小红点，「未保存」文字徽标全量废除**。新增词典段 `app.edt-save/undo/redo/reset`（中/英）。
+- 各应用钮簇能力面：
+  - code-editor：重置=恢复打开时内容（executeEdits 入 undo 栈可反悔）；撤销/重做可用性接 monaco
+    `model.canUndo/canRedo`；保存防重入闸可视化（busy 禁用）；只读闩锁整簇隐藏（editOnly 口径不变）
+  - flow-editor：重置=按打开时原文重解析重建（快照入撤销栈可反悔）；保存链补 `saving` 防重入闸；
+    dirty 红点替代「未保存」徽标；testid 透传保留 `flow-save/undo/redo` + 新增 `flow-reset`
+  - markdown-editor 插件：新增撤销/重做（CM6 `@codemirror/commands` 直调）+ 重置；测试 id
+    保留 `[data-mm-save]` + 新增 `[data-mm-undo/redo/reset]`
+  - html-editor 插件：撤销/重做按活动形态分流（source=CM6 / wysiwyg=Tiptap）+ 重置（source 权威
+    载体写回，可视态按 body 片段重建）；预览态只读→整簇隐藏；徽标保留错误/警告文案通道
+  - univer-office 插件：文字「保存」钮升级为钮簇；撤销/重做接 FUniver facade `undo()/redo()`；
+    重置=按打开时字节整体重挂（Univer 无批量 revert 通道）；保存链补 saving/dirty 双闸
+  - pdf-annotator 插件：钮簇居工具栏最左；新增重做（快照栈对偶）与重置（回打开时标注/表单态基线，
+    压平保存后基线翻空防回滚烙印内容）；保存钮「（压平合并）」语义保留在 title
+- 已知偏差（尽力而为口径）：filerobot-image-editor 保持第三方内核自带 UI（undo/redo/reset/save
+  内核原生已有且已居左），不强行叠加自建钮簇。
+
+### 变更
+
+- 插件产物重建：markdown-editor / html-editor / univer-office / pdf-annotator 四包
+  （`public/plugins/*.js`；v1.0.0 SRI 清单为 tag 历史记录，接入方待下版 SRI 重出）
+- markdown-editor 新增依赖 `@codemirror/commands`；html-editor 新增依赖 `@codemirror/commands`
+
+### 此前（html-viewer，同段待发）
+
 - **内置应用 html-viewer**：html/htm 默认打开应用（注册序先于 code-editor）——净化式沙箱预览
   （sandbox="allow-scripts" + srcdoc，剥脚本面），一切跳转/打开统一代理为「提示确认后新标签页打开」
   （会话级「不再询问该站点」信任表；非法 scheme 拒绝并上报）；code-editor 源码态与 html-editor

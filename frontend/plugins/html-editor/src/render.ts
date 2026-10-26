@@ -5,6 +5,9 @@
  *   preview 按需 srcdoc（只读，不动编辑内容）
  * - 单体化：open pass（外链→base64，script[src] 内联保语义）+ save pass（inline 兜底 + strip 漏网）
  * - 保存链：幂等（非 dirty/在途直接返回）+ Ctrl/Cmd+S + 未保存确认（3s 强制放行竞态，md 同款）
+ * - 统一编辑钮簇（一百四十三番）：保存红点（「未保存」文字徽标废弃；徽标仅剩错误/警告文案通道）｜
+ *   撤销 重做（按活动形态分流：source=CM 命令 / wysiwyg=Tiptap）｜重置=恢复打开时内容；
+ *   预览态只读→整簇隐藏
  * - 预览跳转代理：message（校验 event.source===iframe）→ 确认条 → window.open(_blank,noopener)
  * - savedState：{ mode }；切 tab 回来恢复形态
  * 样式钉在 .mm-html-* 命名空间（多实例零串扰）。
@@ -14,6 +17,7 @@ import { isHtmlMode, resolveInitialMode, writeStoredMode } from './options'
 import { buildPreviewDoc, normalizeOpenUrl, parseOpenRequest, PREVIEW_SANDBOX } from './sandbox'
 import { createSourceEditor, type SourceHandle } from './source'
 import { createWysiwyg, type WysiwygHandle } from './wysiwyg'
+import { createEditToolbar } from '../../../src/shared/editToolbar'
 import type { HostCtx, HostFile, HostInstance, HtmlEditorOptions, HtmlMode } from './types'
 
 const MODES: { key: HtmlMode; tKey: string; icon: string }[] = [
@@ -21,8 +25,6 @@ const MODES: { key: HtmlMode; tKey: string; icon: string }[] = [
   { key: 'wysiwyg', tKey: 'app.html-mode-wysiwyg', icon: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>' },
   { key: 'preview', tKey: 'app.html-mode-preview', icon: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/>' },
 ]
-const SAVE_ICON =
-  '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/>'
 /** 可视工具栏图标（内联 SVG path 片段，24×24 stroke 口径同 svgIcon；全字面量，无用户数据拼入） */
 const ICONS = {
   undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
@@ -78,8 +80,6 @@ function ensureStyles(): void {
 .mm-html-modes{display:flex;border:1px solid #d0d7de;border-radius:6px;overflow:hidden}
 .mm-html-modes button{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;background:transparent;color:#57606a;cursor:pointer;font-size:12px}
 .mm-html-modes button[data-active="true"]{background:#eaeef2;color:#1f2328;font-weight:600}
-.mm-html-save{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid #d0d7de;border-radius:6px;background:#fff;color:#1f2328;cursor:pointer;font-size:12px}
-.mm-html-save:disabled{opacity:.45;cursor:default}
 .mm-html-badge{font-size:12px;color:#b88230;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mm-html-badge.is-warn{color:#d54941}
 .mm-html-wysiwyg-bar{display:flex;align-items:center;gap:2px;flex:none;min-height:26px;padding:2px 6px;border-bottom:1px solid var(--app-separator,rgba(127,127,127,.18));background:transparent;flex-wrap:wrap}
@@ -187,15 +187,30 @@ export async function renderEditor(
   toolbar.className = 'mm-html-toolbar'
   const modesEl = document.createElement('div')
   modesEl.className = 'mm-html-modes'
-  const saveBtn = document.createElement('button')
-  saveBtn.className = 'mm-html-save'
-  saveBtn.appendChild(svgIcon(SAVE_ICON))
-  saveBtn.title = ctx.t('app.html-save') // 仅图标 + 悬浮 hint（无文字）；与脏标一起居左（v3 交换位置）
-  saveBtn.disabled = true
+  // 统一编辑钮簇（一百四十三番：保存红点｜撤销 重做 重置——样式唯源 shared/editToolbar，构建期内联）。
+  // undo/redo 按活动形态分流（source=CM 命令 / wysiwyg=Tiptap 命令）；preview 只读→整簇隐藏（setReadonly）
+  const toolbarCtl = createEditToolbar(
+    { save: ctx.t('app.edt-save'), undo: ctx.t('app.edt-undo'), redo: ctx.t('app.edt-redo'), reset: ctx.t('app.edt-reset') },
+    {
+      onSave: () => void save(),
+      onUndo: () => {
+        if (mode === 'wysiwyg') wysiwyg?.undo()
+        else source?.undo()
+      },
+      onRedo: () => {
+        if (mode === 'wysiwyg') wysiwyg?.redo()
+        else source?.redo()
+      },
+      onReset: () => resetToSaved(),
+    },
+  )
+  toolbarCtl.el.querySelector<HTMLElement>('[data-act="save"]')?.setAttribute('data-mm-save', '1')
+  toolbarCtl.el.querySelector<HTMLElement>('[data-act="reset"]')?.setAttribute('data-mm-reset', '1')
+  // 徽标保留错误/警告文案通道（内联失败/剥离警告/保存失败）；dirty 一律=保存钮红点，不再写「未保存」文字
   const badge = document.createElement('span')
   badge.className = 'mm-html-badge'
-  // v3 交换位置（用户圈注）：保存+脏标居左，三态按钮组居右
-  toolbar.appendChild(saveBtn)
+  // 布局（v3 口径延续）：编辑钮簇+徽标居左，三态按钮组居右
+  toolbar.appendChild(toolbarCtl.el)
   toolbar.appendChild(badge)
   toolbar.appendChild(modesEl)
   modesEl.style.marginLeft = 'auto'
@@ -312,25 +327,49 @@ export async function renderEditor(
   }
 
   // ── 脏标 ──
+  // dirty 只走统一钮簇保存钮红点（一百四十三番）；徽标仅剩错误/警告文案通道（内联失败/剥离警告/保存失败）
   const markDirty = (): void => {
     dirty = true
-    badge.textContent = ctx.t('app.html-dirty')
-    badge.style.color = '#b88230'
-    saveBtn.disabled = false
+    toolbarCtl.setDirty(true)
     // 顺带刷工具栏 active 态：save() 在可视态内重建实例走的是纯 markDirty 回调，
     // 挂在这里保证重建后的新实例也持续驱动按钮态（onStateChange 订阅只盖 enter 路径）
     barSyncs.forEach((f) => f())
   }
   const clearDirty = (): void => {
     dirty = false
+    toolbarCtl.setDirty(false)
     badge.textContent = inlineWarn.length > 0 ? ctx.t('app.html-inline-failed', { n: inlineWarn.length }) : ''
     badge.style.color = '#d54941'
     badge.title = inlineWarn.join('\n')
-    saveBtn.disabled = true
   }
   function refreshBadge(): void {
     if (dirty) markDirty()
     else clearDirty()
+  }
+
+  /** 重置：放弃未保存修改恢复打开时内容（source 权威载体写回；可视态按新 body 片段重建实例） */
+  function resetToSaved(): void {
+    if (disposed || saving || !dirty || !source) return
+    suppressDirty = true
+    try {
+      source.setText(sourceText)
+      if (mode === 'wysiwyg' && wysiwyg) {
+        wysiwygStateUnbind?.()
+        wysiwygStateUnbind = null
+        wysiwyg.dispose()
+        wysiwyg = createWysiwyg(wysiwygPane, { html: currentBodyFragment(), onChange: onEditChange })
+        wysiwygStateUnbind = wysiwyg.onStateChange(() => barSyncs.forEach((f) => f()))
+        barSyncs.forEach((f) => f())
+      }
+    } finally {
+      suppressDirty = false
+    }
+    clearDirty()
+  }
+  /** reset 的程序化改写不入 dirty（CM/Tiptap onChange 同步触发；预览重排不误报脏） */
+  let suppressDirty = false
+  const onEditChange = (): void => {
+    if (!suppressDirty) markDirty()
   }
 
   // ── 保存链（幂等双闸 + save pass 单体化，方案 §3.3）──
@@ -338,7 +377,7 @@ export async function renderEditor(
     if (disposed || saving || !dirty) return
     const htmlNow = currentFullHtml()
     saving = true
-    saveBtn.disabled = true
+    toolbarCtl.setBusy(true)
     try {
       // save pass：内联兜底（可视编辑中新贴的外链 href 等）→ 强制剥离仍外指的资源
       const parsed = new DOMParser().parseFromString(htmlNow, 'text/html')
@@ -353,7 +392,7 @@ export async function renderEditor(
       if (mode === 'wysiwyg' && wysiwyg) {
         const body = new DOMParser().parseFromString(finalHtml, 'text/html').body.innerHTML
         wysiwyg.dispose()
-        wysiwyg = createWysiwyg(wysiwygPane, { html: body, onChange: markDirty })
+        wysiwyg = createWysiwyg(wysiwygPane, { html: body, onChange: onEditChange })
       } else if (source) {
         source.setText(finalHtml)
       }
@@ -368,12 +407,11 @@ export async function renderEditor(
       console.warn('HTML_SAVE_ERR', String(err)?.slice(0, 200))
       badge.textContent = ctx.t('app.html-save-failed')
       badge.style.color = '#d54941'
-      saveBtn.disabled = false
     } finally {
       saving = false
+      toolbarCtl.setBusy(false)
     }
   }
-  saveBtn.addEventListener('click', () => void save())
   const onKey = (ev: KeyboardEvent): void => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') {
       ev.preventDefault()
@@ -461,7 +499,7 @@ export async function renderEditor(
     wysiwygPane.textContent = ''
     wysiwygBar.style.display = 'flex'
     buildWysiwygBar()
-    wysiwyg = createWysiwyg(wysiwygPane, { html: currentBodyFragment(), onChange: markDirty })
+    wysiwyg = createWysiwyg(wysiwygPane, { html: currentBodyFragment(), onChange: onEditChange })
     // 工具栏 active 态：选区/文档事务派发（markDirty 只盖文档变更，选区移动靠这条）
     wysiwygStateUnbind = wysiwyg.onStateChange(() => barSyncs.forEach((f) => f()))
     barSyncs.forEach((f) => f()) // 初态对齐（进态首帧无事务）
@@ -684,6 +722,7 @@ export async function renderEditor(
     wysiwygPane.dataset.active = String(mode === 'wysiwyg')
     previewPane.dataset.active = String(mode === 'preview')
     wysiwygBar.style.display = mode === 'wysiwyg' ? 'flex' : 'none'
+    toolbarCtl.setReadonly(mode === 'preview') // 预览态只读：统一钮簇整簇隐藏
     for (const m of MODES) {
       const b = modesEl.querySelector<HTMLButtonElement>(`button[data-mode="${m.key}"]`)
       if (b) b.dataset.active = String(mode === m.key)
@@ -703,7 +742,7 @@ export async function renderEditor(
   source = createSourceEditor(sourcePane, {
     text: sourceText,
     onSave: () => void save(),
-    onChange: markDirty,
+    onChange: onEditChange,
   })
   el.addEventListener('keydown', onKey, true)
   applyMode()
