@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+（空）
+
+## [1.1.0] — 2026-10-26
+
+主题：**统一编辑工具栏 + html-viewer**。协议无破坏性变更，v1.0.0 接入方升级无感（纯应用层增强）。
+
 ### 新增
 
 - **统一编辑工具栏（内置+可编辑插件全量）**：所有可编辑应用左上角统一 `[保存｜撤销 重做 重置]`
@@ -23,21 +29,31 @@
     重置=按打开时字节整体重挂（Univer 无批量 revert 通道）；保存链补 saving/dirty 双闸
   - pdf-annotator 插件：钮簇居工具栏最左；新增重做（快照栈对偶）与重置（回打开时标注/表单态基线，
     压平保存后基线翻空防回滚烙印内容）；保存钮「（压平合并）」语义保留在 title
-- 已知偏差（尽力而为口径）：filerobot-image-editor 保持第三方内核自带 UI（undo/redo/reset/save
-  内核原生已有且已居左），不强行叠加自建钮簇。
-
-### 变更
-
-- 插件产物重建：markdown-editor / html-editor / univer-office / pdf-annotator 四包
-  （`public/plugins/*.js`；v1.0.0 SRI 清单为 tag 历史记录，接入方待下版 SRI 重出）
-- markdown-editor 新增依赖 `@codemirror/commands`；html-editor 新增依赖 `@codemirror/commands`
-
-### 此前（html-viewer，同段待发）
-
 - **内置应用 html-viewer**：html/htm 默认打开应用（注册序先于 code-editor）——净化式沙箱预览
   （sandbox="allow-scripts" + srcdoc，剥脚本面），一切跳转/打开统一代理为「提示确认后新标签页打开」
   （会话级「不再询问该站点」信任表；非法 scheme 拒绝并上报）；code-editor 源码态与 html-editor
   插件三态编辑经「打开方式」可达。与 html-editor 插件预览态同口径（消息命名空间独立互不串台）。
+
+### 修复
+
+- pdf-annotator：统一钮簇接线将 `saving` 声明留在首次 `renderBadge()` 之后——打开即 TDZ 崩溃
+  （「Cannot access 'Xe' before initialization」）。声明前置修复；该插件无单测，
+  实机截图取证（十应用全量）补位回归面（test-report/2026-10-26-01）。
+
+### 变更
+
+- 插件产物重建：markdown-editor / html-editor / univer-office / pdf-annotator 四包（`public/plugins/*.js`）；
+  SRI 清单重出为 [`documents/releases/v1.1.0-plugin-sri.json`](documents/releases/v1.1.0-plugin-sri.json)
+- markdown-editor / html-editor 新增依赖 `@codemirror/commands`
+- 已知偏差（尽力而为口径）：filerobot-image-editor 保持第三方内核自带 UI（undo/redo/reset/save
+  内核原生已有且已居左），不强行叠加自建钮簇
+
+### 质量基线
+
+- 单元测试 1412 通过（98 文件）；vue-tsc/eslint 零错误
+- E2E：统一工具栏 12/12（code+flow 双应用链路）+ 十应用截图取证（内置 2+插件 5+三态+偏差存档）
+
+## [1.0.0] — 2026-10-22
 
 ## [1.0.0] — 2026-10-22
 

@@ -1,0 +1,14 @@
+{
+  "version": "1.1.0",
+  "generated": "2026-10-26T07:33:48.673Z",
+  "algorithm": "sha384",
+  "plugins": {
+    "artplayer-player.js": "sha384-Q0yQp4vnIrYBErxAu9scR+oY+DBXuH906rLXD5zRlQ+VrSxRyDcg9rO00imt4S4a",
+    "filerobot-image-editor.js": "sha384-9D7HLgPxOitkrHVn7KNsGP6RSuToTYFmP3nTg+oHeYnbTk0axpwu5J/rjwOBWzum",
+    "html-editor.js": "sha384-3Za9LWLlt7pOpuKUQT8uE5by2AGIAyAblY2ZsBjug+v9Y1ackQCmbjWN6esTHQqf",
+    "markdown-editor.js": "sha384-w5aGZTJDXPpi+4XUQRYkISGCwi0Dhr2fJAvvscRdreI33PWpK+ygvLs8gOu4D81d",
+    "pdf-annotator.js": "sha384-atT4KCITHofqrczlKKPfGH5juPgmwbpQq0yc6YrB1AGdJvUapShjrS7B+gEZBJFi",
+    "pptx-viewer.js": "sha384-RBjPalJzqMajq7dYQu/W3S0W99DgdyBrdPG3s9BTQwkhHv1UP2A3oPwHZSUpoewj",
+    "univer-office.js": "sha384-LecqWL3cjgnZMPdsOpKBeVEOa3JcUeL9FXtg40ZWKd2PZDxKiB624826rnp+ifKH"
+  }
+}

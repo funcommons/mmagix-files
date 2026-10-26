@@ -42,12 +42,12 @@ on("fileChanged", (p) => console.log(p.key));
 
 完整命令/事件/错误码契约见 [`documents/JSSDK 接口文档.md`](documents/JSSDK%20接口文档.md)；可运行示例见 `mmagix-embed-demo/`（`pnpm dev` → http://localhost:5200）。
 
-## 发布物清单（v1.0.0）
+## 发布物清单（v1.1.0）
 
 | 物 | 位置 | 说明 |
 |---|---|---|
 | 整站构建 | `frontend/` → `pnpm build` | 部署到任意静态托管（filesBase） |
-| 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [`documents/releases/`](documents/releases/) |
+| 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [`documents/releases/v1.1.0-plugin-sri.json`](documents/releases/v1.1.0-plugin-sri.json) |
 | 宿主侧客户端 | demo 内 `useMmagixFilesClient` 参考实现 | v1.1 起抽独立 npm 包 |
 
 ## 文档
