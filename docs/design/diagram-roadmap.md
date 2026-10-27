@@ -1,8 +1,12 @@
 # mmagix-files 图示类应用设计（脑图 · 时序图 · 架构图）
 
-> **【实现状态 · 2026-10-27 更新】**
-> - **脑图编辑 ✅ 已实现（一百四十七番）**：不新增独立应用——flow-editor 升格双方言（graph TD + mindmap），mindmap 文件直接进 X6 可视化编辑（缩进树解析/单根序列化/装饰往返/tab 宽容/位置 meta 持久化/添加分支自动挂选中节点）；时序图/架构图仍只读降级（本文其余部分保持规划态）
-> - 脑图/时序/架构的只读查看仍由 mermaid-viewer 覆盖；flow-editor 对非本方言语法降级只读
+> **【实现状态 · 2026-10-27 更新（一百四十八番终态）】**
+> - **四方言全可编辑 ✅**：flow-editor 升格为 graph TD 流程图 + mindmap 脑图 + sequenceDiagram 时序图 + architecture-beta 架构图的可视化编辑器（不新增独立应用）：
+>   - 脑图：缩进树解析/单根序列化/装饰往返/添加分支自动挂选中节点（一百四十七番）
+>   - 时序图：participant=节点、消息=边（箭头 kind `->>`/`-->>` 保真）；alt/else/end/Note 块语句整行透传保真（X6 呈现为图，非泳道渲染；位置不持久化）
+>   - 架构图：service=节点（icon/group 经 dialectData 往返）、连接=边（:端口 剥离、箭头 `--/-->/<-->` 保真）；group 行整行透传
+>   - 序列化均为 raw 优先（未编辑行零 diff）；原始行语义等价时原样输出（端口/装饰保留）
+> - 只读查看仍由 mermaid-viewer 覆盖；非四方言语法（pie 等）flow-editor 内部降级只读
 > - §3.3「view+code-editor 双注册」已由既有 mermaid-viewer + code-editor 覆盖，专设 sequence-viewer 无落地必要
 
 

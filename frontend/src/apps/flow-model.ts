@@ -29,6 +29,8 @@ export interface FlowNode {
   bare?: boolean
   /** mindmap 方言：源行装饰前的 id 前缀（`root((x))` 的 `root`；mermaid 忽略其显示，往返保真用） */
   mmId?: string
+  /** architecture 方言：icon/group 往返通道（service 行重生成时保真） */
+  dialectData?: Record<string, string>
   /** 渲染无关元数据（%% meta 行注入；属性面板读写） */
   meta?: Record<string, unknown>
 }
@@ -39,6 +41,8 @@ export interface FlowEdge {
   label: string
   /** 所在行号（-1=新增边） */
   line: number
+  /** 箭头原样（方言相关）：sequence `->>`/`-->>`、architecture `--`/`-->`/`<-->`；缺省按方言缺省箭头 */
+  kind?: string
 }
 
 export interface FlowModel {
@@ -524,4 +528,273 @@ export function serializeMindmap(model: FlowModel): string {
   if (rootIds.length > 0) emit(rootIds[0]!, 0)
   for (const extra of rootIds.slice(1)) emit(extra, 1)
   return out.join('\n')
+}
+
+// ───────────────────────── sequence 方言（时序图 → FlowModel 适配） ─────────────────────────
+// 设计：时序图语法行式 raw 优先（与 flowchart 同构）——participant=节点（round），
+// 消息=带 kind 箭头的边（->> 实线 / -->> 虚线）；alt/else/end/Note 等块语句整行透传保真。
+// 位置不持久化（时序布局由参与方顺序决定，X6 拖拽仅会话内视图）。
+
+export type FlowDialect = 'flowchart' | 'mindmap' | 'sequence' | 'architecture'
+
+const SEQUENCE_HEADER_RE = /^\s*sequenceDiagram\s*$/
+const SEQ_PARTICIPANT_RE = /^\s*participant\s+([A-Za-z0-9_]+)(?:\s+as\s+(.+))?\s*$/
+const SEQ_MESSAGE_RE = /^\s*([A-Za-z0-9_]+)\s*(-->>|->>|-->|-x|--x)\s*([A-Za-z0-9_]+)\s*:\s*(.*)$/
+
+/** 是否时序图语法源 */
+export function isSequenceSource(text: string): boolean {
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (t === '' || t.startsWith('%%')) continue
+    return SEQUENCE_HEADER_RE.test(line)
+  }
+  return false
+}
+
+/** 解析时序图为 FlowModel（participant=节点、消息=边；块语句透传；永不失败） */
+export function parseSequence(text: string): FlowModel {
+  const model = emptyModel('sequenceDiagram')
+  model.lines = text.split('\n')
+  model.lines.forEach((line, i) => {
+    if (SEQUENCE_HEADER_RE.test(line)) {
+      model.header = line
+      model.headerLine = i
+      return
+    }
+    const mm = META_RE.exec(line)
+    if (mm) {
+      if (model.metaIndent === null) model.metaIndent = /^[\t ]*/.exec(line)![0]
+      const key = mm[1] ?? ''
+      if (!key.startsWith('schema=')) {
+        try {
+          model.metaById.set(key, JSON.parse((mm[2] ?? '').trim() || '{}') as Record<string, unknown>)
+        } catch {
+          console.warn(`[flow-model] meta 行 JSON 非法，已忽略（line ${i + 1}）`)
+        }
+      }
+      return
+    }
+    if (line.trim() === '' || /^\s*%%/.test(line)) return
+    const pm = SEQ_PARTICIPANT_RE.exec(line)
+    if (pm) {
+      const id = pm[1] ?? ''
+      const asText = (pm[2] ?? '').trim()
+      model.nodes.set(id, {
+        id,
+        label: asText === '' ? id : unquoteLabel(asText),
+        shape: 'round',
+        bare: asText === '',
+        defLine: i,
+      })
+      return
+    }
+    const msg = SEQ_MESSAGE_RE.exec(line)
+    if (msg) {
+      const from = msg[1] ?? ''
+      const kind = msg[2] ?? '->>'
+      const to = msg[3] ?? ''
+      const label = unquoteLabel((msg[4] ?? '').trim())
+      for (const id of [from, to]) {
+        if (!model.nodes.has(id)) {
+          model.nodes.set(id, { id, label: id, shape: 'round', bare: true, defLine: i }) // 隐式参与方
+        }
+      }
+      model.edges.push({ from, to, label, line: i, kind })
+      return
+    }
+    // alt/else/end/Note/activate… 等块语句：整行透传（raw 保真，不进编辑面）
+  })
+  for (const [id, meta] of model.metaById) {
+    const n = model.nodes.get(id)
+    if (n) n.meta = meta
+  }
+  return model
+}
+
+/** 序列化时序图：raw 优先——participant/消息行重生成（编辑过的），块语句原样；新增消息/参与方追加尾部 */
+export function serializeSequence(model: FlowModel): string {
+  const out: string[] = []
+  const consumedEdges = new Set<number>()
+  let metaPassed = false
+  model.lines.forEach((raw, i) => {
+    if (i === model.headerLine) {
+      out.push(raw)
+      metaPassed = true
+      return
+    }
+    if (META_RE.test(raw)) {
+      out.push(raw) // meta 行原样透传（时序方言不用 meta 编辑面）
+      return
+    }
+    void metaPassed
+    const edgeIdx = model.edges.findIndex((e) => e.line === i)
+    if (edgeIdx >= 0) {
+      const e = model.edges[edgeIdx]!
+      consumedEdges.add(edgeIdx)
+      const gen = `${e.from}${e.kind ?? '->>'}${e.to}: ${e.label}`
+      out.push(raw === gen || raw.trim() === gen.trim() ? raw : gen)
+      return
+    }
+    const pNode = [...model.nodes.values()].find((n) => n.defLine === i && !n.bare)
+    if (pNode) {
+      const gen = `participant ${pNode.id} as ${escapeLabel(pNode.label)}`
+      out.push(raw === gen || raw.trim() === gen.trim() ? raw : gen)
+      return
+    }
+    out.push(raw)
+  })
+  model.edges.forEach((e, idx) => {
+    if (e.line === -1 && !consumedEdges.has(idx)) out.push(`${e.from}${e.kind ?? '->>'}${e.to}: ${e.label}`)
+  })
+  for (const n of model.nodes.values()) {
+    if (n.defLine === -1 && !n.bare) out.push(`participant ${n.id} as ${escapeLabel(n.label)}`)
+  }
+  return out.join('\n')
+}
+
+// ───────────────────────── architecture 方言（架构图 → FlowModel 适配） ─────────────────────────
+// 设计：service=节点（label 取 [...]；icon/group 存 dialectData 往返），连接=边（:端口 剥离，
+// 箭头 kind 保真 -->/<-->等）；group 行整行透传。位置不持久化（架构布局由引擎自动）。
+
+const ARCH_HEADER_RE = /^\s*architecture-beta\s*$/
+const ARCH_SERVICE_RE = /^\s*service\s+([A-Za-z0-9_]+)(?:\(([^)]*)\))?\s*\[([^\]]*)\](?:\s+in\s+([A-Za-z0-9_]+))?\s*$/
+const ARCH_EDGE_RE = /^\s*([A-Za-z0-9_]+)(?::([LRTB]))?\s*(--|-->|<-->)\s*(?:([LRTB]):\s*)?([A-Za-z0-9_]+)\s*$/
+
+/** 是否架构图语法源 */
+export function isArchitectureSource(text: string): boolean {
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (t === '' || t.startsWith('%%')) continue
+    return ARCH_HEADER_RE.test(line)
+  }
+  return false
+}
+
+/** 解析架构图为 FlowModel（service=节点、连接=边；group 行透传；永不失败） */
+export function parseArchitecture(text: string): FlowModel {
+  const model = emptyModel('architecture-beta')
+  model.lines = text.split('\n')
+  model.lines.forEach((line, i) => {
+    if (ARCH_HEADER_RE.test(line)) {
+      model.header = line
+      model.headerLine = i
+      return
+    }
+    const mm = META_RE.exec(line)
+    if (mm) {
+      if (model.metaIndent === null) model.metaIndent = /^[\t ]*/.exec(line)![0]
+      const key = mm[1] ?? ''
+      if (!key.startsWith('schema=')) {
+        try {
+          model.metaById.set(key, JSON.parse((mm[2] ?? '').trim() || '{}') as Record<string, unknown>)
+        } catch {
+          console.warn(`[flow-model] meta 行 JSON 非法，已忽略（line ${i + 1}）`)
+        }
+      }
+      return
+    }
+    if (line.trim() === '' || /^\s*%%/.test(line)) return
+    const sm = ARCH_SERVICE_RE.exec(line)
+    if (sm) {
+      const id = sm[1] ?? ''
+      model.nodes.set(id, {
+        id,
+        label: unquoteLabel((sm[3] ?? '').trim() || id),
+        shape: 'rect',
+        bare: false,
+        defLine: i,
+        dialectData: { icon: (sm[2] ?? '').trim(), group: (sm[4] ?? '').trim() },
+      })
+      return
+    }
+    const em = ARCH_EDGE_RE.exec(line)
+    if (em) {
+      const from = em[1] ?? ''
+      const kind = em[3] ?? '--'
+      const to = em[5] ?? ''
+      for (const id of [from, to]) {
+        if (!model.nodes.has(id)) {
+          model.nodes.set(id, { id, label: id, shape: 'rect', bare: false, defLine: i })
+        }
+      }
+      model.edges.push({ from, to, label: '', line: i, kind })
+      return
+    }
+    // group 行与其余：整行透传
+  })
+  for (const [id, meta] of model.metaById) {
+    const n = model.nodes.get(id)
+    if (n) n.meta = meta
+  }
+  return model
+}
+
+/** 序列化架构图：raw 优先——service/连接行重生成（编辑过的，icon/group/箭头 kind 经 dialectData/kind 保真） */
+export function serializeArchitecture(model: FlowModel): string {
+  const out: string[] = []
+  const consumedEdges = new Set<number>()
+  model.lines.forEach((raw, i) => {
+    if (i === model.headerLine) {
+      out.push(raw)
+      return
+    }
+    if (META_RE.test(raw)) {
+      out.push(raw)
+      return
+    }
+    const edgeIdx = model.edges.findIndex((e) => e.line === i)
+    if (edgeIdx >= 0) {
+      const e = model.edges[edgeIdx]!
+      consumedEdges.add(edgeIdx)
+      const gen = `${e.from} ${e.kind ?? '--'} ${e.to}`
+      // raw 优先：原始行语义等价（同端点/同箭头）→ 原样输出（端口等装饰保留）
+      const rm = ARCH_EDGE_RE.exec(raw)
+      if (rm && (rm[1] ?? '') === e.from && (rm[3] ?? '--') === (e.kind ?? '--') && (rm[5] ?? '') === e.to) {
+        out.push(raw)
+        return
+      }
+      out.push(raw === gen || raw.trim() === gen.trim() ? raw : gen)
+      return
+    }
+    const sNode = [...model.nodes.values()].find((n) => n.defLine === i)
+    if (sNode) {
+      const icon = (sNode.dialectData?.icon as string | undefined) ?? ''
+      const group = (sNode.dialectData?.group as string | undefined) ?? ''
+      const gen =
+        `service ${sNode.id}${icon ? `(${icon})` : ''}[${escapeLabel(sNode.label)}]` + (group ? ` in ${group}` : '')
+      // raw 优先：原始行语义等价（同 id/label/icon/group）→ 原样输出
+      const rm = ARCH_SERVICE_RE.exec(raw)
+      if (rm && (rm[1] ?? '') === sNode.id && unquoteLabel((rm[3] ?? '').trim()) === sNode.label && (rm[2] ?? '').trim() === icon && (rm[4] ?? '').trim() === group) {
+        out.push(raw)
+        return
+      }
+      out.push(raw === gen || raw.trim() === gen.trim() ? raw : gen)
+      return
+    }
+    out.push(raw)
+  })
+  model.edges.forEach((e, idx) => {
+    if (e.line === -1 && !consumedEdges.has(idx)) out.push(`${e.from} ${e.kind ?? '--'} ${e.to}`)
+  })
+  for (const n of model.nodes.values()) {
+    if (n.defLine === -1) {
+      const icon = (n.dialectData?.icon as string | undefined) ?? ''
+      out.push(`service ${n.id}${icon ? `(${icon})` : ''}[${escapeLabel(n.label)}]`)
+    }
+  }
+  return out.join('\n')
+}
+
+/** 方言探测（首条有效行判定；注释/meta 行跳过） */
+export function detectDialect(text: string): FlowDialect {
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (t === '' || t.startsWith('%%')) continue
+    if (/^\s*(graph|flowchart)\s/.test(line)) return 'flowchart'
+    if (MINDMAP_HEADER_RE.test(line)) return 'mindmap'
+    if (SEQUENCE_HEADER_RE.test(line)) return 'sequence'
+    if (ARCH_HEADER_RE.test(line)) return 'architecture'
+    return 'flowchart' // 无头行=按 flowchart 子集宽容解析
+  }
+  return 'flowchart'
 }

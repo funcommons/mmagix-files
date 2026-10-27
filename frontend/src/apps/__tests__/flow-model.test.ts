@@ -8,14 +8,20 @@ import {
   addNode,
   connect,
   escapeLabel,
+  isArchitectureSource,
   isMindmapSource,
+  isSequenceSource,
   nodeToken,
+  parseArchitecture,
   parseFlowchart,
   parseMindmap,
   parseNodeToken,
+  parseSequence,
   removeNode,
+  serializeArchitecture,
   serializeFlowchart,
   serializeMindmap,
+  serializeSequence,
   setNodeMeta,
   updateEdgeLabel,
   updateNode,
@@ -254,5 +260,93 @@ describe('mindmap：isMindmapSource / parseMindmap / serializeMindmap', () => {
     const out = serializeMindmap(m)
     expect(out).toContain('%% meta: schema=v1')
     expect(out).toContain('"layout"')
+  })
+})
+
+// ───────────────────────── sequence 方言（时序图适配） ─────────────────────────
+
+describe('sequence：isSequenceSource / parseSequence / serializeSequence', () => {
+  const FIXTURE = [
+    'sequenceDiagram',
+    '  participant U as 用户',
+    '  participant F as 前端',
+    '  participant S as 服务端',
+    '  U->>F: 输入账密',
+    '  F->>S: POST /login',
+    '  alt 校验通过',
+    '    S-->>F: 200 token',
+    '    F-->>U: 进入工作台',
+    '  else 校验失败',
+    '    S-->>F: 401',
+    '    F-->>U: 提示重试',
+    '  end',
+  ].join('\n')
+
+  it('parseSequence：participant=节点（round）、消息=边（kind 箭头保真）、alt/else/end 透传', () => {
+    expect(isSequenceSource(FIXTURE)).toBe(true)
+    const m = parseSequence(FIXTURE)
+    expect(m.nodes.size).toBe(3)
+    const u = m.nodes.get('U')!
+    expect(u.label).toBe('用户')
+    expect(u.shape).toBe('round')
+    expect(m.edges.length).toBe(6)
+    expect(m.edges[0]).toMatchObject({ from: 'U', to: 'F', label: '输入账密', kind: '->>' })
+    expect(m.edges[2]).toMatchObject({ from: 'S', to: 'F', label: '200 token', kind: '-->>' })
+  })
+
+  it('硬验收：未编辑 → serializeSequence(parseSequence(x)) === x（alt/else/end 原样保真）', () => {
+    expect(serializeSequence(parseSequence(FIXTURE))).toBe(FIXTURE)
+  })
+
+  it('编辑对称：改参与方 label（as 语法保持）、改消息 label（箭头 kind 不变）、新消息按 kind 追加', () => {
+    const m = parseSequence(FIXTURE)
+    updateNode(m, 'U', { label: '管理员' })
+    m.edges[0]!.label = '提交表单'
+    const out = serializeSequence(m)
+    expect(out).toContain('participant U as 管理员')
+    expect(out).toContain('U->>F: 提交表单') // 实线 kind 保持
+    expect(out).toContain('S-->>F: 401') // 未编辑虚线行原样
+    connect(m, 'F', 'S', '新消息')
+    ;(m.edges.at(-1) as { kind?: string }).kind = '-->>'
+    expect(serializeSequence(m)).toContain('F-->>S: 新消息')
+  })
+})
+
+// ───────────────────────── architecture 方言（架构图适配） ─────────────────────────
+
+describe('architecture：isArchitectureSource / parseArchitecture / serializeArchitecture', () => {
+  const FIXTURE = [
+    'architecture-beta',
+    '  group cloud(logos:aws-lambda)[云侧]',
+    '  service s3(logos:aws-s3)[S3 存储] in cloud',
+    '  service db(logos:aws-rds)[数据库] in cloud',
+    '  service fe(logos:react)[前端工作台]',
+    '  fe:R --> L:s3',
+    '  fe:B --> T:db',
+  ].join('\n')
+
+  it('parseArchitecture：service=节点（label/icon/group）、连接=边（端口剥离、箭头 kind 保真）', () => {
+    expect(isArchitectureSource(FIXTURE)).toBe(true)
+    const m = parseArchitecture(FIXTURE)
+    expect(m.nodes.size).toBe(3)
+    const s3 = m.nodes.get('s3')!
+    expect(s3.label).toBe('S3 存储')
+    expect(s3.dialectData).toEqual({ icon: 'logos:aws-s3', group: 'cloud' })
+    expect(m.edges.length).toBe(2)
+    expect(m.edges[0]).toMatchObject({ from: 'fe', to: 's3', kind: '-->' })
+  })
+
+  it('硬验收：未编辑 → serializeArchitecture(parseArchitecture(x)) === x（group/icon/端口原样）', () => {
+    expect(serializeArchitecture(parseArchitecture(FIXTURE))).toBe(FIXTURE)
+  })
+
+  it('编辑对称：改 service label（icon/group 保真）+ 连接重生成保箭头 kind；group 行透传', () => {
+    const m = parseArchitecture(FIXTURE)
+    updateNode(m, 's3', { label: '对象存储' })
+    m.edges[0]!.kind = '<-->'
+    const out = serializeArchitecture(m)
+    expect(out).toContain('service s3(logos:aws-s3)[对象存储] in cloud')
+    expect(out).toContain('fe <--> s3')
+    expect(out).toContain('group cloud(logos:aws-lambda)[云侧]')
   })
 })

@@ -15,7 +15,8 @@
  *    Delete 删除选中；Ctrl+S / Ctrl+Z / Ctrl+Y；snapline 对齐线；拖拽移动、两击连线
  *  - 回写：行级 patch（raw 优先/透传）→ Ctrl+S 或保存钮 → putObject；
  *    关闭确认（3s 竞速）+ 4305 运行期只读闩锁，与 code-editor 同口径
- *  - 非 graph TD 语法（mindmap/时序/架构）内部降级只读 mermaid 渲染
+ *  - 四方言：graph TD 流程图 / mindmap 脑图 / sequence 时序图 / architecture-beta 架构图均可视化编辑；
+ *    其余语法内部降级只读 mermaid 渲染
  *  - 位置持久化：拖拽即编辑（快照→标脏→保存）；坐标写 meta 块伪节点 `%% meta: _layout {"positions":{…}}`
  *    （mermaid 注释透传，AI 可读性不破；重开还原，无 pos 节点落 dagre 自动布局）
  * X6/dagre/snapline 全动态 import；jsdom 测试经模块 mock 注入桩。
@@ -26,18 +27,37 @@
 import {
   addNode,
   connect,
-  isMindmapSource,
+  detectDialect,
+  parseArchitecture,
   parseFlowchart,
   parseMindmap,
+  parseSequence,
   removeNode,
+  serializeArchitecture,
   serializeFlowchart,
   serializeMindmap,
+  serializeSequence,
   setNodeMeta,
   updateEdgeLabel,
   updateNode,
+  type FlowDialect,
   type FlowModel,
   type FlowShape,
 } from '../flow-model'
+
+/** 方言分派：parse/serialize 按首行语法选择（flowchart/mindmap/sequence/architecture） */
+const DIALECT_PARSE: Record<FlowDialect, (t: string) => FlowModel> = {
+  flowchart: parseFlowchart,
+  mindmap: parseMindmap,
+  sequence: parseSequence,
+  architecture: parseArchitecture,
+}
+const DIALECT_SERIALIZE: Record<FlowDialect, (m: FlowModel) => string> = {
+  flowchart: serializeFlowchart,
+  mindmap: serializeMindmap,
+  sequence: serializeSequence,
+  architecture: serializeArchitecture,
+}
 import { MERMAID_MAX_BYTES } from '../builtins'
 import { formatBytes } from '../../files/format'
 import { createEditToolbar } from '../../shared/editToolbar'
@@ -195,17 +215,17 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
 
   // ── 解析 + 语法守卫 ──
   let model: FlowModel
-  /** 源方言：mindmap 走 parseMindmap/serializeMindmap（缩进树），flowchart 走原链（一百四十七番） */
-  let mindmapDialect = false
+  /** 源方言：flowchart/mindmap/sequence/architecture 各自 parse/serialize（一百四十七/四十八番） */
+  let dialect: FlowDialect = detectDialect(text)
   try {
-    mindmapDialect = isMindmapSource(text)
-    model = mindmapDialect ? parseMindmap(text) : parseFlowchart(text)
-    // 语法守卫：flowchart 首条非空行必须 graph/flowchart 头；mindmap 必须有节点——
-    // 其余同扩展名语法（sequence/architecture 等）降级只读 mermaid 渲染，保证「双击就能看」
+    model = DIALECT_PARSE[dialect](text)
+    // 语法守卫：flowchart 首条非空行必须 graph/flowchart 头；其余方言必须有节点——
+    // 守卫不过（含空 mindmap/无参与方的时序）降级只读 mermaid 渲染，保证「双击就能看」
     const firstLine = model.lines.find((l) => l.trim() !== '') ?? ''
-    const dialectOk = mindmapDialect
-      ? model.nodes.size > 0
-      : /^\s*(graph|flowchart)\s/.test(firstLine)
+    const dialectOk =
+      dialect === 'flowchart'
+        ? /^\s*(graph|flowchart)\s/.test(firstLine)
+        : model.nodes.size > 0
     if (dialectOk === false || (model.nodes.size === 0 && model.edges.length === 0)) {
       const mermaid = (await import('mermaid')).default
       mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' })
@@ -383,7 +403,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   function snapshot(): void {
     if (restoring || readonly) return
     try {
-      undoStack.push(mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model))
+      undoStack.push(DIALECT_SERIALIZE[dialect](model))
     } catch (e) {
       console.warn('FLOW_SNAP_THROW', String(e)?.slice(0, 200))
     }
@@ -411,7 +431,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   }
   function loadSnapshot(s: string): void {
     restoring = true
-    model = mindmapDialect ? parseMindmap(s) : parseFlowchart(s)
+    model = DIALECT_PARSE[dialect](s)
     hydrateLayout()
     rebuildAll()
     restoring = false
@@ -420,12 +440,12 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   }
   function undo(): void {
     if (readonly || undoStack.length === 0) return
-    redoStack.push(mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model))
+    redoStack.push(DIALECT_SERIALIZE[dialect](model))
     loadSnapshot(undoStack.pop()!)
   }
   function redo(): void {
     if (readonly || redoStack.length === 0) return
-    undoStack.push(mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model))
+    undoStack.push(DIALECT_SERIALIZE[dialect](model))
     loadSnapshot(redoStack.pop()!)
   }
 
@@ -563,7 +583,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     positions.set(id, { x: base.x + 60 + Math.round(Math.random() * 60), y: base.y + 40 + Math.round(Math.random() * 60) })
     syncLayout()
     // mindmap 方言：新节点自动挂为选中节点的子节点（树语义——流程图仍走两击连线）
-    if (mindmapDialect && selectedNode) {
+    if (dialect === 'mindmap' && selectedNode) {
       connect(model, selectedNode, id)
       graphApi?.addEdge({ id: `edge-${model.edges.length - 1}`, shape: 'edge', source: selectedNode, target: id, attrs: { line: { stroke: '#94a3b8', strokeWidth: 1.5 } }, labels: [] })
     }
@@ -719,7 +739,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     saving = true
     renderBadge()
     syncLayout() // 位置缓存兜底同步（拖拽/新增路径已实时写入）
-    const value = mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model)
+    const value = DIALECT_SERIALIZE[dialect](model)
     try {
       await ctx.putObject(file.key, new Blob([value], { type: 'text/plain;charset=utf-8' }))
       ctx.notify('saved', { key: file.key })
@@ -738,7 +758,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   function resetToSaved(): void {
     if (readonly || !dirty || restoring) return
     snapshot()
-    model = mindmapDialect ? parseMindmap(text) : parseFlowchart(text)
+    model = DIALECT_PARSE[dialect](text)
     hydrateLayout()
     rebuildAll()
     dirty = false

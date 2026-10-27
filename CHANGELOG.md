@@ -14,6 +14,13 @@
 
 ### 新增（续）
 
+- **时序图/架构图可编辑（flow-editor 四方言收官）**：sequenceDiagram/architecture-beta 文件直接进 X6
+  可视化编辑。新增 `parseSequence`/`serializeSequence`（participant=节点、消息=边且箭头 `->>`/`-->>`
+  kind 保真；alt/else/end/Note 整行透传）与 `parseArchitecture`/`serializeArchitecture`（service=节点、
+  icon/group 经 dialectData 往返、连接 `:端口` 剥离且箭头 `--/-->/<-->` 保真、group 行透传）；两者均
+  raw 优先（未编辑行零 diff，原始行语义等价时原样输出保端口/装饰）；`detectDialect` 统一方言探测，
+  flow-editor parse/serialize 分派表驱动。边界：两者位置不持久化（布局由引擎定）；X6 呈现为图形态
+  （非泳道/分组渲染，alt 框/group 分组以源行保真）
 - **脑图可编辑（flow-editor 双方言）**：mindmap 文件不再只读降级——直接进 X6 可视化编辑（同
   flow-editor 全链：统一工具栏/撤销重做/重置/位置持久化 meta 通道/拖拽/连线/属性面板）。新增
   `parseMindmap`/`serializeMindmap`/`isMindmapSource`（缩进树解析、装饰 ((x))/(x)/[x]/{x} 往返、

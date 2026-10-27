@@ -344,8 +344,8 @@ describe('flow-editor 渲染器', () => {
     inst.dispose()
   })
 
-  it('非本方言语法（sequenceDiagram）→ 内部降级只读 mermaid 渲染（.mmagic-mermaid 容器）；mindmap 已升格可编辑不再降级', async () => {
-    const mindSrc = 'sequenceDiagram\n  U->>F: hi\n'
+  it('非四方言语法（pie）→ 内部降级只读 mermaid 渲染（.mmagic-mermaid 容器）；mindmap/sequence 已升格可编辑', async () => {
+    const mindSrc = 'pie title D\n  "a": 40\n  "b": 60\n'
     const ctx = {
       getObject: vi.fn(async () => new Blob([mindSrc])),
       putObject: vi.fn(async () => undefined),
@@ -621,18 +621,22 @@ describe('mindmap 方言：解析/编辑/保存（与 flow-editor 同链）', ()
     inst.dispose()
   })
 
-  it('sequenceDiagram 仍降级只读 mermaid（方言边界不回归）', async () => {
+  it('sequenceDiagram 升格可编辑（participant=节点、消息=边；不降级只读）', async () => {
     const ctx = {
-      getObject: vi.fn(async () => new Blob(['sequenceDiagram\n  U->>F: hi'])),
+      getObject: vi.fn(async () => new Blob(['sequenceDiagram\n  participant U as 用户\n  participant F as 前端\n  U->>F: 输入账密'])),
       putObject: vi.fn(async () => undefined),
       t: (key: string) => `T:${key}`,
       notify: vi.fn(),
     } as unknown as AppCtx & { putObject: ReturnType<typeof vi.fn> }
     const el = document.createElement('div')
     const inst = (await flowEditorRenderer(el, FILE, ctx)) as AppInstance
-    expect(el.querySelector('.mmagic-mermaid')).not.toBeNull()
+    expect(el.querySelector('.mmagic-flow')).not.toBeNull()
+    expect(el.querySelector('.mmagic-mermaid')).toBeNull()
+    const graph = x6Holder.created.at(-1)! as unknown as { cells: Map<string, unknown> }
+    expect(graph.cells.has('U')).toBe(true)
+    expect(graph.cells.has('edge-0')).toBe(true)
     const renderMock = mermaidHolder.state.impl?.render as ReturnType<typeof vi.fn> | undefined
-    expect(renderMock).toHaveBeenCalled()
+    expect(renderMock).not.toHaveBeenCalled()
     inst.dispose()
   })
 })
