@@ -12,6 +12,14 @@
   `clientProtocol.test.ts` 双侧比对（挂 frontend 套件）。单测 21 例（消息泵 harness：
   握手/call-reply/超时/终态/节流/重装坑全链）。
 
+### 新增（续）
+
+- **脑图可编辑（flow-editor 双方言）**：mindmap 文件不再只读降级——直接进 X6 可视化编辑（同
+  flow-editor 全链：统一工具栏/撤销重做/重置/位置持久化 meta 通道/拖拽/连线/属性面板）。新增
+  `parseMindmap`/`serializeMindmap`/`isMindmapSource`（缩进树解析、装饰 ((x))/(x)/[x]/{x} 往返、
+  tab 缩进宽容、非法行按纯文本收编、序列化单根收拢——mermaid「only one root」硬约束）；
+  脑图模式「添加形状」自动挂为选中节点的子节点（树语义）。时序图/架构图保持只读降级。
+
 ### 变更
 
 - **doc/ppt 下载兜底定向提示**：旧版 Office 二进制（.doc/.ppt）打开时由泛化「暂无应用」升级为

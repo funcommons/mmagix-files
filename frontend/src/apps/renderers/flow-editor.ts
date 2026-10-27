@@ -26,9 +26,12 @@
 import {
   addNode,
   connect,
+  isMindmapSource,
   parseFlowchart,
+  parseMindmap,
   removeNode,
   serializeFlowchart,
+  serializeMindmap,
   setNodeMeta,
   updateEdgeLabel,
   updateNode,
@@ -192,14 +195,18 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
 
   // ── 解析 + 语法守卫 ──
   let model: FlowModel
+  /** 源方言：mindmap 走 parseMindmap/serializeMindmap（缩进树），flowchart 走原链（一百四十七番） */
+  let mindmapDialect = false
   try {
-    model = parseFlowchart(text)
-    // graph TD 守卫：首条非空行必须是 graph/flowchart 头——mindmap/sequence/architecture 等
-    // 同扩展名语法的行会被子集解析器误认作裸节点（ext 级默认应用无法按语法分流），
-    // 一律内部降级只读 mermaid 渲染，保证「双击就能看」
+    mindmapDialect = isMindmapSource(text)
+    model = mindmapDialect ? parseMindmap(text) : parseFlowchart(text)
+    // 语法守卫：flowchart 首条非空行必须 graph/flowchart 头；mindmap 必须有节点——
+    // 其余同扩展名语法（sequence/architecture 等）降级只读 mermaid 渲染，保证「双击就能看」
     const firstLine = model.lines.find((l) => l.trim() !== '') ?? ''
-    const isGraphSyntax = /^\s*(graph|flowchart)\s/.test(firstLine)
-    if (isGraphSyntax === false || (model.nodes.size === 0 && model.edges.length === 0)) {
+    const dialectOk = mindmapDialect
+      ? model.nodes.size > 0
+      : /^\s*(graph|flowchart)\s/.test(firstLine)
+    if (dialectOk === false || (model.nodes.size === 0 && model.edges.length === 0)) {
       const mermaid = (await import('mermaid')).default
       mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' })
       const { svg } = await mermaid.render(`mmf-flow-ro-${++renderSeq}`, text)
@@ -376,7 +383,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   function snapshot(): void {
     if (restoring || readonly) return
     try {
-      undoStack.push(serializeFlowchart(model))
+      undoStack.push(mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model))
     } catch (e) {
       console.warn('FLOW_SNAP_THROW', String(e)?.slice(0, 200))
     }
@@ -404,7 +411,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   }
   function loadSnapshot(s: string): void {
     restoring = true
-    model = parseFlowchart(s)
+    model = mindmapDialect ? parseMindmap(s) : parseFlowchart(s)
     hydrateLayout()
     rebuildAll()
     restoring = false
@@ -413,12 +420,12 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   }
   function undo(): void {
     if (readonly || undoStack.length === 0) return
-    redoStack.push(serializeFlowchart(model))
+    redoStack.push(mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model))
     loadSnapshot(undoStack.pop()!)
   }
   function redo(): void {
     if (readonly || redoStack.length === 0) return
-    undoStack.push(serializeFlowchart(model))
+    undoStack.push(mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model))
     loadSnapshot(redoStack.pop()!)
   }
 
@@ -555,6 +562,11 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     setNodeMeta(model, id, { kind: preset.id, style: { fill: preset.fill, stroke: preset.stroke } })
     positions.set(id, { x: base.x + 60 + Math.round(Math.random() * 60), y: base.y + 40 + Math.round(Math.random() * 60) })
     syncLayout()
+    // mindmap 方言：新节点自动挂为选中节点的子节点（树语义——流程图仍走两击连线）
+    if (mindmapDialect && selectedNode) {
+      connect(model, selectedNode, id)
+      graphApi?.addEdge({ id: `edge-${model.edges.length - 1}`, shape: 'edge', source: selectedNode, target: id, attrs: { line: { stroke: '#94a3b8', strokeWidth: 1.5 } }, labels: [] })
+    }
     graphApi?.upsertNode({ id, shape: nodeX6Shape(preset.shape), ...positions.get(id)!, ...nodeBox(model.nodes.get(id)!), attrs: nodeAttrs(model.nodes.get(id)!) })
     selectVisual(id)
     markDirty()
@@ -707,7 +719,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
     saving = true
     renderBadge()
     syncLayout() // 位置缓存兜底同步（拖拽/新增路径已实时写入）
-    const value = serializeFlowchart(model)
+    const value = mindmapDialect ? serializeMindmap(model) : serializeFlowchart(model)
     try {
       await ctx.putObject(file.key, new Blob([value], { type: 'text/plain;charset=utf-8' }))
       ctx.notify('saved', { key: file.key })
@@ -726,7 +738,7 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
   function resetToSaved(): void {
     if (readonly || !dirty || restoring) return
     snapshot()
-    model = parseFlowchart(text)
+    model = mindmapDialect ? parseMindmap(text) : parseFlowchart(text)
     hydrateLayout()
     rebuildAll()
     dirty = false

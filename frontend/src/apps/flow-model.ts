@@ -27,6 +27,8 @@ export interface FlowNode {
   defLine: number
   /** 源文件中以裸 id 形态书写（label===id 且无形状定界）——序列化保持裸形态防行噪声 */
   bare?: boolean
+  /** mindmap 方言：源行装饰前的 id 前缀（`root((x))` 的 `root`；mermaid 忽略其显示，往返保真用） */
+  mmId?: string
   /** 渲染无关元数据（%% meta 行注入；属性面板读写） */
   meta?: Record<string, unknown>
 }
@@ -385,4 +387,141 @@ export function setNodeMeta(model: FlowModel, id: string, meta: Record<string, u
 export function updateEdgeLabel(model: FlowModel, index: number, label: string): void {
   const e = model.edges[index]
   if (e) e.label = label
+}
+
+// ───────────────────────── mindmap 方言（缩进树 → FlowModel 适配） ─────────────────────────
+// 设计：脑图语法（缩进层级树）复用 FlowModel/编辑操作面——节点=缩进行，父子=隐式边；
+// 序列化=整树重建（缩进 2 空格/层），非 raw 优先（缩进语言无逐行边语句可言）。
+// 契约：装饰（((x))/(x)/[x]/{x}）经 shape 往返；纯文本节点经 bare 往返；
+//       tab 缩进归一为 2 空格（mermaid 拒 tab——broken-tab 夹具在本编辑器可编辑即此意）；
+//       无法识别的行宽容按纯文本节点收编（永不失败）；注释行不保留（整树重建）。
+
+const MINDMAP_HEADER_RE = /^\s*mindmap\s*$/
+
+/** 是否 mindmap 语法源（首条有效行=mindmap 头；meta/注释行跳过） */
+export function isMindmapSource(text: string): boolean {
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (t === '' || t.startsWith('%%')) continue
+    return MINDMAP_HEADER_RE.test(line)
+  }
+  return false
+}
+
+/** mindmap 行 token → 形状/纯文本。装饰=尾部包裹（mermaid mindmap 形态 `root((x))`/`id1[x]`——
+ *  前缀 id 被 mermaid 忽略显示；前缀非干净标识符（含 CJK 等）则整行按纯文本，防 `分支(x)` 误吞文本） */
+function mindmapToken(token: string): { label: string; shape: FlowShape; bare: boolean; mmId?: string } {
+  const t = token.trim()
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) return { label: unquoteLabel(t), shape: 'rect', bare: true }
+  for (const [open, close, shape] of SHAPE_PAIRS) {
+    if (t.endsWith(close) && t.includes(open)) {
+      const openIdx = t.indexOf(open)
+      const prefix = t.slice(0, openIdx).trim()
+      const label = unquoteLabel(t.slice(openIdx + open.length, t.length - close.length))
+      if (prefix === '') return { label, shape, bare: false }
+      if (/^[A-Za-z0-9_]+$/.test(prefix)) return { label, shape, bare: false, mmId: prefix }
+      break // 前缀非干净 id（如 CJK 文本自带括号）→ 整行纯文本
+    }
+  }
+  return { label: t, shape: 'rect', bare: true }
+}
+
+/** mindmap 节点序列化 token：纯文本含形状定界字符时包 ["…"]（防 mermaid 歧义）；
+ *  装饰节点=mmId 前缀 + 形状包裹（不带合成 id m<n>——mindmap 无 id 语义，原前缀原样保真） */
+function mindmapNodeToken(node: Pick<FlowNode, 'label' | 'shape' | 'bare' | 'mmId'>): string {
+  if (node.bare) {
+    if (needsQuote(node.label)) return `[${escapeLabel(node.label)}]`
+    return node.label
+  }
+  const label = escapeLabel(node.label)
+  const prefix = node.mmId ?? ''
+  switch (node.shape) {
+    case 'circle':
+      return `${prefix}((${label}))`
+    case 'diamond':
+      return `${prefix}{${label}}`
+    case 'round':
+      return `${prefix}(${label})`
+    default:
+      return `${prefix}[${label}]`
+  }
+}
+
+/** 解析 mindmap 源文本为 FlowModel（宽容口径：无法识别的行按纯文本节点收编，永不失败） */
+export function parseMindmap(text: string): FlowModel {
+  const model = emptyModel('mindmap')
+  model.lines = text.split('\n')
+  const stack: Array<{ id: string; indent: number }> = []
+  let seq = 0
+  model.lines.forEach((line, i) => {
+    if (MINDMAP_HEADER_RE.test(line)) {
+      model.header = line
+      model.headerLine = i
+      return
+    }
+    const mm = META_RE.exec(line)
+    if (mm) {
+      if (model.metaIndent === null) model.metaIndent = /^[\t ]*/.exec(line)![0]
+      const key = mm[1] ?? ''
+      const body = (mm[2] ?? '').trim()
+      if (key.startsWith('schema=')) {
+        model.metaSchema = key
+      } else {
+        try {
+          model.metaById.set(key, JSON.parse(body || '{}') as Record<string, unknown>)
+        } catch {
+          console.warn(`[flow-model] meta 行 JSON 非法，已忽略（line ${i + 1}）`)
+        }
+      }
+      return
+    }
+    if (line.trim() === '' || /^\s*%%/.test(line)) return
+    // tab 归一为 2 空格（mermaid mindmap 拒 tab 缩进；本编辑器宽容）
+    const indent = (line.replace(/\t/g, '  ').match(/^\s*/) ?? [''])[0].length
+    const tk = mindmapToken(line.trim())
+    const id = `m${++seq}`
+    while (stack.length > 0 && (stack.at(-1)?.indent ?? 0) >= indent) stack.pop()
+    model.nodes.set(id, { id, label: tk.label, shape: tk.shape, bare: tk.bare, mmId: tk.mmId, defLine: i })
+    const parent = stack.at(-1)
+    if (parent) model.edges.push({ from: parent.id, to: id, label: '', line: i })
+    stack.push({ id, indent })
+  })
+  for (const [id, meta] of model.metaById) {
+    const n = model.nodes.get(id)
+    if (n) n.meta = meta
+  }
+  return model
+}
+
+/** 序列化 mindmap：整树重建（缩进 2 空格/层；meta 块跟 header；游离节点=额外根） */
+export function serializeMindmap(model: FlowModel): string {
+  const children = new Map<string, string[]>()
+  const hasParent = new Set<string>()
+  for (const e of model.edges) {
+    if (!model.nodes.has(e.from) || !model.nodes.has(e.to)) continue
+    const list = children.get(e.from)
+    if (list) list.push(e.to)
+    else children.set(e.from, [e.to])
+    hasParent.add(e.to)
+  }
+  const out: string[] = [model.header]
+  const ind = model.metaIndent ?? '  '
+  if (model.metaSchema) out.push(`${ind}%% meta: ${model.metaSchema}`)
+  for (const [id, meta] of model.metaById) {
+    out.push(`${ind}%% meta: ${id} ${JSON.stringify(meta)}`)
+  }
+  const seen = new Set<string>()
+  const emit = (id: string, depth: number): void => {
+    if (seen.has(id)) return // 环防御（畸形边输入）
+    seen.add(id)
+    const n = model.nodes.get(id)
+    if (!n) return
+    out.push(`${'  '.repeat(depth + 1)}${mindmapNodeToken(n)}`)
+    for (const c of children.get(id) ?? []) emit(c, depth + 1)
+  }
+  // mermaid 硬约束「only one root」：首个无入边节点=主根，其余孤儿（面板新增未连）收拢为其子节点
+  const rootIds = [...model.nodes.values()].filter((n) => !hasParent.has(n.id)).map((n) => n.id)
+  if (rootIds.length > 0) emit(rootIds[0]!, 0)
+  for (const extra of rootIds.slice(1)) emit(extra, 1)
+  return out.join('\n')
 }

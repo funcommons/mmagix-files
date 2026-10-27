@@ -48,7 +48,7 @@
 | audio-player | mp3/wav/ogg/flac/m4a | 预览 | 同上 |
 | pdf-viewer | pdf | 预览 | pdf.js（直链 Range） |
 | markdown-renderer | md/markdown | 预览 | 5MiB 限额 |
-| flow-editor | mmd/mermaid | 编辑 | graph TD 子集可视化编辑（X6），位置持久化 meta 通道 |
+| flow-editor | mmd/mermaid | 编辑 | **双方言**：graph TD 流程图 + mindmap 脑图（X6 可视化编辑，位置持久化 meta 通道；时序/架构等其余 mermaid 语法降级只读） |
 | mermaid-viewer | mmd/mermaid | 预览 | 全 mermaid 语法只读 |
 | csv-table | csv/tsv | 预览 | papaparse 表格化；20MiB 限额（超线拒绝+下载提示） |
 | html-viewer | html/htm | 预览 | 净化沙箱（srcdoc 剥脚本面）+ 跳转代理确认新 tab；20MiB |
@@ -91,7 +91,7 @@
 ## 5. 范围外与已知边界
 
 - 旧 .doc/.ppt 二进制不可在线预览（提供定向转存提示）；pptx 保真中上（SmartArt/艺术字有损；高保真 LibreOffice 路线未部署）
-- 脑图/时序图/架构图编辑器为规划项（当前以 mermaid-viewer 只读覆盖，见 diagram-roadmap.md）
+- 时序图/架构图编辑器为规划项（脑图编辑已随 flow-editor 双方言落地）；只读查看由 mermaid-viewer 覆盖（见 diagram-roadmap.md）
 - probe（magic bytes 嗅探）未实现（matcher 仅 ext 维度）；图片 >50MP 降采样未实现
 - 本地文件夹模式（File System Access API）未实现（Safari/Firefox 兼容边界）
 - 服务端会话/存储、redis 等一律不做（纯前端定位）

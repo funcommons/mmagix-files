@@ -344,8 +344,8 @@ describe('flow-editor 渲染器', () => {
     inst.dispose()
   })
 
-  it('非 graph TD 语法（mindmap）→ 内部降级只读 mermaid 渲染（.mmagic-mermaid 容器）', async () => {
-    const mindSrc = 'mindmap\n  root((MM))\n    分支\n'
+  it('非本方言语法（sequenceDiagram）→ 内部降级只读 mermaid 渲染（.mmagic-mermaid 容器）；mindmap 已升格可编辑不再降级', async () => {
+    const mindSrc = 'sequenceDiagram\n  U->>F: hi\n'
     const ctx = {
       getObject: vi.fn(async () => new Blob([mindSrc])),
       putObject: vi.fn(async () => undefined),
@@ -553,6 +553,86 @@ describe('flow-editor 渲染器', () => {
     // 撤销 → A 回 dagre 初始位（mock：中心 100,80 − 半宽 41/半高 19 = 59,61），_layout 行随之消失
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }))
     expect(graph.cells.get('A')).toMatchObject({ x: 59, y: 61 })
+    inst.dispose()
+  })
+})
+
+// ───────────────────────── mindmap 方言（一百四十七番：脑图可编辑，与 flow-editor 同链） ─────────────────────────
+
+describe('mindmap 方言：解析/编辑/保存（与 flow-editor 同链）', () => {
+  const MM_SRC = 'mindmap\n  root((MMagic-Files))\n    预览\n      图片\n    编辑\n      代码'
+  function makeMindCtx() {
+    return {
+      getObject: vi.fn(async () => new Blob([MM_SRC])),
+      putObject: vi.fn(async () => undefined),
+      t: (key: string) => `T:${key}`,
+      notify: vi.fn(),
+    } as unknown as AppCtx & { putObject: ReturnType<typeof vi.fn> }
+  }
+
+  it('打开 mindmap：走 X6 编辑器（树渲染），不降级 mermaid 只读；保存=缩进树原样往返', async () => {
+    const ctx = makeMindCtx()
+    const el = document.createElement('div')
+    const inst = (await flowEditorRenderer(el, FILE, ctx)) as AppInstance
+    const graph = x6Holder.created.at(-1)! as unknown as {
+      cells: Map<string, unknown>
+      emit: (ev: string, a: unknown) => void
+    }
+    expect(graph.cells.has('m1')).toBe(true) // 根
+    expect(graph.cells.has('m2')).toBe(true) // 预览
+    expect(graph.cells.has('edge-0')).toBe(true) // 隐式父子边
+    expect(mermaidHolder.state.impl?.render).not.toHaveBeenCalled() // 不降级只读
+
+    // 弄脏（拖动=编辑，与 flowchart 同口径）→ 保存链才会写
+    graph.emit('node:moved', { node: { id: 'm2' } })
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(ctx.putObject).toHaveBeenCalledTimes(1)
+    const text = await (ctx.putObject.mock.calls[0]![1] as Blob).text()
+    // 缩进树序列化：结构保持（根/分支/叶）+ 位置 meta 通道（拖拽持久化对脑图同样生效）
+    expect(text.startsWith('mindmap\n  %% meta:')).toBe(true)
+    expect(text).toContain('root((MMagic-Files))')
+    expect(text).toContain('预览')
+    expect(text).toContain('代码')
+    expect(text).toContain('%% meta: _layout')
+    inst.dispose()
+  })
+
+  it('脑图添加形状：自动挂为选中节点子节点（树语义）+ 保存含新增分支', async () => {
+    const ctx = makeMindCtx()
+    const el = document.createElement('div')
+    const inst = (await flowEditorRenderer(el, FILE, ctx)) as AppInstance
+    // 选中根（点击画布节点）→ 形状下拉添加 → 自动连线
+    const graph = x6Holder.created.at(-1)! as unknown as {
+      cells: Map<string, unknown>
+      emit: (ev: string, a: unknown) => void
+    }
+    ;(graph.emit)('node:click', { node: { id: 'm1' } })
+    addShape(el, 'process')
+    await new Promise((r) => setTimeout(r, 0))
+    // 新节点经 mindmap 单根收拢/显式连边入树
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(ctx.putObject).toHaveBeenCalledTimes(1)
+    const text = await (ctx.putObject.mock.calls[0]![1] as Blob).text()
+    expect(text).toContain('T:app.flow-kind-process') // 模板 label（t mock 口径）
+    expect(text).toContain('%% meta: _layout') // meta 通道（位置持久化）存在
+    expect(text).toContain('[T:app.flow-kind-process]') // 新分支入树（选中节点子节点）
+    inst.dispose()
+  })
+
+  it('sequenceDiagram 仍降级只读 mermaid（方言边界不回归）', async () => {
+    const ctx = {
+      getObject: vi.fn(async () => new Blob(['sequenceDiagram\n  U->>F: hi'])),
+      putObject: vi.fn(async () => undefined),
+      t: (key: string) => `T:${key}`,
+      notify: vi.fn(),
+    } as unknown as AppCtx & { putObject: ReturnType<typeof vi.fn> }
+    const el = document.createElement('div')
+    const inst = (await flowEditorRenderer(el, FILE, ctx)) as AppInstance
+    expect(el.querySelector('.mmagic-mermaid')).not.toBeNull()
+    const renderMock = mermaidHolder.state.impl?.render as ReturnType<typeof vi.fn> | undefined
+    expect(renderMock).toHaveBeenCalled()
     inst.dispose()
   })
 })

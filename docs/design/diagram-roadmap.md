@@ -1,6 +1,9 @@
 # mmagix-files 图示类应用设计（脑图 · 时序图 · 架构图）
 
-> **【实现状态 · 2026-10-26 审计】** **本文为规划文档——脑图/时序图/架构图编辑器均未实现**（注册表无此三应用；当前仅 mermaid-viewer 只读覆盖 + 非 graph TD 语法降级只读渲染）。§3.3 提议的「view+code-editor 双注册」形态实际已由既有 mermaid-viewer + code-editor 覆盖，专设 sequence-viewer 无落地必要。
+> **【实现状态 · 2026-10-27 更新】**
+> - **脑图编辑 ✅ 已实现（一百四十七番）**：不新增独立应用——flow-editor 升格双方言（graph TD + mindmap），mindmap 文件直接进 X6 可视化编辑（缩进树解析/单根序列化/装饰往返/tab 宽容/位置 meta 持久化/添加分支自动挂选中节点）；时序图/架构图仍只读降级（本文其余部分保持规划态）
+> - 脑图/时序/架构的只读查看仍由 mermaid-viewer 覆盖；flow-editor 对非本方言语法降级只读
+> - §3.3「view+code-editor 双注册」已由既有 mermaid-viewer + code-editor 覆盖，专设 sequence-viewer 无落地必要
 
 
 ## 〇、头表

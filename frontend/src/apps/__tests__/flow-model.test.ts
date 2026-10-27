@@ -8,11 +8,14 @@ import {
   addNode,
   connect,
   escapeLabel,
+  isMindmapSource,
   nodeToken,
   parseFlowchart,
+  parseMindmap,
   parseNodeToken,
   removeNode,
   serializeFlowchart,
+  serializeMindmap,
   setNodeMeta,
   updateEdgeLabel,
   updateNode,
@@ -158,5 +161,98 @@ describe('serializeFlowchart（raw 优先）', () => {
     const m = parseFlowchart('graph TD\n  A -->|旧| B')
     updateEdgeLabel(m, 0, '新')
     expect(serializeFlowchart(m)).toContain(`A -->|新| B`)
+  })
+})
+
+// ───────────────────────── mindmap 方言（缩进树适配） ─────────────────────────
+
+describe('mindmap：isMindmapSource / parseMindmap / serializeMindmap', () => {
+  const FIXTURE = [
+    'mindmap',
+    '  root((MMagic-Files))',
+    '    预览',
+    '      图片',
+    '      文档',
+    '      图示',
+    '    编辑',
+    '      代码',
+    '      画板',
+    '    嵌入',
+    '      iframe',
+    '      JSSDK',
+  ].join('\n')
+
+  it('isMindmapSource：mindmap 头=真；graph TD/sequence=false；meta/空行跳过后仍识别', () => {
+    expect(isMindmapSource(FIXTURE)).toBe(true)
+    expect(isMindmapSource('graph TD\n A-->B')).toBe(false)
+    expect(isMindmapSource('sequenceDiagram\n U->>F: x')).toBe(false)
+    expect(isMindmapSource('%% meta: schema=v1\n\nmindmap')).toBe(true)
+    expect(isMindmapSource('')).toBe(false)
+  })
+
+  it('parseMindmap：节点/隐式父子边/装饰形状/纯文本 bare 全对', () => {
+    const m = parseMindmap(FIXTURE)
+    expect(m.header).toBe('mindmap')
+    expect(m.nodes.size).toBe(11) // 根+3 分支+7 叶
+    expect(m.edges.length).toBe(10)
+    const root = [...m.nodes.values()][0]!
+    expect(root.label).toBe('MMagic-Files')
+    expect(root.shape).toBe('circle') // ((…))
+    expect(root.bare).toBe(false)
+    const children = m.edges.filter((e) => e.from === root.id)
+    expect(children.map((e) => m.nodes.get(e.to)?.label)).toEqual(['预览', '编辑', '嵌入'])
+    const yulan = m.nodes.get(children[0]!.to)!
+    expect(yulan.bare).toBe(true) // 纯文本节点
+    expect(yulan.shape).toBe('rect')
+  })
+
+  it('硬验收：未编辑 → serializeMindmap(parseMindmap(x)) === x（缩进/装饰/纯文本逐字节还原）', () => {
+    expect(serializeMindmap(parseMindmap(FIXTURE))).toBe(FIXTURE)
+  })
+
+  it('编辑对称：改 label/装饰/增删节点后序列化反映变更；纯文本含形状字符自动包 ["…"]', () => {
+    const m = parseMindmap(FIXTURE)
+    const root = [...m.nodes.values()][0]!
+    updateNode(m, root.id, { label: '新根' })
+    let out = serializeMindmap(m)
+    expect(out).toContain('root((新根))') // 装饰保持
+
+    const yulan = m.edges.map((e) => m.nodes.get(e.to)!).find((n) => n.label === '图片')!
+    updateNode(m, yulan.id, { label: '图片(缩略)' }) // 纯文本含括号 → 序列化包 ["…"]
+    out = serializeMindmap(m)
+    expect(out).toContain('["图片(缩略)"]')
+
+    const nid = addNode(m, '新分支', 'round')
+    connect(m, root.id, nid)
+    out = serializeMindmap(m)
+    expect(out).toContain('(新分支)')
+    removeNode(m, nid)
+    expect(serializeMindmap(m)).not.toContain('新分支')
+  })
+
+  it('宽容口径：tab 缩进归一（broken-tab 修复）；非法记号行按纯文本收编（broken-mind 不炸）', () => {
+    const tabbed = 'mindmap\n  root((MM))\n\t分支(tab缩进)'
+    const m = parseMindmap(tabbed)
+    expect(m.nodes.size).toBe(2) // tab 归一：分支与 root 同级=第二根（mermaid 会拒，我们宽容收编）
+    expect(m.edges.length).toBe(0)
+    const out = serializeMindmap(m)
+    // 序列化单根收拢：分支挂为主根子节点（层级修正），括号文本自动加保护包裹
+    expect(out).toBe('mindmap\n  root((MM))\n    ["分支(tab缩进)"]')
+
+    const garbage = parseMindmap('mindmap\n  root((MM))\n    分支\n  @@@@ 非法记号 []]] {{{')
+    expect(garbage.nodes.size).toBe(3) // 非法行按纯文本节点收编（root+分支+非法行），永不失败
+    expect(serializeMindmap(garbage)).toContain('@@@@ 非法记号')
+  })
+
+  it('meta 通道：%% meta 行解析进 metaById 并随序列化重建；位置持久化对脑图同样生效', () => {
+    const src = 'mindmap\n  %% meta: schema=v1\n  %% meta: m1 {"kind":"root"}\n  root((MM))\n    子'
+    const m = parseMindmap(src)
+    expect(m.metaSchema).toBe('schema=v1')
+    const root = [...m.nodes.values()].find((n) => n.label === 'MM')!
+    expect(m.metaById.get(root.id)).toEqual({ kind: 'root' })
+    setNodeMeta(m, root.id, { kind: 'root', layout: { x: 1 } })
+    const out = serializeMindmap(m)
+    expect(out).toContain('%% meta: schema=v1')
+    expect(out).toContain('"layout"')
   })
 })
