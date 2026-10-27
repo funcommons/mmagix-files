@@ -1,5 +1,9 @@
 # code-editor 升级建议（内置 Monaco 编辑器应用演进线）
 
+> **【现状追记 · 2026-10-26（v1.1.0 后）】** 统一编辑工具栏落地（`src/shared/editToolbar.ts` 十应用簇）：
+> 保存钮红点替代「未保存」徽标、新增重置（恢复打开时内容，入 undo 栈）、撤销/重做接 `model.canUndo/canRedo`、
+> 保存失败经 `ctx.notifyAppError` 上报宿主、36px 工具栏。P2-1 Diff / P2-2 model 复用 / P3-1 py 格式化仍为待办。
+
 > 状态：v1.1（2026-10-21）。独立 `monaco-editor` 动态插件计划已取消——增强全部并入内置 code-editor 演进线，原《Monaco编辑器插件方案》已删除；本建议承接其有效设计（OpenSumi MIT 增强思路佐证 + 主题适配设计）。
 > 基线：Monaco 0.57 · `frontend/src/apps/renderers/code.ts` · 工具栏 36px 插件风格 · worker 五入口分发 + 格式化双链（2026-10-20 落地，memory/monaco-worker-dispatch + test-report/2026-10-20-01）。
 > **进度：P1-1 已实施（2026-10-21）；P1-2 查证后关闭（无需实施，假设证伪）。**

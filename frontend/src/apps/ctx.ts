@@ -1,6 +1,6 @@
 /**
  * AppCtx 工厂——把数据面实现（工作台=S3Client / 单文件=UrlSourceProvider）装配成插件能力面
- * 契约：《动态插件方案.md》V1.1 §二 ctx 能力面 + notify→fileChanged 映射表
+ * 契约：《docs/design/plugin-system.md》V1.1 §二 ctx 能力面 + notify→fileChanged 映射表
  */
 import type { AppCtx, FileChangedPayload } from '../sdk/types'
 
@@ -23,7 +23,7 @@ export interface AppCtxDeps {
   notifyAppError?: (err: { code: number; message: string }) => void
 }
 
-/** notify type → fileChanged action 映射（契约正本：《动态插件方案.md》§二） */
+/** notify type → fileChanged action 映射（契约正本：《docs/design/plugin-system.md》§二） */
 export function mapNotifyAction(type: 'saved' | 'changed' | 'deleted' | 'renamed'): FileChangedPayload['action'] {
   switch (type) {
     case 'saved':

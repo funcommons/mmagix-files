@@ -1,7 +1,7 @@
 /**
  * 媒体渲染器（video/audio）——M2-R2，Lane F6 增媒体直链优先
- * 契约：《documents/第一期文件类型支持计划.md》§一（video-player/audio-player 行「Range 请求拖动进度」）+
- *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
+ * 契约：《docs/product/PRD.md》§一（video-player/audio-player 行「Range 请求拖动进度」）+
+ *       《docs/design/plugin-system.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
  * 链路（两级）：
  *  1) ctx 带 getMediaUrl 能力（装配层透传 datasource.getMediaUrl，预签名 URL）→ 直接作
  *     <video|audio src>——「Range 拖动」的实现口径：src 为 HTTP(S) 直链时，浏览器对媒体资源

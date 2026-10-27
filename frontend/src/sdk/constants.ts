@@ -1,6 +1,6 @@
 /**
  * JSSDK 协议常量
- * 契约正本：《documents/JSSDK 接口文档.md》V1.0
+ * 契约正本：《docs/design/jsdk-api.md》V1.0
  * 本文件由主线持有，子 agent 只读。
  */
 

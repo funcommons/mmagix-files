@@ -1,7 +1,7 @@
 /**
  * AppRegistry 单测（Wave1-A7）
  * 被测：src/apps/registry.ts——normalizeExt / normalizeMime / matches / AppRegistry
- * 契约：《方案设计.md》V1.2 §4.6、《动态插件方案.md》V1.1 §一/§二
+ * 契约：《docs/design/solution-design.md》V1.2 §4.6、《docs/design/plugin-system.md》V1.1 §一/§二
  * matcher：字段间 AND、同字段内 OR；无任何字段=不命中（防吞所有类型）；
  * ext 命中要求点分隔（`a.todo` 命中 `todo`，裸名 `todo` 无扩展名不命中）
  */

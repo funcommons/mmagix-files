@@ -1,9 +1,17 @@
 # 动态插件方案：markdown-editor（Markdown 编辑器 × Mermaid × 三形态）
 
+> **【实施状态注记 · 2026-10-26 审计】** 三形态/options 通道/保存链/20MB 闸全部落地；细节漂移以代码为准：
+> 1. **形态优先级**：savedState > initialMode > 用户记忆 > defaultMode > 'split'（`render.ts:109-112`）
+> 2. mermaid 单块失败**静默降级普通代码块**（无错误框 UI；`mermaid.ts:44-52`——§一.2/§五 过期，以 §3.2 为准）
+> 3. 链接加固实为统一 target/rel（scheme 白名单靠 markdown-it 缺省 validateLink）
+> 4. dirty=统一工具栏保存钮红点（「未保存」文字徽标已废；v1.1.0 统一编辑工具栏接入，`render.ts` 经 `src/shared/editToolbar`）
+> 5. 演示接入 lazy:false（EmbedPlay 注释存档：lazy 对有内置默认应用扩展名永不触发）
+
+
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.0（2026-10-16） |
-| 性质 | 动态应用插件施工方案（对齐《动态插件方案.md》契约 + 《JSSDK 接口文档.md》V1.0） |
+| 性质 | 动态应用插件施工方案（对齐《../design/plugin-system.md》契约 + 《../design/jsdk-api.md》V1.0） |
 | 交付物 | `public/plugins/markdown-editor.js` 单文件 ESM 插件 + 参数通道契约微扩展 |
 
 ---

@@ -1,12 +1,18 @@
 # mmagix-files 流程图应用设计（Mermaid 源 + X6 编辑）
 
+> **【实施状态注记 · 2026-10-26 审计】** MVP-①②③④ 已实现且核心契约吻合；以下以代码为准：
+> 1. **未实现**：BPMN 导出（§五/MVP-⑤ 全章）、SVG 旁路键（`<key>.svg.derived/`）
+> 2. **口径演进**：布局缓存旁路键 → `%% meta: _layout` 伪节点（随源持久化）；graph LR 可进编辑器（布局强制 TD，保存保留 LR 头行）；subgraph 仅行透传不建组；meta 重复静默覆盖（不告警）
+> 3. **X6 v2 适配（代码已踩平，本文按 v1 撰写）**：DEF-1 zoom 增量陷阱（读-算-写绝对值）、DEF-2 mousewheel 配置失效（ctrl+滚轮手工监听）、DEF-3 无 toSVG（画布 SVG 序列化导出）、DEF-6 removeCell 级联删边（applyNodeCell 补回相邻边）——见 `flow-editor.ts` 文件头
+
+
 ## 〇、头表
 
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.0（2026-10-13 首版） |
 | 状态 | **草案（候裁）** |
-| 依据 | 《方案设计.md》应用模型；《应用打开防样式污染方案.md》V1.0（同文档+约定式隔离结论）；本设计前置于 2026-10-13 会话评估结论 |
+| 依据 | 《solution-design.md》应用模型；《style-isolation.md》V1.0（同文档+约定式隔离结论）；本设计前置于 2026-10-13 会话评估结论 |
 | 范围 | 流程图（graph TD 子集）的存储格式 / 渲染 / 可视化编辑 / BPMN 交换导出；脑图（mindmap）沿用同一架构，本文附带口径 |
 | 定位 | 新内置应用（`mermaid-viewer` 只读兜底 + `flow-editor` 编辑），走既有 AppRegistry/「打开方式」体系，不改 JSSDK 协议 |
 
@@ -184,4 +190,4 @@ graph TD
 - AntV X6：https://x6.antv.antgroup.com ；dagre：https://github.com/dagrejs/dagre
 - bpmn-moddle：https://github.com/bpmn-io/bpmn-moddle ；bpmn-auto-layout：https://github.com/bpmn-io/bpmn-auto-layout
 - Mermaid Chart（官方商业可视化编辑器，形态参照）：https://mermaidchart.com
-- 本仓：《第一期文件类型支持计划.md》应用清单 / 《应用打开防样式污染方案.md》隔离结论 / 《动态插件方案.md》T2 沙箱口径
+- 本仓：《../product/PRD.md》应用清单 / 《style-isolation.md》隔离结论 / 《plugin-system.md》T2 沙箱口径

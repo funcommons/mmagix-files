@@ -1,6 +1,6 @@
 /**
  * MessageBus —— postMessage 双向通道（Wave1-A1）
- * 契约正本：《documents/JSSDK 接口文档.md》V1.0 §一/§二/§三/§七
+ * 契约正本：《docs/design/jsdk-api.md》V1.0 §一/§二/§三/§七
  *
  * 职责边界：
  *  - 信封构造/解析（ns/v/kind/id/name/payload）、cmd id ↔ pending 匹配、超时（4004）

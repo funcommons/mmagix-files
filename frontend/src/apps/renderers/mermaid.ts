@@ -1,7 +1,7 @@
 /**
  * Mermaid 图示渲染器（mermaid-viewer）——graph TD / mindmap / sequenceDiagram /
  * architecture-beta 等四类图（及 mermaid 支持的其余语法）的只读渲染。
- * 设计正本：《documents/流程图应用设计（Mermaid+X6）.md》《documents/图示类应用设计（脑图·时序图·架构图）.md》
+ * 设计正本：《docs/design/flow-editor-design.md》《docs/design/diagram-roadmap.md》
  * 管线：ctx.getObject → Blob.text() → 动态 import('mermaid') → mermaid.render → SVG 注入。
  * 安全：securityLevel:'strict'（源文本中的 HTML/事件一律不执行）；SVG 产物为 mermaid 生成，非源 HTML。
  * 超限：与 spec.maxBytes（MERMAID_MAX_BYTES）同源防御纵深（R2-03 口径）。

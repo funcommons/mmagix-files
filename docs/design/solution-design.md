@@ -1,5 +1,16 @@
 # mmagix-files 方案设计（web 文件中台）
 
+> **【实施状态注记 · 2026-10-26 审计】** 本文为总体方案裁决档案（概要设计现状见 [architecture.md](architecture.md)）。以下与代码已分叉，以代码为准（锚点见各条）：
+> 1. §4.7 命令实为 **17 条**（+v1.1 `setCredentials`/`getApps`）；事件 **15 条**（+`previewFullscreen`，`views/Home.vue:535`；iframe 侧类型暂未收编）
+> 2. §4.5 布局为**自研** TreePanel+PreviewTabs+拖拽分隔条（无 dockview/allotment）；「轻量文本降级 CodeMirror 6」未实现
+> 3. §4.4 S3 子集无 ListParts/ListMultipartUploads（`sdk/s3/client.ts:2` 自述）
+> 4. §4.2/§八 会话已支持**续期**：setCredentials 重签热替换+extend 重置自毁线（`session.ts:124`）
+> 5. §4.1b 单文件 shape 另有 `appId`/`security`/`plugins`，v1.2 支持 `source.url=''` 无源装载（`config.ts:139-165`）
+> 6. §4.6/§4.8 image-painter 未实现（renderers/index.ts 注释「M2+ 排期」）；pptx 已由插件可预览（非「降级下载」）
+> 7. §4.2「刷新=从 fragment 重建」→ 实际解析后 `scrubFragment()` 抹除 fragment，刷新经 sessionStorage 备份链重建（`config.ts:188-211`）
+> 8. 交付物已扩：dist + `@mmagix/files-client` 宿主包 + 7 个动态插件
+
+
 ## 〇、头表
 
 | 项 | 值 |
@@ -81,7 +92,7 @@ S3 兼容端点（S3 端点与 scoped 临时凭证：AK/SK/SessionToken 三元�
 
 **组件清单**：①前端 SPA（唯一交付物）②CDN/静态托管（运营面）。
 
-> ✅ 已裁⑥（2026-10-08）：**无租户概念**——fragment 配置只对当前浏览器会话生效，个性化全部由前端读配置实现；交付层零按消费方差异化。frame-ancestors 由托管运营面统一设定或省略（非接入义务——无配置/凭证的嵌入实例=空壳）；插件供应链执法=配置 `plugins[]` 清单本身+SRI 标签注入（§五.1、《动态插件方案.md》§四）。
+> ✅ 已裁⑥（2026-10-08）：**无租户概念**——fragment 配置只对当前浏览器会话生效，个性化全部由前端读配置实现；交付层零按消费方差异化。frame-ancestors 由托管运营面统一设定或省略（非接入义务——无配置/凭证的嵌入实例=空壳）；插件供应链执法=配置 `plugins[]` 清单本身+SRI 标签注入（§五.1、《plugin-system.md》§四）。
 
 **可选增强件（非本期，接缝预留）**：会话服务（ticket 一次性+心跳延期+控制面审计/presign）——接缝=前端凭证获取接口 `fetchCredentials()`：fragment 形态从配置直取，服务形态 RPC 获取；架构不因它分叉，v2 增强不返工。
 
@@ -153,7 +164,7 @@ AppRegistry: registerApp({ id, matcher: {mime|ext|probe}, renderer, actions })
 
 - **内置应用**：图片浏览（viewerjs 级）、图片画图、文本/代码编辑（Monaco）、Markdown 渲染（markdown-it，含 mermaid）、PDF（iframe 原生/pdf.js）、音视频（`<video>/<audio>`）、CSV（文本+表格化）
 - **同类型多应用**：同 matcher 多 app →「打开方式」菜单（图片→浏览/画图）
-- **扩展插件**：与内置走同一 registry——**T1 宿主自管插件=配置注入 ES module（`activate(sdk)`→`registerApp`，特权运行）一期定案**；T2 第三方市场插件（sandboxed 渲染）候需求——契约/安全红线/工程细则见《动态插件方案.md》
+- **扩展插件**：与内置走同一 registry——**T1 宿主自管插件=配置注入 ES module（`activate(sdk)`→`registerApp`，特权运行）一期定案**；T2 第三方市场插件（sandboxed 渲染）候需求——契约/安全红线/工程细则见《plugin-system.md》
 - **office**：预览=docx-preview/SheetJS **进 v1**；编辑**不进 v1**（纯前端不可行，Collabora 预选备档，候真实需求+商务裁决）
 
 ### 4.7 JSSDK（postMessage 双向协议）
@@ -186,7 +197,7 @@ AppRegistry: registerApp({ id, matcher: {mime|ext|probe}, renderer, actions })
 
 ## 五、安全设计
 
-1. **嵌入控制（已裁⑥：无租户概念）**：不做按消费方 frame-ancestors 钉域——「谁能嵌」不是交付层边界：无配置/凭证的嵌入实例=空壳、无物可泄；真实边界=JSSDK `event.origin` 双向校验（本节 6）+凭证 scope（本节 3）；托管运营面可统一设定全局 frame-ancestors（非接入义务）；宿主侧禁 `allow-top-navigation`（接入指引见《用户手册.md》§四）
+1. **嵌入控制（已裁⑥：无租户概念）**：不做按消费方 frame-ancestors 钉域——「谁能嵌」不是交付层边界：无配置/凭证的嵌入实例=空壳、无物可泄；真实边界=JSSDK `event.origin` 双向校验（本节 6）+凭证 scope（本节 3）；托管运营面可统一设定全局 frame-ancestors（非接入义务）；宿主侧禁 `allow-top-navigation`（接入指引见《../operations/user-guide.md》§四）
 
 2. **URL 泄漏面**：Token/配置禁 query；fragment 在凭证 TTL 内可重放——「URL 即凭证，泄漏=会话泄漏（至 TTL 止）」写入消费方接入契约第一行
 3. **凭证**：scoped 短 TTL 临时凭证为**接入硬义务**（prefix 限定+TTL ≤1h 建议/24h 硬帽）；XSS 失守的唯一缓释=scope——**T1 特权档的强制红线=插件域白名单+SRI 完整性校验+宿主自担信任承诺**（宿主本就把凭证托付给同信任级的自家 js）；**沙箱隔离=T2 市场插件期义务**
@@ -227,7 +238,7 @@ AppRegistry: registerApp({ id, matcher: {mime|ext|probe}, renderer, actions })
 | # | 项 | 裁决 | 状态 |
 | --- | --- | --- | --- |
 | ① | 凭证模型 | **a. scoped 凭证进浏览器（直签 SigV4）**；presign 控制面降级可选增强件 | ✅ 已裁（V1.1，随 0 后端定案） |
-| ② | 插件沙箱档 | **T1 宿主自管插件（配置注入 ES module，特权运行）一期；T2 第三方市场（sandboxed iframe/worker）候需求** | ✅ 已裁（翻案正本=《动态插件方案.md》） |
+| ② | 插件沙箱档 | **T1 宿主自管插件（配置注入 ES module，特权运行）一期；T2 第三方市场（sandboxed iframe/worker）候需求** | ✅ 已裁（翻案正本=《plugin-system.md》） |
 | ③ | office 编辑进 v1? | **预览进 v1（M4），编辑不进 v1**——Collabora 预选备档，候真实需求再议 | ✅ 已裁（用户裁 2026-10-08） |
 | ④ | URL 配置形态 | **fragment 全量 JSON**；ticket 形态随会话服务降级为增强件能力 | ✅ 已裁（V1.1，随 0 后端定案） |
 | ⑤ | 后端形态 | **0 后端纯前端定案**；会话服务（ticket/心跳/审计）为未来可选增强件，接缝=`fetchCredentials()` | ✅ 已裁（V1.1） |

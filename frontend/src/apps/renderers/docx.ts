@@ -1,7 +1,7 @@
 /**
  * docx 渲染器（内置应用 docx-viewer 的 renderer，M2-R5——M4 内容提前）
- * 契约：《documents/第一期文件类型支持计划.md》§一（docx-viewer 行，docx-preview 还原度中上）+
- *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
+ * 契约：《docs/product/PRD.md》§一（docx-viewer 行，docx-preview 还原度中上）+
+ *       《docs/design/plugin-system.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
  * 链路：ctx.getObject(key) → Blob.arrayBuffer → 动态 import('docx-preview') →
  *       renderAsync(buffer, 容器, undefined, { inWrapper: true })。
  *       docx-preview 体积大，动态 import 不入主 bundle（R1 mermaid 同款口径）。

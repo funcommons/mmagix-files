@@ -1,5 +1,5 @@
 /**
- * credentials.ts 单测：凭证获取接缝（《方案设计.md》§4.3 fetchCredentials 抽象）
+ * credentials.ts 单测：凭证获取接缝（《docs/design/solution-design.md》§4.3 fetchCredentials 抽象）
  * 本期实现 = FragmentCredentialsProvider（fragment 直取）
  */
 import { describe, it, expect } from 'vitest'

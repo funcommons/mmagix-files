@@ -1,5 +1,5 @@
 /**
- * 凭证获取接缝（《方案设计.md》V1.2 §4.3 fetchCredentials 抽象）
+ * 凭证获取接缝（《docs/design/solution-design.md》V1.2 §4.3 fetchCredentials 抽象）
  *
  * - 本期 = fragment 直取：FragmentCredentialsProvider 构造时快照 backend.credentials
  * - 增强期（非本期，接缝不变）= 会话服务 RPC 换发：届时实现 RpcCredentialsProvider

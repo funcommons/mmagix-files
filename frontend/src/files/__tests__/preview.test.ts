@@ -1,7 +1,7 @@
 /**
  * 预览生命周期单测（Wave Lane F1）
- * 契约正本：《documents/动态插件方案.md》§五（dispose/恢复/beforeDispose）、
- *          《documents/第一期文件类型支持计划.md》缺口 7（渲染失败/超时 10s 错误边界）
+ * 契约正本：《docs/design/plugin-system.md》§五（dispose/恢复/beforeDispose）、
+ *          《docs/product/PRD.md》缺口 7（渲染失败/超时 10s 错误边界）
  * 覆盖点：
  *  1. 向后兼容——open/clear/current 既有语义不变（stage 渲染、fallback、切换先 dispose）
  *  2. beforeDispose gate——open 切换/close 询问：false=暂缓（实例与容器完整保留）、3s 超时强制放行、

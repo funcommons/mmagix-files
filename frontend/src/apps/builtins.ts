@@ -1,5 +1,5 @@
 /**
- * 内置应用预置表——正本：《documents/第一期文件类型支持计划.md》§一应用清单
+ * 内置应用预置表——正本：《docs/product/PRD.md》§一应用清单
  * code=registry id（与计划表列一致）；label=i18n key（词典在 locales，M2 收口）；
  * renderer 由 M2 注入（registerBuiltins 的 renderers 参数），缺位时占位渲染。
  * fallback-download 不入 registry（空 matcher 语义=不命中，防吞所有类型）——

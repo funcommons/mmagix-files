@@ -3,8 +3,7 @@
 演示如何把 [mmagix-files](../frontend/)（纯前端、S3 直连的文件工作台 SPA）通过
 **iframe + `#config` / `#file` fragment + postMessage JSSDK** 嵌入第三方宿主页面。
 工程形态 copy 自 `opencut-embed-demo`（Vue 3 + Element Plus + Pinia + vue-router +
-Vite + SCSS 品牌令牌），**composable 为裸 `window.postMessage` 实现，零 npm SDK 依赖**，
-可直接把 `src/composables/useMmagixFilesClient.ts` 拷进你自己的项目。
+Vite + SCSS 品牌令牌），**composable 实现抽为 npm 包 [`@mmagix/files-client`](../frontend/packages/files-client/)**（本 demo 经 vite alias 消费同一份源码，`src/composables/useMmagixFilesClient.ts` 仅为兼容出口）——接入方直接 `npm install @mmagix/files-client`。
 
 ## 快速开始（两个终端）
 
@@ -119,10 +118,10 @@ pnpm s3:seed   # 读 .env.local，灌入演示种子对象
 | 项 | opencut-embed-demo | 本 demo |
 | --- | --- | --- |
 | 被嵌应用 | OpenCut 编辑器（同机反代 `/opencut`） | mmagix-files SPA（跨源直连 `http://localhost:5199/`） |
-| SDK | `@opencut/embed-sdk`（vite alias 源码） | 协议层无 SDK——`useMmagixFilesClient.ts` 裸 postMessage；UI 层已接 fc-web-sdk（`src/components/sdk`，Fc* 组件 + FcThemeProvider/FcThemeSwitcher，符合《fc-web-sdk》规范） |
-| 品牌 | 9 个 | 2 个（bend / aigc） |
+| SDK | `@opencut/embed-sdk`（vite alias 源码） | [`@mmagix/files-client`](../frontend/packages/files-client/)（vite alias 源码）；UI 层已接 fc-web-sdk（`src/components/sdk`，Fc* 组件 + FcThemeProvider/FcThemeSwitcher，符合《fc-web-sdk》规范） |
+| 品牌 | 9 个 | 随宿主注入（demo 内置品牌表已退役，见 src/App.vue） |
 | 页面 | Overview + EmbedPlay | Overview + EmbedPlay（工作台）+ FilePlay（单文件） |
 | 端口 | 9340 | 5200（strictPort） |
 
-契约正本：`../documents/JSSDK 接口文档.md`（协议）/`../documents/用户手册.md`（接入）；
+契约正本：`../../docs/design/jsdk-api.md`（协议）/`../../docs/operations/user-guide.md`（接入）；
 协议常量/形状镜像自 `../frontend/src/sdk/{constants,types}.ts`，改协议须两处同步。

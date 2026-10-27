@@ -1,5 +1,5 @@
 /**
- * 会话自毁控制器（契约《方案设计.md》§4.2 /《JSSDK 接口文档.md》§三）
+ * 会话自毁控制器（契约《docs/design/solution-design.md》§4.2 /《docs/design/jsdk-api.md》§三）
  *
  * 执法线分层：会话有效期=凭证 TTL，签发时定死、不延期——
  * - 服务侧硬线：STS 凭证真实 TTL（刷新/塞栓不可续命），TTL 到 → S3 全拒；

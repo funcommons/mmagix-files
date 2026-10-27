@@ -1,7 +1,7 @@
 # mmagix-files 动态插件样例（examples/plugins/）
 
-《documents/动态插件样例.md》三个样例的**可运行正本**——零构建依赖的纯 ES module，
-`export function activate(sdk)` 为唯一约定入口（契约：《documents/动态插件方案.md》V1.1 §二）。
+《../../docs/design/plugin-sample.md》三个样例的**可运行正本**——零构建依赖的纯 ES module，
+`export function activate(sdk)` 为唯一约定入口（契约：《../../docs/design/plugin-system.md》V1.1 §二）。
 本目录即「文档样例=可运行代码」的审计闭环证明：`src/plugins/__tests__/samples.test.ts`
 直接 import 这三个文件跑注册/渲染/保存链，测试即规格。
 
@@ -45,7 +45,7 @@ curl -s http://localhost:5173/examples/plugins/todo-viewer.js | head -3
 }
 ```
 
-- `features.plugins` 是总闸（`false`=动态插件整链不存在，见《用户手册.md》）
+- `features.plugins` 是总闸（`false`=动态插件整链不存在，见《../../docs/operations/user-guide.md》）
 - `lazy` 默认开：首个 matcher 命中才加载；`"lazy": false` 改启动即载
 - S3 常以 `application/octet-stream` 存上传物，样例 matcher **只用 ext**（契约 §一）
 

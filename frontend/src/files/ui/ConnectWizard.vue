@@ -199,7 +199,7 @@ function connect(): void {
     origin: window.location.origin,
     ttlMinutes: ttlMinutes.value,
   })
-  // #config 原始片段（encodeURIComponent 与宿主拼装口径一致，见《用户手册.md》§一第 3 步）。
+  // #config 原始片段（encodeURIComponent 与宿主拼装口径一致，见《docs/operations/user-guide.md》§一第 3 步）。
   // 只写 sessionStorage 备份、不写 URL：凭据不进地址栏/历史/Referer，reload 后由 boot 原链重建。
   persistRawBackup('#config=' + encodeURIComponent(JSON.stringify(config)), ttlSeconds)
   reloadPage()

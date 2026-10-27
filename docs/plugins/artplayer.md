@@ -1,9 +1,15 @@
 # 动态插件方案：artplayer-player（Artplayer 媒体播放器）
 
+> **【实施状态注记 · 2026-10-26 审计】** 方案已全部落地；超方案实现补记：
+> 1. **断流重连终态判定**：artplayer 自带自动重连（上限 5）+ 监听原始 `video:error` 计次，达 RECONNECT_MAX=5 才降级错误节点（`render.ts:16-17,84-98,176-182`）
+> 2. 插件 id=`artplayer-media`；音频形态隐藏居中大播放钮（样式注入）
+> 其余（体积 173KB<500KB 目标、options、白名单、savedState{time}、宿主触点）与代码一致。
+
+
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.0（2026-10-16） |
-| 性质 | 动态应用插件施工方案（对齐《动态插件方案.md》+《JSSDK 接口文档.md》v1.1 options 通道） |
+| 性质 | 动态应用插件施工方案（对齐《../design/plugin-system.md》+《../design/jsdk-api.md》v1.1 options 通道） |
 | 交付物 | `public/plugins/artplayer-player.js` 单文件 ESM 插件（目标 ≤500KB，预计 ~250KB） |
 
 ## 一、目标与非目标

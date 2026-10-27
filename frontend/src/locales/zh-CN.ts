@@ -258,7 +258,7 @@ export default {
     'docx-load-fail': 'Word 文档加载失败',
     'xlsx-load-fail': '表格解析失败',
     'xlsx-empty': '空工作簿',
-    // —— 内置应用 labelKey（《第一期文件类型支持计划.md》应用表；「打开方式」菜单消费）——
+    // —— 内置应用 labelKey（《docs/product/PRD.md》应用表；「打开方式」菜单消费）——
     'image-viewer': '图片查看',
     'video-player': '视频播放',
     'audio-player': '音频播放',
@@ -277,7 +277,7 @@ export default {
     'xlsx-viewer': '表格预览',
   },
   plugin: {
-    // 《动态插件样例.md》ctx.t 消费的样例文案（宿主词典兜底，避免样例运行显示 key 原文）
+    // 《docs/design/plugin-sample.md》ctx.t 消费的样例文案（宿主词典兜底，避免样例运行显示 key 原文）
     'parse-fail': '插件解析失败',
     save: '保存',
     'unsaved-confirm': '有未保存的修改，确定关闭吗？',

@@ -1,6 +1,6 @@
 /**
  * 应用数据面桥——S3Client（工作台）/ UrlSourceProvider（单文件）→ AppCtx 数据面
- * 契约：《方案设计.md》V1.2 §4.1b「数据源抽象：内置应用与插件零感知」
+ * 契约：《docs/design/solution-design.md》V1.2 §4.1b「数据源抽象：内置应用与插件零感知」
  * getMediaUrl（Lane F6）：可选媒体直链——预签名/源 URL 直接作 <video>/<audio> src，
  * 浏览器原生 Range 请求拖动进度（S3 原生支持），无则渲染器回落 Blob 路径。
  */

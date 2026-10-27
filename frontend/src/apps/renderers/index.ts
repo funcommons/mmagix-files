@@ -1,6 +1,6 @@
 /**
  * 渲染器总表——code → renderer（registerBuiltins 的 renderers 注入源）
- * 契约正本：《documents/第一期文件类型支持计划.md》§一应用清单
+ * 契约正本：《docs/product/PRD.md》§一应用清单
  * R5（docx/xlsx）落地后补两行；image-painter（Canvas 画板）M2+ 排期。
  */
 import type { AppDefinition } from '../../sdk/types'

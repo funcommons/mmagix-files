@@ -1,9 +1,17 @@
 # 动态插件方案：filerobot-image-editor（图片编辑器）
 
+> **【实施状态注记 · 2026-10-26 审计】** 两处方向性声明被实现推翻，以代码为准：
+> 1. **源一律 Blob**——getMediaUrl 预签名直链路径未实现（内核强制 crossOrigin 匿名读像素，直链无 CORS 即失败；`types.ts:9` 为死声明）
+> 2. **未保存确认已实现**（onModify 置脏 + beforeDispose confirm 3s 竞态）——非目标声明作废
+> 3. Tab=内核 4.9 仅 6 个（Adjust/Finetune/Filters/Annotate/Resize/Watermark；无独立 Crop Tab、无 Stickers/Frame）
+> 4. 保存格式以弹层用户选择优先（'image/jpg'→'image/jpeg' 归一；bmp/gif 回落 png）
+> 5. 超方案实现：无修改不可保存、保存成败徽标、图标化重排、useBackendTranslations:false 断网防卡死（`render.ts`）
+
+
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.0（2026-10-18） |
-| 性质 | 动态应用插件施工方案（对齐《动态插件方案.md》+《JSSDK 接口文档.md》v1.1 options 通道） |
+| 性质 | 动态应用插件施工方案（对齐《../design/plugin-system.md》+《../design/jsdk-api.md》v1.1 options 通道） |
 | 交付物 | `public/plugins/filerobot-image-editor.js` 单文件 ESM 插件（**实测全量 ~1.3MB / gzip ~390KB**，参考在产 univer-office 8.7MB 先例，可接受；插件 lazy/打开方式触发） |
 
 ## 一、目标与非目标

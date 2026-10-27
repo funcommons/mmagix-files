@@ -1,7 +1,7 @@
 /**
  * ctx.ts 单测（Wave1-A8）：AppCtx 工厂与 notify→fileChanged 映射
  * 被测：src/apps/ctx.ts——mapNotifyAction / createAppCtx
- * 契约：《动态插件方案.md》V1.1 §二——ctx 能力面（白名单：凭证不出、字节流进出）
+ * 契约：《docs/design/plugin-system.md》V1.1 §二——ctx 能力面（白名单：凭证不出、字节流进出）
  *       + notify 映射表（'saved'|'changed'→put；'deleted'→delete；'renamed'→rename）
  */
 import { describe, expect, it, vi } from 'vitest'

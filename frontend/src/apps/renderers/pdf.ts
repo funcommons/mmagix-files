@@ -1,7 +1,7 @@
 /**
  * PDF 渲染器（两级降级）——M2-R2，Lane F6 增 pdf.js 二级
- * 契约：《documents/第一期文件类型支持计划.md》§一（pdf-viewer 行「iframe 原生 → 降级 pdf.js」）+
- *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
+ * 契约：《docs/product/PRD.md》§一（pdf-viewer 行「iframe 原生 → 降级 pdf.js」）+
+ *       《docs/design/plugin-system.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
  *
  * 降级判定（唯一口径）：navigator.pdfViewerEnabled——
  *  - true / undefined（老浏览器无此字段，内置查看器能力未知）→ 一级：原生 iframe

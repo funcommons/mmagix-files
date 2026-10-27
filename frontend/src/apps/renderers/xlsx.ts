@@ -1,7 +1,7 @@
 /**
  * xlsx/xls 渲染器（内置应用 xlsx-viewer，B 方案保真升级 2026-10-21）
- * 契约：《documents/第一期文件类型支持计划.md》§一（xlsx-viewer 行，多 sheet 切换）+
- *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
+ * 契约：《docs/product/PRD.md》§一（xlsx-viewer 行，多 sheet 切换）+
+ *       《docs/design/plugin-system.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
  * 双引擎分流：
  *   .xlsx → ExcelJS（4.4.0）读**样式**（底色/字色/粗斜/字号/边框/对齐/合并/列宽/行高）自研
  *           HTML 表格渲染（保真度「中」——SheetJS sheet_to_html 是纯数据网格，样式全丢）；

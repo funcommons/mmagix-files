@@ -1,6 +1,6 @@
 /**
  * 图片查看渲染器（内置应用 image-viewer 的 renderer，M2-R3）
- * 契约：《documents/第一期文件类型支持计划.md》§一——<img> + viewerjs（缩放/旋转）。
+ * 契约：《docs/product/PRD.md》§一——<img> + viewerjs（缩放/旋转）。
  *
  * 数据流：ctx.getObject(key) → Blob → URL.createObjectURL → <img>（max-width:100%）挂 el；
  * 图片 load 成功后建 Viewer（navbar 关、toolbar 开，全屏查看走 viewerjs 自己的容器）；

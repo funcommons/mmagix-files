@@ -66,7 +66,7 @@ iframe 侧按「event.origin ∈ config.security.allowedOrigins」白名单校�
 - 失败统一 `MmxError`（code：4004 超时 / 4303 未握手 / 4005 不可用 / 5001 origin 拒绝 / 5000 终态；业务码见 §七）
 - 配置只走 URL fragment（`#config=` / `#file=` + `encodeURIComponent`），禁 query——fragment 不到服务端/代理日志
 
-完整协议契约：仓库 `documents/JSSDK 接口文档.md`。
+完整协议契约：仓库 `../../../docs/design/jsdk-api.md`。
 
 ## 构建与测试（本仓内）
 

@@ -1,6 +1,6 @@
 /**
  * bootApp 装配层单测（Wave2-A9）
- * 契约：《JSSDK 接口文档.md》V1.0 §三（握手时序：先 ack 后 evt）、《方案设计.md》V1.2 §4.1/§4.2
+ * 契约：《docs/design/jsdk-api.md》V1.0 §三（握手时序：先 ack 后 evt）、《docs/design/solution-design.md》V1.2 §4.1/§4.2
  *
  * 策略（A1 已探明 jsdom 限制：window.parent/opener 只读、postMessage 的 event.origin 恒为空串）：
  *  - 注入 FakeWindow 纯对象（实现 addEventListener/removeEventListener/location/document.referrer/parent，
@@ -412,7 +412,7 @@ describe('bootApp：dispose（页面卸载/测试清理）', () => {
   })
 })
 
-// ───────────────────────── sessionStorage 备份（刷新重建会话：《用户手册.md》「刷新=从 URL 重建」补偿） ─────────────────────────
+// ───────────────────────── sessionStorage 备份（刷新重建会话：《docs/operations/user-guide.md》「刷新=从 URL 重建」补偿） ─────────────────────────
 
 describe('bootApp：原始 fragment 的 sessionStorage 备份', () => {
   it('解析成功后、scrub 前备份整段 fragment；exp=now+min(ttl,24h)', () => {

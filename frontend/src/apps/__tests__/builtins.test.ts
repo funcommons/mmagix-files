@@ -1,7 +1,7 @@
 /**
  * 内置应用预置表单测（Wave2-A11）
- * 契约正本：builtins.ts 文件头注释——「正本：《documents/第一期文件类型支持计划.md》§一应用清单」
- * （documents/ 在仓库外，测试侧以 builtins.ts 头注释口径为核对基准：13 个内置 + fallback 常量不入表）
+ * 契约正本：builtins.ts 文件头注释——「正本：《docs/product/PRD.md》§一应用清单」
+ * （正本 docs/product/PRD.md §3.2；测试侧以 builtins.ts 头注释口径为核对基准：13 个内置 + fallback 常量不入表）
  *
  * 覆盖点：
  *  1. 表完整性——code 无重复；每项 code/labelKey/matcher/actions 齐全；actions 与 type 语义一致
@@ -34,7 +34,7 @@ import type { AppCtx, AppInstance } from '../../sdk/types'
 /** 计划 §一表口径：13 个内置应用 id（image-painter 已拆除）（即注册序；fallback-download 不入表）。
  *  F3 修订：csv-table/html-viewer 先于 code-editor（注册序=默认应用优先级，渲染类默认可达——
  *  html 默认进净化式预览，源码/三态编辑经「打开方式」）；
- *  图示双应用（flow-editor/mermaid-viewer）依据《流程图应用设计（Mermaid+X6）.md》V1.0 增补 */
+ *  图示双应用（flow-editor/mermaid-viewer）依据《../../../../docs/design/flow-editor-design.md》V1.0 增补 */
 const EXPECTED_IDS = [
   'image-viewer',
   'video-player',

@@ -17,9 +17,9 @@ import { ApiError } from './api/errorCodes'
 import { getFriendlyMessage } from './utils/errorMessages'
 import { bootApp, BOOT_KEY } from './boot'
 
-// JSSDK 装配（契约《JSSDK 接口文档.md》§三）：iframe/独立窗加载即 boot——
+// JSSDK 装配（契约《docs/design/jsdk-api.md》§三）：iframe/独立窗加载即 boot——
 // 成功=句柄 provide（UI/W2-T2 消费）；失败=BootResult 错误态 provide（Home 渲染错误卡）。
-// 配置解析失败时的宿主通知属 best-effort，本期不实现（决策记录见 PROGRESS.md）。
+// 配置解析失败时的宿主通知属 best-effort，本期不实现（决策档案 test-report/PROGRESS-2026-10-10-archived.md）。
 // M1 overrides：workspace 模式下宿主命令由 tree/queue 实做接管（懒 busRef 解 boot 内时序——
 // 命令执行必然晚于 bootApp 返回与 ready 往返，届时 busRef 已赋值）。
 import { setupStores } from './files/setup'
@@ -98,7 +98,7 @@ let pluginLoader: PluginLoader | null = null
 const boot = bootApp({
   onWarn: () => logger.warn('[mmagic] 会话即将到期（T-5min，UX 线）'),
   setupPlugins: (registry, cfg) => {
-    // features.plugins 总闸（《动态插件方案.md》§一）：显式 false → 动态插件整链不存在——
+    // features.plugins 总闸（《docs/design/plugin-system.md》§一）：显式 false → 动态插件整链不存在——
     // 不建 PluginLoader、不载配置注入的 plugins[]、不返回 ensureApps（打开链对缺省安全跳过）；
     // registerApp 命令口的 requireFeature(features,'plugins') 保持兜底（4301）。
     if (!pluginsEnabled(cfg.features)) return undefined

@@ -1,6 +1,6 @@
 /**
  * CSV/TSV 表格渲染器（内置应用 csv-table 的 renderer，M2-R3）
- * 契约：《documents/第一期文件类型支持计划.md》§一——papaparse 表格化 + 客户端分页；
+ * 契约：《docs/product/PRD.md》§一——papaparse 表格化 + 客户端分页；
  * >20MB 不渲染表格，只出提示节点（截断与下载引导由宿主工具条承接）。
  *
  * 数据流：ctx.getObject(key) → Blob.text() → Papa.parse(text,{header:false}) → <table>

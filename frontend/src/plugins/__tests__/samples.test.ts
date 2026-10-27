@@ -1,7 +1,7 @@
 /**
  * 插件样例集成测试（Lane H6：审计缺口闭环——「3 个样例只存在于文档」→ 文档样例=可运行代码）
- * 被测：examples/plugins/{todo-viewer,ipynb-viewer,svg-painter}.js（正本：《documents/动态插件样例.md》V1.0）
- * 契约：《动态插件方案.md》V1.1 §二（registerApp/renderer/ctx 能力面）、§五（beforeDispose 暂缓语义）
+ * 被测：examples/plugins/{todo-viewer,ipynb-viewer,svg-painter}.js（正本：《docs/design/plugin-sample.md》V1.0）
+ * 契约：《docs/design/plugin-system.md》V1.1 §二（registerApp/renderer/ctx 能力面）、§五（beforeDispose 暂缓语义）
  * 策略：
  *  - 直接 dynamic import 三个样例模块 → activate(spy sdk) → def 过真实 AppRegistry.register 校验（ok===true）
  *  - 渲染冒烟（jsdom）：fake ctx（getObject→Blob 文本）执行 renderer → 断言预期 DOM；

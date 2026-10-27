@@ -1,6 +1,6 @@
 /**
  * 协议常量（镜像 frontend/src/sdk/constants.ts——漂移由 frontend 套件内 clientProtocol.test.ts 拦截）。
- * 正本语义见 documents/JSSDK 接口文档.md。
+ * 正本语义见 ../../../../docs/design/jsdk-api.md。
  */
 
 /** postMessage 命名空间（信封 ns 字段；异 ns 消息双向静默丢弃） */

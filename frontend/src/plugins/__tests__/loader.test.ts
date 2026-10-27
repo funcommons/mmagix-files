@@ -1,7 +1,7 @@
 /**
  * PluginLoader 单测（Wave2-A12）
  * 被测：src/plugins/loader.ts——PluginLoader（fetch → SRI 自校验 → import(blobUrl) → activate(sdk)）
- * 契约：《动态插件方案.md》V1.1 §一/§二/§四
+ * 契约：《docs/design/plugin-system.md》V1.1 §一/§二/§四
  * 策略：fetcher / importModule 全注入；registry 用真实 AppRegistry 验证接线；
  * SRI 期望值用 crypto.subtle 同算法现算（非硬编码）；失败一律走 onError 不上抛、load 恒 resolve
  */

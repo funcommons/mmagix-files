@@ -1,6 +1,6 @@
 /**
  * MessageBus 单测（Wave1-A1）
- * 契约：《documents/JSSDK 接口文档.md》V1.0 §一/§二/§三/§七
+ * 契约：《docs/design/jsdk-api.md》V1.0 §一/§二/§三/§七
  * 策略：接收侧用真实 jsdom window + MessageEvent 派发（确定性，不依赖真实跨窗投递）；
  *       发送侧用 fake remote window（{ postMessage: vi.fn() }）断言信封构造。
  *       jsdom 真实 postMessage 的 iframe 往返集成测试单独放最后一个 describe（可选，flaky 则跳过并注记）。

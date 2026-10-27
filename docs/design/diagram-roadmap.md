@@ -1,12 +1,15 @@
 # mmagix-files 图示类应用设计（脑图 · 时序图 · 架构图）
 
+> **【实现状态 · 2026-10-26 审计】** **本文为规划文档——脑图/时序图/架构图编辑器均未实现**（注册表无此三应用；当前仅 mermaid-viewer 只读覆盖 + 非 graph TD 语法降级只读渲染）。§3.3 提议的「view+code-editor 双注册」形态实际已由既有 mermaid-viewer + code-editor 覆盖，专设 sequence-viewer 无落地必要。
+
+
 ## 〇、头表
 
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.0（2026-10-13 首版） |
 | 状态 | **草案（候裁）** |
-| 依据 | 《流程图应用设计（Mermaid+X6）.md》V1.0（姊妹篇——存储/渲染/回写/隔离全部沿用其架构与三条纪律条款）；《应用打开防样式污染方案.md》V1.0 |
+| 依据 | 《flow-editor-design.md》V1.0（姊妹篇——存储/渲染/回写/隔离全部沿用其架构与三条纪律条款）；《style-isolation.md》V1.0 |
 | 范围 | 脑图（mindmap）/ 时序图（sequenceDiagram）/ 架构图（architecture-beta）三类应用的源格式、渲染、编辑形态与集成口径 |
 | 定位 | 三个新增注册表应用，走既有 AppRegistry /「打开方式」体系；与流程图共享同一套「mermaid 文本源 + 多端渲染」管线 |
 
@@ -175,4 +178,4 @@ architecture-beta
 - mind-elixir：https://github.com/ssshooter/mind-elixir-core ；simple-mind-map：https://github.com/wanglin2/simple-mind-map
 - markmap（markdown↔脑图）：https://github.com/markmap/markmap
 - AntV X6：https://x6.antv.antgroup.com
-- 本仓：《流程图应用设计（Mermaid+X6）.md》V1.0（架构正本）/《应用打开防样式污染方案.md》V1.0
+- 本仓：《flow-editor-design.md》V1.0（架构正本）/《style-isolation.md》V1.0

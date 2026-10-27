@@ -1,6 +1,6 @@
 /**
  * 工作台装配（Wave2-T2）：boot 句柄 → 管理面 store 构造（UI 直连 store，不绕 JSSDK）。
- * 契约：《方案设计.md》§4.4（S3 直连签名）、《JSSDK 接口文档.md》§六（fileChanged / upload* 事件）。
+ * 契约：《docs/design/solution-design.md》§4.4（S3 直连签名）、《docs/design/jsdk-api.md》§六（fileChanged / upload* 事件）。
  *
  * 构造链：S3SigV4Client（backend 凭证；包装 fetcher best-effort 校准时钟 §4.3）→
  * createFileTree（onFileChanged→bus 'fileChanged'，宿主同步视图）→

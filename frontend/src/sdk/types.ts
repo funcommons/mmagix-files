@@ -1,6 +1,6 @@
 /**
  * JSSDK 共享类型与领域契约
- * 契约正本：《documents/JSSDK 接口文档.md》V1.0 /《方案设计.md》V1.2 §4.1b/§4.4
+ * 契约正本：《docs/design/jsdk-api.md》V1.0 /《docs/design/solution-design.md》V1.2 §4.1b/§4.4
  * 本文件由主线持有，子 agent 只读。
  */
 import type { NS } from './constants'
@@ -184,7 +184,7 @@ export interface UploadAccepted { id: string }
 export interface UploadRejected {
   name: string
   reason: 'ext' | 'size'
-  /** 拒收错误码（契约《JSSDK 接口文档.md》§五：ext=4304 EXT_DENIED、size=4302 PAYLOAD_TOO_LARGE）；additive */
+  /** 拒收错误码（契约《docs/design/jsdk-api.md》§五：ext=4304 EXT_DENIED、size=4302 PAYLOAD_TOO_LARGE）；additive */
   code?: number
 }
 export interface UploadFilesReply { accepted: UploadAccepted[]; rejected: UploadRejected[] }

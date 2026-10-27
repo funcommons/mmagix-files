@@ -1,6 +1,6 @@
 /**
  * M1 命令接线——把 tree-store / upload-queue / S3Client 接成 handlers 的 overrides
- * 契约：《JSSDK 接口文档.md》V1.0 §五/§六/§七（命令语义、事件、错误码）
+ * 契约：《docs/design/jsdk-api.md》V1.0 §五/§六/§七（命令语义、事件、错误码）
  *
  * Lane F4 命令语义补齐：uploadProgress 200ms 节流（§六）、全批拒收补发 uploadFailed
  * （§五「error.code=4302/4304」）、rejected 逐项补 code、缺省拉起文件选择器（§五）。

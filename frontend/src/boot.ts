@@ -1,6 +1,6 @@
 /**
  * boot——装配层（Wave2-T1）：把 config/bus/session/handlers/registry 接成可运行的 iframe 应用
- * 契约：《JSSDK 接口文档.md》V1.0 §三（握手时序）、《方案设计.md》V1.2 §4.1/§4.2
+ * 契约：《docs/design/jsdk-api.md》V1.0 §三（握手时序）、《docs/design/solution-design.md》V1.2 §4.1/§4.2
  *
  * 关键时序：destroy 命令 = 先 ack 后 evt:expired（§三）——handler 内 session.destroy() 同步进终态，
  * expired 的 emit 延迟到宏任务，保证 wrap 的 ack reply（微任务）先行。
@@ -108,7 +108,7 @@ export function bootApp(options: BootOptions = {}): BootResult {
   const win = options.win ?? window
   const rawConfigStorage = sessionStorageOf(win)
 
-  // ① 配置解析（失败→UI 错误态；宿主通知为 best-effort，本期跳过——决策见 PROGRESS）
+  // ① 配置解析（失败→UI 错误态；宿主通知为 best-effort，本期跳过——决策档案 test-report/PROGRESS-2026-10-10-archived.md）
   //
   // 刷新重建（手册「刷新=从 URL 重建」的补偿兑现）：scrub 已抹掉 fragment，刷新后 URL 无配置键——
   // 此时读 sessionStorage 备份走同一 parseAppConfig 路径重建（不回写 URL）；备份过期/损坏由

@@ -1,6 +1,6 @@
 /**
  * S3 API 子集客户端（A3）：ListObjectsV2 / Get / Put / Head / Copy / DeleteObjects / Multipart
- * 依据《方案设计.md》§4.4——前端用 BackendConfig 凭证 + sigv4.ts 就地签名直连 S3。
+ * 依据《docs/design/solution-design.md》§4.4——前端用 BackendConfig 凭证 + sigv4.ts 就地签名直连 S3。
  * 错误映射（契约 §七）：
  * - 403 且 body 含 ExpiredToken/TokenExpired → CREDENTIAL_EXPIRED(4003)
  * - 其他 403/401 → CREDENTIAL_INVALID(4002)

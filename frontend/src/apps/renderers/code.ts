@@ -1,10 +1,10 @@
 /**
  * 文本/代码编辑器渲染器（Monaco 完整编辑器版）——M2-R4，工具栏升级（R5）
- * 契约：《documents/第一期文件类型支持计划.md》§一（code-editor 行）+
- *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）+ AppInstance 生命周期。
+ * 契约：《docs/product/PRD.md》§一（code-editor 行）+
+ *       《docs/design/plugin-system.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）+ AppInstance 生命周期。
  * 链路：5MB 先判（file.size，超限不拉字节流）→ ctx.getObject → Blob.text() →
  *       monaco.editor.create（动态 import，绝不入主 bundle）→ dirty 跟踪 → Ctrl/Cmd+S 保存链。
- * 工具栏（26px 紧凑条）：统一编辑钮簇（保存｜撤销 重做 重置——shared/editToolbar 唯一样式源，
+ * 工具栏（36px 紧凑条）：统一编辑钮簇（保存｜撤销 重做 重置——shared/editToolbar 唯一样式源，
  *       一百四十三番口径：dirty=保存钮右上角红点，「未保存」文字徽标废弃）+ 格式化/查找/字号±/
  *       语言切换（按扩展名自动识别，可手切）/状态徽标（只读锁）。编辑类钮只读态隐藏。
  *       重置=恢复打开时内容（最后保存态），executeEdits 入 undo 栈可撤销取回。

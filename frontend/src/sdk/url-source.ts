@@ -1,6 +1,6 @@
 /**
  * 单文件模式数据源（#file）——普通 HTTP provider
- * 契约：《方案设计.md》V1.2 §4.1b——AppRegistry ctx 统一 getObject/putObject 语义，
+ * 契约：《docs/design/solution-design.md》V1.2 §4.1b——AppRegistry ctx 统一 getObject/putObject 语义，
  * 与 S3 provider（工作台模式）双实现，内置应用与插件零感知。
  * 只读=无 save 段（写链零存在）；可写=有 save 段（按 save.method 回写）。
  */

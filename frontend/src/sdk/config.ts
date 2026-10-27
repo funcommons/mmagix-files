@@ -1,6 +1,6 @@
 /**
  * URL fragment 配置解析（#config / #file）
- * 契约：《方案设计.md》V1.2 §4.1 / §4.1b、《用户手册.md》V1.0 §一
+ * 契约：《docs/design/solution-design.md》V1.2 §4.1 / §4.1b、《docs/operations/user-guide.md》V1.0 §一
  *
  * - 配置 JSON 走 fragment（#config={...} / #file={...}）：不到服务端/代理日志；
  *   解析完成后由 scrubFragment() 抹除（§4.1 建议 history.replaceState）

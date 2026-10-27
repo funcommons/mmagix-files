@@ -1,7 +1,7 @@
 /**
  * 预览打开链——选中文件 → registry 解析默认应用（或按 appId 指定）→ ctx 装配 → 渲染器执行
- * 契约：《方案设计.md》V1.2 §4.6（AppRegistry/同类型多应用）、《动态插件方案.md》§五（dispose/恢复/beforeDispose）、
- *      《第一期文件类型支持计划.md》缺口 7（渲染失败/超时 10s 错误边界）
+ * 契约：《docs/design/solution-design.md》V1.2 §4.6（AppRegistry/同类型多应用）、《docs/design/plugin-system.md》§五（dispose/恢复/beforeDispose）、
+ *      《docs/product/PRD.md》缺口 7（渲染失败/超时 10s 错误边界）
  * 生命周期：
  *  - 切换（open）/关闭（close）：先过 beforeDispose gate——false=暂缓本次操作（实例与容器完整保留），
  *    3s 超时强制放行，true/无 beforeDispose=直接放行；放行后 dispose 前 getState 采集 savedState（per-key，容量 32）
@@ -35,7 +35,7 @@ const RENDER_TIMEOUT_MS = 10_000
 const SAVED_STATE_LIMIT = 32
 
 /**
- * 大文件分级闸阈值（Lane G4，建议默认值——《第一期文件类型支持计划.md》§三「可配」口径）：
+ * 大文件分级闸阈值（Lane G4，建议默认值——《docs/product/PRD.md》§三「可配」口径）：
  * CONFIRM 以上询问宿主、REJECT 以上直接拒绝；两者间留给确认 UI 裁决。
  */
 export const PREVIEW_CONFIRM_BYTES = 20 * 1024 * 1024

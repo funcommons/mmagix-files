@@ -1,5 +1,5 @@
 /**
- * createCommandHandlers 单测（契约《JSSDK 接口文档.md》§四/§五/§七）
+ * createCommandHandlers 单测（契约《docs/design/jsdk-api.md》§四/§五/§七）
  * 覆盖：16 键命令表形状（含 v1.1 setCredentials）/ 单文件模式 4305 / 工作台桩 4301 / 终态 5000 / getInfo / destroy / setTheme / setLocale
  */
 import { describe, expect, it, vi } from 'vitest'

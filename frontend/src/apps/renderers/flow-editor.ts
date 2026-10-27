@@ -1,6 +1,6 @@
 /**
  * 流程图编辑渲染器（flow-editor）——graph TD 子集的可视化编辑（MVP-③④ 完全体）
- * 设计正本：《documents/流程图应用设计（Mermaid+X6）.md》V1.0 §四/§四.3
+ * 设计正本：《docs/design/flow-editor-design.md》V1.0 §四/§四.3
  *
  * 能力面：
  *  - 工具栏：统一编辑钮簇（保存红点｜撤销 重做 重置，shared/editToolbar 唯一样式源——一百四十三番：

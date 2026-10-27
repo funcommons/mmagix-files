@@ -1,12 +1,20 @@
 # mmagix-files 动态插件方案
 
+> **【实施状态注记 · 2026-10-26 审计】** 契约骨架（url/sri/lazy/options、activate/registerApp、requiresSdk、beforeDispose 3s）与代码一致；以下偏差以代码为准：
+> 1. **装载机制**：非 `<script type="module" src integrity>` 标签注入——实际为 fetch 字节 → `crypto.subtle` sha384 自校验 → Blob URL import → activate（`frontend/src/plugins/loader.ts:91-133`；§一 V1.1a 修正段与此一致，§一流程图与 §五 未同步）
+> 2. **未实现（保留声明）**：ctx 事件订阅、sessionStorage 轻量存储（`apps/ctx.ts` 无）；`deactivate()` 未接线；插件域白名单/运行时校验未实现（执法仅=plugins[] 清单+SRI）
+> 3. **API 面增补未回写**：renderer 第 5 参 `appOptions`、`AppDefinition.maxBytes`、ctx 可选 `getMediaUrl`/`notifyAppError`、notify 多 `html-open-rejected`
+> 4. **lazy 单文件口径**：单文件模式全量预载；lazy 让位「打开方式」全量命中面（`main.ts:112-119`）
+> 5. 错误面文案实为「应用渲染失败」+重试钮（`preview.ts:216-236`）
+
+
 ## 〇、头表
 
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.1（2026-10-08 评审修订版：加载机制 SRI 重构、matcher/版本协商/notify 映射契约补齐） |
 | 状态 | **已裁定案**——T1 宿主自管插件（特权运行）一期落地；T2 第三方市场插件（沙箱隔离）候需求 |
-| 归属 | 《方案设计.md》§4.6 应用模型之扩展篇、裁决台账②之翻案正本 |
+| 归属 | 《solution-design.md》§4.6 应用模型之扩展篇、裁决台账②之翻案正本 |
 | 一句话 | 配置注入 xxx.js（ES module）→ `activate(sdk)` → `registerApp` → 新文件类型即上「打开方式」菜单，与内置应用零特判 |
 
 ---
@@ -26,7 +34,7 @@ activate(sdk, options?) → sdk.registerApp({...})    ← 与内置应用走同�
 - 加载原语=**fetch 字节 → crypto.subtle 自算 sha384 校验 → Blob URL `import()` → `activate(sdk, options?)`**（V1.1a 实现口径修正：script 标签只执行模块顶层、拿不到导出——`export activate(sdk)` 将无人调用；fetch+自校验达到并超过 SRI 标签强度，失败路径可控；裁决⑥后 SPA 不设 script-src，`blob:` 加载无 CSP 顾虑）；lazy 语义不变；**options（v1.1 增补）**=`PluginEntry.options` 对象原样作 activate 第二参，插件自解（未知字段忽略、非法值丢弃），缺省不传
 - 注入形态=**配置声明式**（消费方在 config 里列 URL），非运行时 eval——**框架自身零 eval/零动态拼 HTML**（createElement+setAttribute 非 HTML 拼接）；插件 renderer 自管 DOM（含 innerHTML），消毒责任随数据源（样例③注记）
 - matcher 契约：**字段间 AND、同字段内 OR**（如 `{ ext: ['ipynb','md'] }`=任一扩展名命中）；mime 无把握时（S3 常以 `application/octet-stream` 存储）**只用 ext**
-- 插件加载受配置 `features.plugins` 总闸控制（见《用户手册.md》）
+- 插件加载受配置 `features.plugins` 总闸控制（见《../operations/user-guide.md》）
 - `targetOrigin`：JSSDK 双向 origin 校验不变。**不做 CSP 差异化**（已裁⑥无租户概念）：文件服务 SPA 不设 `script-src` 白名单（设了即与任意消费方插件域冲突）；插件供应链执法=配置 `plugins[]` 清单本身+SRI（见 §四红线 2/3）
 
 ## 二、插件契约（完整 API 面就这么大）
@@ -53,7 +61,7 @@ export function deactivate() { /* 可选：清理全局副作用 */ }
 ```
 
 - `ctx` 能力面（白名单）：`getObject()/putObject()`（字节流进出，**不含凭证**）、主题 token、i18n（`ctx.t(key)`）、事件订阅、**事件上报 `ctx.notify(type, payload)` → 宿主 `fileChanged` 事件：`'saved'|'changed'`→action `'put'`；`'deleted'`→`'delete'`；`'renamed'`→`'rename'`（payload `{ key, from? }`）**、轻量存储（sessionStorage 隔离命名空间）
-- 与 JSSDK 关系：`registerApp` 即 JSSDK command 之一——但宿主运行时注册经 postMessage 传 **`{ url, sri, lazy?, options? }`**（函数不可克隆，manifest 随 module 自描述；options 对象可克隆、随通道透传 activate 第二参，v1.1），宿主侧复用本档同一加载机制拉起；与配置注入双通道、同一 registry（见《JSSDK 接口文档.md》V1.0 §四）
+- 与 JSSDK 关系：`registerApp` 即 JSSDK command 之一——但宿主运行时注册经 postMessage 传 **`{ url, sri, lazy?, options? }`**（函数不可克隆，manifest 随 module 自描述；options 对象可克隆、随通道透传 activate 第二参，v1.1），宿主侧复用本档同一加载机制拉起；与配置注入双通道、同一 registry（见《jsdk-api.md》V1.0 §四）
 
 ## 三、信任两级（裁决台账②之翻案）
 

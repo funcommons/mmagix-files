@@ -1,7 +1,7 @@
 /**
  * features.ts 单测（Wave1-A8）：功能开关门控
  * 被测：src/sdk/features.ts——FEATURE_DEFAULTS / resolveFeatures / requireFeature
- * 契约：《用户手册.md》V1.0 §一 features 全集与命令映射；
+ * 契约：《docs/operations/user-guide.md》V1.0 §一 features 全集与命令映射；
  * 语义：default 全开，config.features 显式 false 优先，未知键保留（只增不删）；
  * 执法：UI 隐藏 + API 拒绝（SdkError 4301 FEATURE_DISABLED）双层
  */

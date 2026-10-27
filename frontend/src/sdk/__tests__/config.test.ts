@@ -1,6 +1,6 @@
 /**
  * config.ts 单测：URL fragment 配置解析（#config / #file）
- * 契约：《方案设计.md》V1.2 §4.1 / §4.1b、《用户手册.md》V1.0 §一
+ * 契约：《docs/design/solution-design.md》V1.2 §4.1 / §4.1b、《docs/operations/user-guide.md》V1.0 §一
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
@@ -17,7 +17,7 @@ import { SdkError, ERROR_CODES } from '../errorCodes'
 import { CONFIG_VERSION } from '../constants'
 import type { AppConfig, SingleFileConfig, WorkspaceConfig } from '../types'
 
-// ───────────────────────── 样例（照抄《用户手册.md》§一配置示例） ─────────────────────────
+// ───────────────────────── 样例（照抄《docs/operations/user-guide.md》§一配置示例） ─────────────────────────
 
 const workspaceJson = {
   v: CONFIG_VERSION,

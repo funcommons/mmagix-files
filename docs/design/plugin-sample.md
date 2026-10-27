@@ -1,10 +1,17 @@
 # mmagix-files 动态插件样例
 
+> **【实施状态注记 · 2026-10-26 审计】** 契约层可跑且有集成测试（`frontend/src/plugins/__tests__/samples.test.ts` 动态 import 正本过真实 AppRegistry）；**本文内嵌代码非被测正本**，正本=`frontend/examples/plugins/*.js`（文件头自述差异）。主要差异：
+> 1. todo-viewer：真实 checkbox（非 emoji 拼文本）
+> 2. ipynb-viewer：markdown cell 分色类 + 非对象守卫；tt() 词典兜底 helper
+> 3. svg-painter：textarea 编辑源文本+消毒预览+保存序列化编辑器文本（非 innerHTML 直改）
+> 4. 加载机制为 fetch+sha384 自校验（非 SRI 标签注入）；类型在 `src/sdk/types.ts`（无 `@mmagix-files/sdk` 包）
+
+
 ## 〇、头表
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | V1.0（2026-10-08 评审修订版：样例①②③修复、加载机制改 SRI 标签注入、恢复/beforeDispose 契约落位）——随《动态插件方案.md》V1.1 契约 |
+| 版本 | V1.0（2026-10-08 评审修订版：样例①②③修复、加载机制改 SRI 标签注入、恢复/beforeDispose 契约落位）——随《plugin-system.md》V1.1 契约 |
 | 性质 | 三个可跑样例，由浅入深：最小骨架 → 取流渲染 → 可保存编辑 + 同类型多应用 |
 | 约定 | `sdk`=`activate(sdk)` 注入句柄；类型见 `@mmagix-files/sdk`；全部样例为 ES module |
 
@@ -23,7 +30,7 @@ export function activate(sdk) {
     label: '清单预览',
     actions: ['preview'],
     version: '1.0.0',
-    requiresSdk: 1,                        // 本批契约=1（协商语义见《动态插件方案.md》§五）
+    requiresSdk: 1,                        // 本批契约=1（协商语义见《plugin-system.md》§五）
     async renderer(el, file, ctx) {
       const text = await (await ctx.getObject(file.key)).text()
       const ul = document.createElement('ul')
@@ -56,11 +63,11 @@ export function activate(sdk) {
 export function activate(sdk) {
   sdk.registerApp({
     id: 'ipynb-viewer',
-    matcher: { ext: ['ipynb'] },           // S3 常以 application/octet-stream 存储 .ipynb，mime 匹配不可靠故仅用 ext（契约见《动态插件方案.md》§一）
+    matcher: { ext: ['ipynb'] },           // S3 常以 application/octet-stream 存储 .ipynb，mime 匹配不可靠故仅用 ext（契约见《plugin-system.md》§一）
     label: 'Notebook 预览',
     actions: ['preview'],
     version: '1.0.0',
-    requiresSdk: 1,                        // 本批契约=1（协商语义见《动态插件方案.md》§五）
+    requiresSdk: 1,                        // 本批契约=1（协商语义见《plugin-system.md》§五）
     async renderer(el, file, ctx) {
       const wrap = document.createElement('div')
       wrap.className = 'mmf-plugin-ipynb'
@@ -110,7 +117,7 @@ export function activate(sdk) {
   sdk.registerApp({
     id: 'svg-painter',
     matcher: { ext: ['svg'] },                          // 与内置「图片浏览」同类型；S3 常以 application/octet-stream 存储上传物，
-    // mime 匹配不可靠故仅用 ext（契约见《动态插件方案.md》§一）
+    // mime 匹配不可靠故仅用 ext（契约见《plugin-system.md》§一）
     label: 'SVG 画板',                                   // →「打开方式」菜单出现两项
     actions: ['edit'],
     version: '1.0.0',
@@ -137,7 +144,7 @@ export function activate(sdk) {
       save.onclick = async () => {
         await ctx.putObject(file.key, new Blob([stage.innerHTML], { type: 'image/svg+xml' }))  // ② 序列化 stage——不含按钮
         dirty = false
-        ctx.notify('changed', { key: file.key })        // → 宿主 fileChanged（action='put'，映射见《动态插件方案.md》§二）
+        ctx.notify('changed', { key: file.key })        // → 宿主 fileChanged（action='put'，映射见《plugin-system.md》§二）
       }
       el.appendChild(save)
       return {
@@ -185,14 +192,14 @@ function sanitizeSvg(text) {
 ```
 
 - 权限注记：`putObject` 走会话凭证 policy——scope 内可写、scope 外 S3 直接拒绝（前端拦不住的不归前端管）
-- 「编辑」类插件自觉在 `beforeDispose` 处理未保存态（契约：resolve `false`=暂缓关闭、3 秒超时强制放行、expired/destroy 路径宿主忽略返回值，见《动态插件方案.md》§五）；宿主会话到期自毁时 dispose 链照样走（保存窗口期=凭证 TTL 内）
+- 「编辑」类插件自觉在 `beforeDispose` 处理未保存态（契约：resolve `false`=暂缓关闭、3 秒超时强制放行、expired/destroy 路径宿主忽略返回值，见《plugin-system.md》§五）；宿主会话到期自毁时 dispose 链照样走（保存窗口期=凭证 TTL 内）
 
 ---
 
 ## 附：发布清单（每个插件上线前）
 
 - [ ] 用任意 shasum 工具生成 sha384 integrity 值（如 `shasum -a 384 xxx.js | awk '{ print $1 }'`，配置里写 `sha384-<hex>`）
-- [ ] 托管在**你自己的可信 CDN**（插件域白名单+运行时校验；CSP 口径见《动态插件方案.md》§四）
+- [ ] 托管在**你自己的可信 CDN**（插件域白名单+运行时校验；CSP 口径见《plugin-system.md》§四）
 - [ ] `requiresSdk` 标注（本批契约=`1`）
 - [ ] 渲染入口消毒自查：innerHTML 喂入前必消毒（DOMParser+元素白名单，见样例③）；动态文本一律 `textContent`
 - [ ] dispose/beforeDispose 全路径自查（关 tab/切 tab/会话过期/错误降级）

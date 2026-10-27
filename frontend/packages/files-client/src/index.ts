@@ -7,7 +7,7 @@
  * 头号坑：#config 的 security.allowedOrigins 必须含宿主自身 origin——mount/createHost
  * 已自动注入（withHostOrigin），但请理解规则：换域名部署无需改代码，自动追加的永远是自己。
  *
- * 协议正本：documents/JSSDK 接口文档.md（本包常量/形状逐字段镜像 frontend/src/sdk，
+ * 协议正本：../../../../docs/design/jsdk-api.md（本包常量/形状逐字段镜像 frontend/src/sdk，
  * 漂移由 frontend 套件内 clientProtocol.test.ts 拦截）。
  */
 export * from "./constants";

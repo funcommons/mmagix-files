@@ -55,7 +55,7 @@
 ### 变更
 
 - 插件产物重建：markdown-editor / html-editor / univer-office / pdf-annotator 四包（`public/plugins/*.js`）；
-  SRI 清单重出为 [`documents/releases/v1.1.0-plugin-sri.json`](documents/releases/v1.1.0-plugin-sri.json)
+  SRI 清单重出为 [`docs/releases/v1.1.0-plugin-sri.json`](docs/releases/v1.1.0-plugin-sri.json)
 - markdown-editor / html-editor 新增依赖 `@codemirror/commands`
 - 已知偏差（尽力而为口径）：filerobot-image-editor 保持第三方内核自带 UI（undo/redo/reset/save
   内核原生已有且已居左），不强行叠加自建钮簇

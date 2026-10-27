@@ -1,5 +1,5 @@
 /**
- * SessionController 单测（契约《方案设计.md》§4.2 /《JSSDK 接口文档.md》§三）
+ * SessionController 单测（契约《docs/design/solution-design.md》§4.2 /《docs/design/jsdk-api.md》§三）
  * 覆盖：TTL 到点自毁 / T-5min 预警恰一次 / expiresAt 优先 / destroy 终态 / stop 重入 / DI 计时器 / extend 续期重布（v1.1）
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

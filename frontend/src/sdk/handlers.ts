@@ -1,5 +1,5 @@
 /**
- * 16 命令 handler 表（契约《JSSDK 接口文档.md》§三/§四/§五/§七；setCredentials=v1.1 增补）
+ * 16 命令 handler 表（契约《docs/design/jsdk-api.md》§三/§四/§五/§七；setCredentials=v1.1 增补）
  *
  * 门控次序（每命令统一先过两道门，再进实现，overrides 不例外）：
  *   ① 终态门控：会话已终态 → 5000 SESSION_EXPIRED（任何命令，含 destroy——契约 §七「终态后任何 cmd」）；

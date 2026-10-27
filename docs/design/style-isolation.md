@@ -1,5 +1,11 @@
 # mmagix-files 应用打开防样式污染方案
 
+> **【实施状态注记 · 2026-10-26 审计】** 核心裁决（同文档+约定式前缀为默认档、Shadow DOM/iframe 按需升级）与实现同向；本文 P0–P2 建议项**基本未执行**，现状盘点已过期：
+> 1. 实际防污染机制=`mmagic-*`/`mm-*` 类名前缀执法 + 渲染器实例 `<style>` 注入随 dispose 移除（csv/mermaid/flow/code 均此模式）+ html-viewer 的 sandbox iframe（v1.1.0 抢先落地，文档未预见）
+> 2. 未执行：孤儿 global.scss/_reset 清理、markdown 自排版（.mmagic-md）、index.scss @layer 分层、docx iframe 化
+> 3. §1.2 盘点失效行：painter 渲染器已拆除；csv 非唯一自清理注入者；xlsx 已有完整样式（ExcelJS B 方案）
+
+
 ## 〇、头表
 
 | 项 | 值 |
@@ -7,7 +13,7 @@
 | 版本 | V1.0（2026-10-13 首版） |
 | 状态 | **技术调研·建议案（候裁）**——本期只调研不改代码，文中代码均为目标样例 |
 | 命题 | 「应用打开文件如何防样式污染？iframe 好不好？」 |
-| 依据 | 《方案设计.md》V1.2 §4.6 应用模型；《动态插件方案.md》V1.1 三信任档；《第一期文件类型支持计划.md》§五验收（明暗双主题渲染无样式破损） |
+| 依据 | 《solution-design.md》V1.2 §4.6 应用模型；《plugin-system.md》V1.1 三信任档；《../product/PRD.md》§五验收（明暗双主题渲染无样式破损） |
 | 定位 | 工作台预览区（`frontend/src/views/Home.vue` `.ws__preview-host`）内，渲染器与宿主**同文档同 DOM 树**现状的污染面盘点 + 隔离方案（同文档约定 / Shadow DOM / iframe）对比与分期路线 |
 
 ---
@@ -25,7 +31,7 @@ Home.vue  <div ref="previewEl" class="ws__preview-host">      （workspace/file 
 
 - 渲染器产出的 DOM 与宿主共用同一个 `document`、同一棵 DOM 树、同一份 CSSOM——**任何一方的全局样式都会命中对方**。
 - 渲染器拿到的 `el` 是每次 open 新建的 `div.mmf-preview-stage`，dispose 后随容器清空——DOM 生命周期是干净的，**脏的只有样式**。
-- 注意：产品本身已是一次 iframe 隔离——《方案设计.md》§一嵌入形态=iframe/window.open，本命题是**第二层**（渲染器 vs 工作台）的隔离问题，不与第一层混淆。
+- 注意：产品本身已是一次 iframe 隔离——《solution-design.md》§一嵌入形态=iframe/window.open，本命题是**第二层**（渲染器 vs 工作台）的隔离问题，不与第一层混淆。
 
 ### 1.2 渲染器 → 宿主方向的注入盘点（逐渲染器）
 
@@ -94,9 +100,9 @@ main.ts 全量引入：`element-plus/dist/index.css` + `remixicon` + `./styles/i
 | 阶段 | 内容 | 改动位 | 成本 | 风险 |
 | --- | --- | --- | --- | --- |
 | **P0 立即（建议下一个 lane 顺带）** | ①删孤儿 `styles/global.scss`、`styles/_reset.scss`（防误接线双 reset）；②给 markdown 落自排版：新建 `.mmagic-md` 作用域样式（标题/段落/列表/`pre code`/`table`/`blockquote`，token 用 `var(--app-*)` 带兜底），renderer 挂 `el.classList.add('mmagic-md')`；③xlsx 补 `.xlsx-*` 一套最小表格样式（对齐 csv 观感口径） | 新增 1 个 scss + 2 个渲染器各 1 行 | 半天 | 极低（纯增益，`@layer` 外普通规则即可） |
-| **P1 收敛（P0 后任意时点）** | 宿主全局规则分层：index.scss 的 reset/工具类/EP 覆写收进 `@layer base, ep, utilities`；渲染器与插件样式置于 unlayered 或后序 `@layer apps`；`.mmf-preview-stage` 开 container；同步把「类名前缀 `mmagic-*`、禁裸元素选择器、禁 `!important`（EP 覆写白名单除外）」写进《动态插件方案.md》§五工程细则（T1 插件当前与内置同树，**是本方案最大未设防面**） | index.scss + 文档 | 1 天 | 低（EP 覆写带 `!important` 的规则若在 `_ep-overrides`/`_component-overrides` 中存在，收进 layer 后 layer 间优先级变化需回归 Drawer/Overlay 弹层；`_reset.scss` 的同类规则已在 P0 随孤儿文件删除，不参与本轮） |
+| **P1 收敛（P0 后任意时点）** | 宿主全局规则分层：index.scss 的 reset/工具类/EP 覆写收进 `@layer base, ep, utilities`；渲染器与插件样式置于 unlayered 或后序 `@layer apps`；`.mmf-preview-stage` 开 container；同步把「类名前缀 `mmagic-*`、禁裸元素选择器、禁 `!important`（EP 覆写白名单除外）」写进《plugin-system.md》§五工程细则（T1 插件当前与内置同树，**是本方案最大未设防面**） | index.scss + 文档 | 1 天 | 低（EP 覆写带 `!important` 的规则若在 `_ep-overrides`/`_component-overrides` 中存在，收进 layer 后 layer 间优先级变化需回归 Drawer/Overlay 弹层；`_reset.scss` 的同类规则已在 P0 随孤儿文件删除，不参与本轮） |
 | **P2 定点升级 iframe（候裁，值得做的只有一个）** | **docx-viewer** 升 `srcdoc` iframe：docx-preview 的用户文档派生类名/`@font-face` 从此物理关进独立文档；主题 token 与文案在 srcdoc 生成时灌入 + `setTheme` 广播同步；保存链不涉及（docx 只读）。改造点：docx.ts 改产 HTML 串、preview.ts 增 iframe 挂载分支（renderer 契约不变，el 内挂 iframe 即可，可完全收在渲染器内）、e2e 改 `frameLocator` | docx.ts 为主 | 2-3 天（含双语双主题 e2e 回归） | 中：blob/srcdoc 内字体加载、打印行为变化；验收口径对齐《第一期…》§五 |
-| **不做/候需求** | Monaco/code-editor、csv、image、media、painter 上 iframe 或 shadow——联动面（保存链/confirm/键盘/测量/e2e）远大于收益；T2 第三方市场插件按《动态插件方案.md》既裁走 sandboxed iframe+能力桥，本方案不重复裁定 | — | — | — |
+| **不做/候需求** | Monaco/code-editor、csv、image、media、painter 上 iframe 或 shadow——联动面（保存链/confirm/键盘/测量/e2e）远大于收益；T2 第三方市场插件按《plugin-system.md》既裁走 sandboxed iframe+能力桥，本方案不重复裁定 | — | — | — |
 
 ---
 
@@ -111,5 +117,5 @@ main.ts 全量引入：`element-plus/dist/index.css` + `remixicon` + `./styles/i
 ## 五、开放项
 
 - `ctx.theme` 目前宿主传 `{}`（Home.vue L518/L567）——主题实际只走 CSS 变量通道。若未来把 token 塞进 `ctx.theme`，iframe 档的 token 灌注应改为消费 ctx 而非另读 DOM，需在 P2 设计时定稿。
-- T1 插件样式纪律（前缀/layer）写入《动态插件方案.md》V1.2 的时机，建议与 P1 同 lane。
+- T1 插件样式纪律（前缀/layer）写入《plugin-system.md》V1.2 的时机，建议与 P1 同 lane。
 - docx iframe 档的打印语义（宿主打印按钮 vs iframe 内打印）候 P2 细化。

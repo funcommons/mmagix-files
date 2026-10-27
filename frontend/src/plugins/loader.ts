@@ -1,5 +1,5 @@
 /**
- * T1 宿主自管插件加载器（契约：《动态插件方案.md》V1.1 §一/§四）
+ * T1 宿主自管插件加载器（契约：《docs/design/plugin-system.md》V1.1 §一/§四）
  *
  * 机制说明（与文档 §一 的 script 标签差异，等价更强）：
  * `<script type="module" src integrity>` 只执行模块顶层、拿不到导出——插件的

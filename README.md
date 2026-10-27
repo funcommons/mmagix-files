@@ -1,67 +1,64 @@
 # mmagix-files
 
-纯前端 S3 文件管理器 · iframe 嵌入式 JS SDK · 可扩展动态应用插件。
+**纯前端 S3 文件管理器**——以 iframe 嵌入任意业务前端：对象存储桶的浏览/上传/下载/多应用预览与编辑，
+一套 postMessage 协议接入。凭证不出宿主，服务端零侵入（S3/MinIO 直连）。
 
-凭证不出宿主、字节流直进直出——把对象存储桶变成一个可嵌入的文件工作台（预览/编辑/签批/媒体全家桶）。
+- 内置 13 类文件应用（代码/Monaco、xlsx 样式表、docx、PDF、Markdown、流程图编辑、CSV、HTML 沙箱预览、HEIC、音视频…）
+- 7 个官方动态插件（Univer 办公编辑 · PDF 标注签批 · Markdown/HTML 编辑器 · 媒体增强 · 图片编辑 · PPTX 预览），SRI 自校验、按需装载
+- 可编辑应用统一 `[保存｜撤销 重做 重置]` 工具栏，dirty=保存钮红点
+- 宿主接入：npm 包 [`@mmagix/files-client`](frontend/packages/files-client/)（核心 + Vue 双入口，零依赖）
+- 明暗/多品牌主题随宿主 · 中英双语 · 明暗下统一编辑体验
 
-## 特性
+## 三步接入
 
-| 域 | 能力 |
-|---|---|
-| 双形态 | workspace（S3 桶树浏览/多 tab/上传下载/重命名/删除）· 单文件（直链/预签名 URL 读写） |
-| SDK | postMessage 协议（origin 白名单/超时/信封错误码），iframe 与 window.open 双构造 |
-| 内置应用 | 代码编辑（Monaco 全功能+worker 语言服务+格式化双链）· xlsx 样式渲染 · docx · PDF · Markdown · Mermaid · CSV · HEIC · 音视频 |
-| 动态插件 | Univer 办公编辑 · PDF 标注签批 · Markdown/HTML 编辑器 · 媒体增强 · 图片编辑 · PPTX 预览（SRI 自校验，按需装载） |
-| 安全 | S3 密钥仅宿主持有（TTL 自毁/热替换）· 预签名直传 · iframe 沙箱 · 敌意文件免疫 |
-| 工程 | 中英 i18n · 明暗主题随宿主 · 1391 单测 · Playwright E2E 基线 |
-
-## 快速接入（三步）
-
-宿主页装载文件管理器（iframe）+ 调用 SDK：
-
-```ts
-import { useMmagixFilesClient } from "@/composables/useMmagixFilesClient"; // 参考实现随 demo 提供
-
-const { iframeRef, mount, call, on, destroy } = useMmagixFilesClient();
-
-// ① 模板里放 <iframe ref="iframeRef" />
-// ② 装载（凭证留在宿主，S3 预签名在浏览器直连）
-await mount({
-  mode: "workspace",
-  bucket: "my-bucket",
-  endpoint: "https://s3.example.com",
-  region: "us-east-1",
-  credentials: { accessKeyId, secretAccessKey, sessionToken },
-  ttlSeconds: 1800,
-}, "https://cdn.example.com/mmagix-files/"); // filesBase=部署好的本产品整站
-
-// ③ 命令与事件
-await call("uploadFiles", { files, targetPrefix: "docs/" });
-on("fileChanged", (p) => console.log(p.key));
+```bash
+npm install @mmagix/files-client
 ```
 
-完整命令/事件/错误码契约见 [`documents/JSSDK 接口文档.md`](documents/JSSDK%20接口文档.md)；可运行示例见 `mmagix-embed-demo/`（`pnpm dev` → http://localhost:5200）。
+```ts
+import { useMmagixFilesClient } from "@mmagix/files-client/vue"; // Vue 3；非 Vue 用核心入口
 
-## 发布物清单（v1.1.0）
+const { iframeRef, mount, call, on } = useMmagixFilesClient();
+await mount(workspaceConfig, "https://your-files-app/"); // 等 evt ready（宿主 origin 自动入白名单）
+await call("navigate", { path: "/reports" });
+on("fileOpened", (p) => console.log(p));
+```
 
-| 物 | 位置 | 说明 |
-|---|---|---|
-| 整站构建 | `frontend/` → `pnpm build` | 部署到任意静态托管（filesBase） |
-| 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [`documents/releases/v1.1.0-plugin-sri.json`](documents/releases/v1.1.0-plugin-sri.json) |
-| 宿主侧客户端 | npm 包 [`@mmagix/files-client`](frontend/packages/files-client/)（Vue 入口 `/vue`） | 零依赖 postMessage 封装；demo 经 vite alias 消费同一份源码 |
+可运行示例：`mmagix-embed-demo/`（`pnpm dev` → http://localhost:5200）。
+
+## 快速开发
+
+```bash
+pnpm install
+cd frontend && pnpm dev --port 5199 --strictPort   # SPA（iframe 侧）
+cd mmagix-embed-demo && pnpm dev                    # 宿主 demo（5200，跨源联调形态）
+```
+
+构建/测试/部署细节见 [docs/operations/deployment.md](docs/operations/deployment.md)。
 
 ## 文档
 
-- [JSSDK 接口文档](documents/JSSDK%20接口文档.md)——协议契约正本
-- [用户手册](documents/用户手册.md)——接入/配置指南
-- [动态插件方案](documents/动态插件方案.md) / [动态插件样例](documents/动态插件样例.md)——扩展应用开发
-- [CHANGELOG](CHANGELOG.md)
+| 类 | 入口 |
+|---|---|
+| 文档索引 | [docs/README.md](docs/README.md) |
+| 需求（PRD） | [docs/product/PRD.md](docs/product/PRD.md) |
+| 架构（概要设计） | [docs/design/architecture.md](docs/design/architecture.md) |
+| 接口（JSSDK 协议） | [docs/design/jsdk-api.md](docs/design/jsdk-api.md) |
+| 测试（计划/用例/报告） | [docs/test/](docs/test/) |
+| 部署手册 | [docs/operations/deployment.md](docs/operations/deployment.md) |
+| 用户手册 | [docs/operations/user-guide.md](docs/operations/user-guide.md) |
+| 发布与交付 | [docs/releases/](docs/releases/) |
 
-## 开发
+## 参与
 
-```bash
-cd frontend && pnpm install && pnpm dev --port 5199   # 文件管理器
-cd mmagix-embed-demo && pnpm install && pnpm dev    # 演示站 5200（需 MinIO 9000）
-pnpm verify   # typecheck + lint + 1391 单测
-pnpm e2e      # Playwright 全量
-```
+- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)（含契约同步红线与已知地雷）
+- 安全披露：[SECURITY.md](SECURITY.md)（请勿公开 issue 报漏洞）
+- 变更历史：[CHANGELOG.md](CHANGELOG.md) · 许可：[LICENSE](LICENSE)（MIT；pptx-preview 组件例外见内注）
+
+## 发布物清单（v1.1.x）
+
+| 物 | 位置 | 说明 |
+|---|---|---|
+| 整站构建 | `frontend/` → `pnpm build` | 部署到任意静态托管 |
+| 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [docs/releases/v1.1.0-plugin-sri.json](docs/releases/v1.1.0-plugin-sri.json) |
+| 宿主侧客户端 | npm 包 [@mmagix/files-client](frontend/packages/files-client/)（Vue 入口 `/vue`） | 零依赖 postMessage 封装；demo 经 vite alias 消费同一份源码 |

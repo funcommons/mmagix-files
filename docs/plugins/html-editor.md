@@ -1,6 +1,15 @@
 # HTML 编辑器插件方案（html-editor）
 
-> 状态：v2 已实施（2026-10-20：P0+P1+P2 全量交付，产物 1.39MB/gzip 401KB，单测 15 例 + 全链 E2E ALL PASS）。对齐《动态插件方案.md》插件契约与 markdown-editor 插件先例（构建/注册/形态/appOptions 通道）。
+> **【实施状态注记 · 2026-10-26 审计】** v2「已实施」声明核实属实（三态/打开 pass/保存剥离/新 tab 代理全在）；偏差以代码为准：
+> 1. savedState 仅 `{ mode }`（光标位置未实现）
+> 2. 形态优先级：**initialMode > savedState/用户记忆 > 'source'**（`options.ts:40-42`；与 §一 相反）
+> 3. 构建为 Vite lib 单文件（无 build.mjs）；文件另有 find.ts/options.ts/types.ts；i18n 全走宿主词典 `app.html-*`
+> 4. 跳转怪值拒绝走 `ctx.notify('html-open-rejected')`→控制台 warn（无 toast）
+> 5. wysiwyg/preview 离态销毁（preview 保活未实现）
+> 6. 单测 24 例；产物 ≈1.36MiB
+
+
+> 状态：v2 已实施（2026-10-20：P0+P1+P2 全量交付，产物 1.39MB/gzip 401KB，单测 15 例 + 全链 E2E ALL PASS）。对齐《../design/plugin-system.md》插件契约与 markdown-editor 插件先例（构建/注册/形态/appOptions 通道）。
 > 目标：新增应用插件 `html-editor`——**三态：源码编辑 / 可视编辑（所见即所得）/ 页面预览**；图片全量 base64 内联（单体 HTML）；预览内一切跳转改为「确认后新标签页打开」。
 > v2 修订：取消「左编辑右预览」分屏态（用户裁定）——三态即三个独立视图，无双窗同步复杂度。
 
@@ -141,7 +150,7 @@ frontend/plugins/html-editor/
 | `frontend/public/plugins/html-editor.js`（新产物） | esbuild 产物 |
 | demo `FilePlay.vue` | `PLUGIN_DEFS` + `{ key:'html', label:'HTML 编辑', url:'/plugins/html-editor.js' }`（勾选默认开）；`APP_CATALOG` + `{ id:'html-editor', label:'HTML 编辑', kind:'edit', exts:['html','htm'], pluginKey:'html' }` |
 | `frontend/src/apps/builtins.ts` | 渲染器限额登记（html-editor maxBytes 20MB）——由插件自带 def.maxBytes 则免 |
-| `documents/动态插件方案.md` / `JSSDK 接口文档.md` | 插件清单补一行 |
+| `../design/plugin-system.md` / `JSSDK 接口文档.md` | 插件清单补一行 |
 | seed（可选） | 桶里放一个含外链图片的样例 `sample.html` 供演示单体化 |
 
 契约零变更（registerApp/renderer/appOptions 既有通道全够用）。

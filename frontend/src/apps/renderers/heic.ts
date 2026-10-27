@@ -1,7 +1,7 @@
 /**
  * HEIC 转码预览渲染器（内置应用 heic-viewer 的 renderer，Lane F6）
- * 契约：《documents/第一期文件类型支持计划.md》§一（heic-viewer 行，heic2any 转码预览）+
- *       《动态插件方案.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
+ * 契约：《docs/product/PRD.md》§一（heic-viewer 行，heic2any 转码预览）+
+ *       《docs/design/plugin-system.md》V1.1 §二 ctx 能力面（凭证不出、字节流进出）。
  *
  * 链路：ctx.getObject(key) → >32MB 拒转（提示下载，防 heic2any/wasm 解码整图入内存爆掉移动端）
  *       → 动态 import('heic2any')（libheif wasm 体积大，不入主 bundle，docx/mermaid 同款口径）

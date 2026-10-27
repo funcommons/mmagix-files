@@ -1,4 +1,5 @@
 {
+  "_note": "历史档案：仅对 v1.0.0 发版时点的插件产物有效——v1.1.0 已重建 markdown-editor/html-editor/univer-office/pdf-annotator 四包，勿用本清单校验当前 dist。当前有效清单见 v1.1.0-plugin-sri.json。",
   "version": "1.0.0",
   "generated": "2026-10-22T07:03:19.136Z",
   "algorithm": "sha384",

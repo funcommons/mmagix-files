@@ -1,5 +1,5 @@
 /**
- * #config / #file fragment 构造（契约《JSSDK 接口文档.md》§4.1/§4.1b）
+ * #config / #file fragment 构造（契约《../../../docs/design/jsdk-api.md》§4.1/§4.1b）
  * backend 指向假端点 https://s3.mock.local（由 s3-mock.ts 拦截应答）。
  */
 

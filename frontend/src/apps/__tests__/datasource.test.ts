@@ -1,7 +1,7 @@
 /**
  * datasource.ts 单测（Wave2-A13）：应用数据面桥
  * 被测：src/apps/datasource.ts——s3DataSource / urlDataSource
- * 契约：《方案设计.md》V1.2 §4.1b「数据源抽象：内置应用与插件零感知」
+ * 契约：《docs/design/solution-design.md》V1.2 §4.1b「数据源抽象：内置应用与插件零感知」
  *       + S3Client（工作台，key 透传）/ UrlSourceProvider（单文件，key 忽略）参数桥接
  *       + getMediaUrl 可选媒体直链（Lane F6：s3 经 getPresignedUrl；url 仅「可直接 GET」源）
  */

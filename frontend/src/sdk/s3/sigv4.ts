@@ -1,6 +1,6 @@
 /**
  * 浏览器内 AWS SigV4 签名（纯 WebCrypto，零三方依赖）
- * 依据《方案设计.md》§4.3/§4.4：凭证不下发后端代理，前端对 S3 请求就地签名。
+ * 依据《docs/design/solution-design.md》§4.3/§4.4：凭证不下发后端代理，前端对 S3 请求就地签名。
  * 关键性质：
  * - 签名确定性：同输入（含 nowMs）必得同输出
  * - clockOffsetMs：按 S3 响应 Date 头校准本机时钟偏差（observeServerDate）

@@ -1,6 +1,6 @@
 /**
  * 宿主侧配置/载荷类型（镜像 frontend/src/sdk/types.ts 宿主关心的子集）。
- * 正本语义见 documents/JSSDK 接口文档.md §二/§六。
+ * 正本语义见 ../../../../docs/design/jsdk-api.md §二/§六。
  */
 
 export interface MmxCredentials {

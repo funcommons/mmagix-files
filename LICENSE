@@ -1,0 +1,31 @@
+MIT License
+
+Copyright (c) 2026 funcommons
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Third-party licenses:
+
+- 插件 pptx-viewer 内嵌的 pptx-preview（v1.0.7，锁版本）：npm 包可免费自用/商用，
+  但其源码闭源、不修改不再分发——本仓仅依赖其 dist 产物（详见 docs/plugins/ 与
+  CHANGELOG v1.0.0）。
+- 其余第三方依赖许可见各 package.json 与其上游声明（Monaco/ExcelJS/CodeMirror/
+  Univer/pdf.js 等均为 MIT/Apache-2.0 系）。

@@ -1,6 +1,6 @@
 /**
  * 流程图源模型——mermaid graph TD 子集的解析 / 序列化（flow-editor 数据层）
- * 设计正本：《documents/流程图应用设计（Mermaid+X6）.md》V1.0 §三（子集契约/透传/meta 规范）
+ * 设计正本：《docs/design/flow-editor-design.md》V1.0 §三（子集契约/透传/meta 规范）
  *
  * 三条纪律（同设计文档 §1.2）：
  *  1. 子集契约：只解析本文件定义的语法；解析不了的行原样透传

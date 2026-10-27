@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 接入总览：三步接入 + #config 字段表 + 命令/事件/错误码表
-// 内容提炼自《JSSDK 接口文档.md》V1.0 与《用户手册.md》V1.0（契约正本，冲突以其为准）。
+// 内容提炼自《../../../docs/design/jsdk-api.md》V1.0 与《../../../docs/operations/user-guide.md》V1.0（契约正本，冲突以其为准）。
 // fc-web-sdk 合规改造：卡片=FcSection、表格=数据驱动（cell 内 {zh,en} 双语随 locale 取），
 // 富文本 cell 走 v-html（内容为本页静态文档常量，非用户输入）。
 import { computed } from "vue";
@@ -16,8 +16,8 @@ const pick = (v: L) => (locale.value === "en-US" ? v.en : v.zh);
 // 长富文本走组件内常量而非 vue-i18n 词典——正文含字面量 `{}`（信封示例），
 // 会与 vue-i18n 具名插值语法冲突；表格 cell 同款 L 模式，静态文档不进词典。
 const heroHtml: L = {
-  zh: "mmagix-files 是<strong>纯前端、S3 直连</strong>的文件工作台（无业务后端）：凭证即配置，配置走 URL fragment（<code>#config=</code> 工作台 / <code>#file=</code> 单文件，二者互斥）。本项目演示消费方视角的完整接入：iframe 嵌入、裸 <code>postMessage</code> 协议驱动、单文件只读预览。契约正本见仓库 <code>documents/JSSDK 接口文档.md</code>。",
-  en: "mmagix-files is a <strong>pure-frontend, S3-direct</strong> file workspace (no business backend): credentials as config, config via URL fragment (<code>#config=</code> workspace / <code>#file=</code> single file, mutually exclusive). This project demonstrates full integration from the consumer side: iframe embed, raw <code>postMessage</code> protocol, single-file preview. Contract source of truth: <code>documents/JSSDK 接口文档.md</code>.",
+  zh: "mmagix-files 是<strong>纯前端、S3 直连</strong>的文件工作台（无业务后端）：凭证即配置，配置走 URL fragment（<code>#config=</code> 工作台 / <code>#file=</code> 单文件，二者互斥）。本项目演示消费方视角的完整接入：iframe 嵌入、裸 <code>postMessage</code> 协议驱动、单文件只读预览。契约正本见仓库 <code>docs/design/jsdk-api.md</code>。",
+  en: "mmagix-files is a <strong>pure-frontend, S3-direct</strong> file workspace (no business backend): credentials as config, config via URL fragment (<code>#config=</code> workspace / <code>#file=</code> single file, mutually exclusive). This project demonstrates full integration from the consumer side: iframe embed, raw <code>postMessage</code> protocol, single-file preview. Contract source of truth: <code>docs/design/jsdk-api.md</code>.",
 };
 const step1Html: L = {
   zh: "配置 JSON → <code>encodeURIComponent</code> → 拼到 <code>https://files.example.com/#config=…</code>。<b>只走 fragment，禁 query</b>（fragment 不到服务端/代理日志）；解析端用 <code>decodeURIComponent</code> 还原——对端不用 URLSearchParams，因为它会把 <code>+</code> 解成空格。建议整段 ≤8KB。",

@@ -1,12 +1,21 @@
 # mmagix-files PDF 标注签批插件设计方案（pdf.js 覆盖层 + pdf-lib 写回）
 
+> **【实施状态注记 · 2026-10-26 审计】** P1+P2+P3 已全部落地（sidecar 导出/导入/P3 归并、AcroForm+XFA 禁用、压平写回；插件 version=1.1.0）；**未实现/口径漂移**以代码为准：
+> 1. 图形仅矩形（椭圆/直线未实现）；文字框=input 一次性录入（无再编辑/字号）
+> 2. 选中操作仅 click 选中 + Delete 删除（无拖动/等比缩放）；图章落位无光标跟随
+> 3. i18n 未走宿主词典（硬编码中文 ~15 处）；样式全 inline cssText（无 mmagic-pdfann-* 类名/样式节点——等效无外溢，§十 A-12 验收口径按此理解）
+> 4. 渲染=全页连续滚动（scale=min(2, 宽适配)；无挡位/翻页条）；签名 sessionStorage 持久（跨会话，非仅内存）；签名产物整幅 toDataURL（无 800ms 裁切/文字签名）
+> 5. 加密件直接拒绝（无口令输入预览路径）；扫描件检测未实现；savedState 不消费
+> 6. ink 写回逐段 drawLine（非 drawSvgPath，功能等效）；保存后 sidecar 自动重写为空（烙印一次性出口，演进自「不做自动双写」）
+
+
 ## 〇、头表
 
 | 项 | 值 |
 | --- | --- |
 | 版本 | V1.0（2026-10-15 首版） |
 | 性质 | 设计草案（候裁）——**T1 宿主自管插件**（特权运行=宿主信任域），动态应用形态、非内置 |
-| 依赖正本 | 《动态插件方案.md》V1.1（加载机制/插件契约/安全红线）；《JSSDK 接口文档.md》V1.0（`fileChanged` put/delete/rename 映射）；《应用打开防样式污染方案.md》（`mmagic-*` 隔离约定）；《动态插件样例.md》样例③（beforeDispose/消毒先例）；《流程图应用设计（Mermaid+X6）.md》（双应用并存与「打开方式」先例） |
+| 依赖正本 | 《../design/plugin-system.md》V1.1（加载机制/插件契约/安全红线）；《../design/jsdk-api.md》V1.0（`fileChanged` put/delete/rename 映射）；《../design/style-isolation.md》（`mmagic-*` 隔离约定）；《../design/plugin-sample.md》样例③（beforeDispose/消毒先例）；《../design/flow-editor-design.md》（双应用并存与「打开方式」先例） |
 | 范围 | PDF 覆盖层标注 / 签批 / 手写签名 / AcroForm 填写（P2）与压平写回；不含原内容流改写、不含 PDF 生成 |
 | 定位 | 插件应用 `pdf-annotator`（`actions:['edit']`），与内置 `pdf-viewer` 并存，经「打开方式」进入 |
 | 一句话 | pdf.js 画布渲染 + 每页覆盖层标注 + pdf-lib 压平写回——**原内容流字节不动**，注释作为追加绘制段合并进各页对象层 |
@@ -75,7 +84,7 @@
 
 ## 三、应用契约
 
-### 3.1 插件 manifest（完整定义，契约见《动态插件方案.md》§二）
+### 3.1 插件 manifest（完整定义，契约见《../design/plugin-system.md》§二）
 
 ```js
 // pdf-annotator.js — 单文件 ESM（vite lib + inlineDynamicImports，全依赖内联）
@@ -102,7 +111,7 @@ export function activate(sdk) {
 | `lazy: false`（启动即载） | **是** | lazy 语义=首个 matcher 命中才拉取——而 pdf 的首次打开大概率是**只读预览**（viewer 命中即触发插件拉取但菜单缺项），用户在「打开方式」里看不到 pdf-annotator，**第二次打开才齐**；签批是核心场景，菜单完备性优先，故启动即载。带宽敏感的消费方可自改 `lazy:true`（降级=首开菜单缺项，可接受） |
 | 工程位置 | `frontend/plugins/pdf-annotator/`，产物 `public/plugins/pdf-annotator.js` | 对齐 univer-office 先例：vite lib mode + `inlineDynamicImports` + `vite-plugin-css-injected-by-js`（样式无独立通道，随 JS 注入）；生产由消费方托管自有 CDN + SRI（红线 2） |
 | i18n | 文案全走 `ctx.t('plugin.pdf-annot.*')` 宿主词典 | 契约：i18n 通道强制走宿主词典；超限/拒绝类文案用具名插值 `{limit}`（对齐 R2-03 口径）；词典条目随宿主 locales 一并收口 |
-| 发布清单 | 按《动态插件样例.md》附表自检 | SRI 生成、消毒自查、dispose 全路径、端到端闭环 |
+| 发布清单 | 按《../design/plugin-sample.md》附表自检 | SRI 生成、消毒自查、dispose 全路径、端到端闭环 |
 
 ### 3.3 `maxBytes: 50MB` 与并存
 
@@ -142,7 +151,7 @@ PDF 字节（ctx.getObject → Blob）
 | 签名图章 | 绝对定位 `<img>`（PNG dataURL） | 拖放、等比缩放 |
 | AcroForm 字段（P2） | 按 fieldType 映射 input/select/checkbox，锚定字段 rect | 聚焦填写、Tab 序 |
 
-- **隔离**：`mmagic-pdfann-*` 类名前缀；`<style>` 随实例注入、dispose 移除（《应用打开防样式污染方案.md》）；色值全走 `ctx.theme` token，禁硬编码
+- **隔离**：`mmagic-pdfann-*` 类名前缀；`<style>` 随实例注入、dispose 移除（《../design/style-isolation.md》）；色值全走 `ctx.theme` token，禁硬编码
 - 覆盖层仅当前页实例化——翻页即按模型重建该页投影（注释多时无 DOM 积累）
 
 ### 4.3 模型层（内存 annotation 模型）
@@ -197,9 +206,9 @@ interface Annotation {
 
 | 项 | 口径 |
 | --- | --- |
-| 保存链 | 组装 pdf 字节 → `ctx.putObject(file.key, new Blob([bytes], {type:'application/pdf'}))` → `ctx.notify('saved', { key: file.key })` → 宿主 `fileChanged { action:'put' }`（《JSSDK 接口文档.md》§六映射）→ 树/面板刷新 |
+| 保存链 | 组装 pdf 字节 → `ctx.putObject(file.key, new Blob([bytes], {type:'application/pdf'}))` → `ctx.notify('saved', { key: file.key })` → 宿主 `fileChanged { action:'put' }`（《../design/jsdk-api.md》§六映射）→ 树/面板刷新 |
 | 不自动保存 | **决策：仅显式保存（按钮/Ctrl+S）**。压平是不可逆合并，auto-save 会随时间推移吞掉撤销窗口——与 code-editor 的脏态自治同构，但这里不可逆性更强，更不能自动 |
-| 关闭确认 | `beforeDispose(): Promise<boolean>`——dirty 时 `confirm` 保存/放弃/取消；resolve `false`=暂缓关闭，**3 秒竞速**宿主强制放行；`expired/destroy` 路径宿主只通知不询问（仍调用但忽略返回值，保存窗口期=凭证 TTL 内）。契约原文见《动态插件方案.md》§五 |
+| 关闭确认 | `beforeDispose(): Promise<boolean>`——dirty 时 `confirm` 保存/放弃/取消；resolve `false`=暂缓关闭，**3 秒竞速**宿主强制放行；`expired/destroy` 路径宿主只通知不询问（仍调用但忽略返回值，保存窗口期=凭证 TTL 内）。契约原文见《../design/plugin-system.md》§五 |
 | 只读/无权限 | `putObject` 被 S3 侧拒（scope 外）或会话只读闩锁（4305）→ 保存失败提示 + dirty 保持，不丢标注（对齐 code-editor 口径） |
 | 大文件策略 | **>20MB 进编辑态时提示**（「标注与保存耗时可能较长」）——内存放大系数约 3–4×（pdf.js 字节副本 + canvas + pdf-lib 重建副本）；50MB 硬闸在预览闸（§3.3），提示与硬闸分层各管一段 |
 | 逃生通道 | 「下载副本」=本地导出压平 PDF，**不落桶不改原文件**——对外发前的预览/比对场景零风险 |
@@ -213,7 +222,7 @@ interface Annotation {
 2. **产物**：停止输入 800ms 或点「完成」→ 离屏 canvas 按笔迹包围盒裁切 → **透明底 PNG**（dataURL）→ 归一为 `type:'stamp'` 注释进入模型
 3. **文字签名**：同浮层提供「输入文字 + 手写体字体 canvas 渲染」路径，产物同为 PNG 图章（避开字体嵌入问题，§8.3）
 4. **落位**：图章挂光标跟随，点击任意页落位；选中后等比缩放/拖动/删除
-5. **留存决策**：签名 PNG 仅**会话内存留存**（tab 存续期内重复使用零成本）；跨会话留存候 P2——依赖 ctx 轻量存储能力（《动态插件方案.md》§二提及 sessionStorage 隔离命名空间，`types.ts` AppCtx 尚未落该字段，不假设能力存在）
+5. **留存决策**：签名 PNG 仅**会话内存留存**（tab 存续期内重复使用零成本）；跨会话留存候 P2——依赖 ctx 轻量存储能力（《../design/plugin-system.md》§二提及 sessionStorage 隔离命名空间，`types.ts` AppCtx 尚未落该字段，不假设能力存在）
 6. **安全**：PNG dataURL 只进 `<img src>` 与 `embedPng` 字节通道；签名板 DOM 全程序化创建，无 innerHTML 面（样例③消毒注记同源）
 
 ---

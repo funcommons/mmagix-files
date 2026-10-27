@@ -1,6 +1,6 @@
 /**
  * AppRegistry——内置/插件同一注册表，零特判
- * 契约：《方案设计.md》V1.2 §4.6、《动态插件方案.md》V1.1 §一/§二
+ * 契约：《docs/design/solution-design.md》V1.2 §4.6、《docs/design/plugin-system.md》V1.1 §一/§二
  * matcher：字段间 AND、同字段内 OR；ext 归一化=忽略大小写与前导点，命中要求点分隔
  * （`a.todo` 命中 `todo`，裸名 `todo` 无扩展名不命中）；mime 无把握时只用 ext
  */

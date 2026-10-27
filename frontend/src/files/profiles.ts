@@ -1,6 +1,6 @@
 /**
  * profiles——本地连接模式 · 多 Profile 存储（Lane G5）
- * 契约：PROGRESS.md Wave G / G5「profiles(localStorage)+连接表单+测试连接；
+ * 契约：开发决策档案（test-report/PROGRESS-2026-10-10-archived.md）Wave G / G5「profiles(localStorage)+连接表单+测试连接；
  * 写入 mmagic.config.raw 备份→reload 走既有恢复链，不暴露 URL」。
  *
  * ⚠️ 明文存储风险定位（选型是显式的，不是疏漏）：
@@ -9,7 +9,7 @@
  *   做不了「下次打开免输入」）；明文是 localStorage 的本性，无密钥可用的前端做不了真加密。
  * - 因此仅限个人设备使用——向导表单底部常驻 wizard.plaintext-warn 警示条；
  *   **企业嵌入一律走宿主 #config 注入（STS scoped 凭据 + sessionStorage 备份），不走此路径**
- *   （见《用户手册.md》§四「凭证必须是 STS scoped 临时凭证」与 config.ts §4.2 禁 localStorage 持态）。
+ *   （见《docs/operations/user-guide.md》§四「凭证必须是 STS scoped 临时凭证」与 config.ts §4.2 禁 localStorage 持态）。
  * - 与凭证备份的边界：连接动作产生的 #config 原始片段走 config.ts 的 sessionStorage 备份
  *   （带 exp 到期、会话终态即清），**不进 localStorage**——两套存储职责分离。
  *

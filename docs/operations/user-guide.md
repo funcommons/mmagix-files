@@ -4,9 +4,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | **V1.0（2026-10-08 评审修订版：CORS 补 ExposeHeaders、SDK 引入/单文件/独立窗接入补齐、ttlSeconds 语义定义）** |
+| 版本 | **V1.1（2026-10-26 修订：SDK 接入改 npm 包 `@mmagix/files-client`、会话续期口径、ui.treeMode/treeTitle、日常使用面扩全；V1.0=2026-10-08 评审版）** |
 | 读者 | 消费方接入开发者（把 mmagix-files iframe 嵌进自己产品的人） |
-| 配套 | 《JSSDK 接口文档.md》（消息协议契约）/《动态插件方案.md》（扩展文件类型）/《方案设计.md》（嵌入形态/单文件模式正本） |
+| 配套 | [JSSDK 接口文档](../design/jsdk-api.md)（消息协议契约）/ [插件体系](../design/plugin-system.md)（扩展文件类型）/ [概要设计](../design/solution-design.md)（嵌入形态/单文件模式正本） |
 
 ---
 
@@ -47,7 +47,7 @@
   "features": { "upload": true, "delete": true, "rename": true, "mkdir": true,
                 "download": true, "multiTab": true, "openWithMenu": true, "plugins": true },
   "permissions": { "denyExts": ["exe"] },
-  "plugins": [{ "url": "https://cdn.your.com/mmagic/ipynb-viewer.js", "sri": "sha384-...", "lazy": true, "options": {} }],
+  "plugins": [{ "url": "https://cdn.your.com/plugins/ipynb-viewer.js", "sri": "sha384-...", "lazy": true, "options": {} }],
   "ui": { "initialPath": "/", "defaultOpen": "reports/summary.md" }
 }
 ```
@@ -59,14 +59,14 @@
 | `v` | ✅ | 配置协议版本，当前 `1` |
 | `backend.*` | ✅ | S3 端点+scoped 凭证；`prefix`=会话目录域（文件树从此起） |
 | `backend.ttlSeconds` | - | =前端自毁定时器时长；必须 ≤（建议略短于）STS 凭证真实 TTL——若配置值大于真实 TTL，会出现「前端还显示剩余时间、S3 已全部拒绝」；可选 `expiresAt` 可直接对齐 STS 到期时刻 |
-| `security.allowedOrigins` | ✅ | 宿主页域白名单——文件服务→宿主方向按此白名单收发；宿主→文件服务方向还需在 `new MMagixFilesSDK(el, { allowedOrigin: 'https://files.mmagic.app' })` 传文件服务域 |
+| `security.allowedOrigins` | ✅ | 宿主页域白名单——文件服务→宿主方向按此白名单收发；宿主→文件服务方向由客户端包自动钉死 iframe origin（`createMmagixFilesHost` 的 `baseUrl`） |
 | `params.uploadMaxBytes` | - | 单文件上传上限（字节），超限前端拒收 |
 | `params.uploadConcurrency` | - | 并发上传数，默认 3 |
 | `appearance.*` | - | 主题 light/dark/auto、品牌（OEM）、语言 zh-CN/en-US |
 | `features.*` | - | 功能开关，false=对应操作整链禁用（UI 隐藏+API 拒绝）；全集与命令映射见下表 |
 | `permissions.denyExts` | - | 拒收扩展名黑名单，统一**不带点**（如 `["exe"]`）；匹配前忽略大小写与前导点；命中拒收走 JSSDK `4304 EXT_DENIED`（`uploadFiles` reply 的 `rejected` 列表） |
-| `plugins[]` | - | 动态插件（url+sri 完整性哈希+lazy+options 透传 activate 第二参，v1.1）——详见《动态插件方案.md》 |
-| `ui.*` | - | 初始目录/默认打开文件 |
+| `plugins[]` | - | 动态插件（url+sri 完整性哈希+lazy+options 透传 activate 第二参，v1.1）——详见 [插件体系](../design/plugin-system.md) |
+| `ui.*` | - | `initialPath` 初始目录 / `defaultOpen` 默认打开文件 / `treeMode` 文件树形态（sidebar=常驻侧栏〔默认〕/ drawer=左抽屉）/ `treeTitle` 文件树标题覆写（缺省=前缀末段，根=「根目录」） |
 
 features 全集与命令映射：
 
@@ -94,27 +94,29 @@ const url = 'https://files.mmagic.app/' + '#config=' + encodeURIComponent(JSON.s
 ```
 
   花括号属于 JSON 本身；整个编码结果接在 `#config=` 之后，**不要再包一层 `{}`**
-- 配置 JSON **必须放 fragment（`#`）并 encodeURIComponent**——禁走 query（`?`），详见《方案设计.md》§4.1
+- 配置 JSON **必须放 fragment（`#`）并 encodeURIComponent**——禁走 query（`?`），详见 [概要设计](../design/solution-design.md) §4.1
 - 配置 JSON 建议 **≤8KB**（fragment 实用上限）；logo 等大内容走 URL 引用不内联
 
-### 第 4 步：引入 SDK
+### 第 4 步：接入宿主客户端包
 
-两种方式任选：
+```bash
+npm install @mmagix/files-client
+```
 
-- `<script src="https://files.mmagic.app/sdk/mmagix-files-sdk.umd.js"></script>`——暴露全局 `MMagixFilesSDK`
-- `npm i @mmagix-files/sdk`（附带 `.d.ts`）
+Vue 3 项目用组合式层（`@mmagix/files-client/vue` 的 `useMmagixFilesClient`——状态机/日志/卸载自动销毁）；
+非 Vue 用核心入口 `createMmagixFilesHost`。最小示例见 [JSSDK 接口文档](../design/jsdk-api.md) §八。
 
-完成后监听 JSSDK `ready` 事件即可用 SDK 操控（最小示例见《JSSDK 接口文档.md》§七）。
+> 会话凭据注入：宿主经 `setCredentials` 命令热替换 STS 凭证并重置自毁线（可反复调用实现「心跳续期」，
+> 见 `call("setCredentials", { credentials, ttlSeconds })`）。
 
 ### 形态 A：window.open 独立窗（等效 iframe）
 
-- `window.open(第 3 步拼出的 url)` 打开独立窗——与 iframe **等效**，JSSDK 通道自动适配 parent/opener（《方案设计.md》§4.1）
-- SDK 改传窗口引用：`const mmagic = new MMagixFilesSDK(window.open(url), { allowedOrigin: 'https://files.mmagic.app' })`
-- origin 安全规则同一套（`security.allowedOrigins` + SDK `allowedOrigin` 双向校验）
+- `window.open(第 3 步拼出的 url)` 打开独立窗——与 iframe 等效，通道适配 parent/opener（[概要设计](../design/solution-design.md) §4.1）
+- 客户端包当前提供 iframe 形态（`createMmagixFilesHost({ iframe })`）；独立窗形态可自行监听 `message` 并按同套 origin 双闸过滤（iframe origin 收包 + 白名单发包）
 
 ### 形态 B：单文件模式（`#file=`，不开工作台）
 
-URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《方案设计.md》§4.1b 一致：
+URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《../design/solution-design.md》§4.1b 一致：
 
 ```json
 {
@@ -130,7 +132,7 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《方�
 - **只读=无 `save` 段**（预览应用渲染，零写链）；**可写=有 `save` 段**（编辑类应用可用，按 `save.method` 回写）
 - 与 `#config` **互斥、二选一**；不接 S3、常无凭证
 - **源站 CORS 自理**：`source.headers` 可带宿主签发的短时 token
-- JSSDK 子集：命令仅 `setTheme`/`setLocale`/`getInfo`/`destroy`；事件仅 `ready`/`expired`/`error`/`fileChanged`——详见《JSSDK 接口文档.md》单文件小节
+- 命令子集：`setTheme`/`setLocale`/`getInfo`/`destroy`/`uploadFiles`（内存通道）/`getApps`/`registerApp`；事件子集：`ready`/`expired`/`error`/`fileChanged`——详见 [JSSDK 接口文档](../design/jsdk-api.md) 单文件小节
 
 ---
 
@@ -138,20 +140,25 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《方�
 
 | 操作 | 方式 |
 | --- | --- |
-| 浏览目录 | 左侧文件树点击；懒加载子目录 |
+| 浏览目录 | 左侧文件树点击（sidebar 常驻/`ui.treeMode=drawer` 抽屉两种形态）；懒加载子目录 |
 | 打开文件 | 双击/回车——按类型走默认应用；右键「打开方式」选其他应用（同类型多应用） |
-| 多文件多 tab | 打开的文件各占一个 tab，可拖分屏 |
-| 上传 | 工具栏或拖拽入面板；大文件自动分块直传 |
-| 下载 | 右键/工具栏；多选可打包 |
+| 多 tab | 打开的文件各占一个 tab；可钉住，超量 LRU 淘汰（上限 8）；树/预览宽度可拖分隔条 |
+| 上传 | 工具栏/拖拽入面板/直接粘贴（剪贴板图片即传）；大文件直传+并发 3 |
+| 下载 | 右键/工具栏；多选可打包 zip |
 | 重命名/删除/新建目录 | 右键菜单；重命名=copy+delete 语义 |
-| 代码编辑 | 文本/代码文件在编辑器 tab 直接改，Ctrl+S 保存直传 |
-| Office | docx/xlsx **预览**（v1）；编辑不在本期 |
-| 新文件类型 | 接入方写插件 js+配置一行——见《动态插件方案.md》 |
+| 搜索 | 全局搜索对话框（文件名索引） |
+| 命令面板 | `Ctrl/⌘+K`——工作台全部动作快捷入口 |
+| 分享 | 右键「分享」生成链接（ShareDialog） |
+| 编辑与保存 | 可编辑应用（代码/流程图/Markdown/HTML/Office/图片/PDF）统一左上角 `[保存｜撤销 重做 重置]` 工具栏；Ctrl/⌘+S 保存直传；**未保存=保存钮右上角红点**，关闭前会确认 |
+| 预览全屏 | 预览工具栏「全屏」按钮（浏览器内全屏，发 `previewFullscreen` 事件给宿主） |
+| Office | docx/xlsx 预览 + **univer-office 插件在线编辑**；旧 .doc/.ppt 出定向转存提示（另存新格式再上传） |
+| 连接配置 | 右上角连接向导（ConnectWizard）：支持 STS 与本地长期 AK/SK（sessionToken 留空）两种模式，多 Profile 记忆 |
+| 新文件类型 | 接入方写插件 js+配置一行——见 [插件体系](../design/plugin-system.md) |
 
 ## 三、会话行为（必读）
 
-- **会话有效期=凭证 TTL**，签发时定死、不延期；到期前端自毁（清态+`expired` 事件）且 S3 全部拒绝
-- 页面刷新=从 URL 重建（凭证仍有效期内则无缝恢复）
+- **会话有效期=凭证 TTL**，到期前端自毁（清态+`expired` 事件）且 S3 全部拒绝；**支持续期**：宿主 `setCredentials` 重签热替换凭证并重置自毁线（可反复调用实现「心跳」）
+- 页面刷新：嵌入配置经 sessionStorage 备份链重建（凭证仍有效期内则无缝恢复；URL fragment 已抹除，「URL 即凭证」的暴露窗口仅限首次签发链接）
 - **「URL 即凭证」**：嵌入链接在凭证 TTL 内可重放——不要把带配置的 URL 发给不该有权限的人；渠道建议走「点击时后端现拼现发」
 - 审计：中台无服务端会话记录，合规审计请启用 bucket access log（S3 原生）
 
@@ -159,7 +166,7 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《方�
 
 > 文件服务**无租户概念**（2026-10 裁决⑥）：不做按消费方嵌入钉域/CSP 差异化——无配置/凭证的嵌入实例=空壳，无物可泄；真实边界=本清单+JSSDK origin 双向校验。
 
-- [ ] 凭证必须是 **STS scoped 临时凭证**（prefix+TTL+最小动作集）——长期 AK/SK 不得接入
+- [ ] 凭证首选 **STS scoped 临时凭证**（prefix+TTL+最小动作集）；本地/内网模式可用长期 AK/SK（连接向导 sessionToken 留空）——公网宿主不推荐
 - [ ] bucket CORS 已按§一配置
 - [ ] 配置只在 fragment、经用户点击时现签现发
 - [ ] 宿主侧校验 JSSDK 消息 `event.origin`（SDK 已内建，勿绕过）
@@ -170,7 +177,7 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《方�
 
 ## 五、FAQ
 
-**Q：会话能续期吗？** 不能（v1 设计）。需要长会话→签发时放大 TTL（上限 24h）；需要「心跳延期」→ 候企业增强件（会话服务，架构已留缝）。
+**Q：会话能续期吗？** 能——宿主 `call("setCredentials", { credentials, ttlSeconds })` 重签热替换凭证并重置自毁线（STS 过期前反复调用即「心跳」）。需要超长会话也可签发时放大 TTL（上限 24h）。
 
 **Q：凭证过期前用户还在编辑怎么办？** 到期前 5 分钟（T-5min）起**面板横幅+编辑器顶部提示**；`expired` 事件后宿主可引导重新签发新 URL。
 
