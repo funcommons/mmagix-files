@@ -850,8 +850,7 @@ export default {
   },
   transfer: {
     title: '传输任务',
-    collapse: '收起面板',
-    collapsed: '{n} 个传输任务 · 点击展开',
+    close: '关闭',
     retry: '重试',
     paused: '已暂停',
     pause: '暂停',

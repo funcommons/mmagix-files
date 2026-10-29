@@ -33,7 +33,12 @@ export interface DownloadTaskView {
   error?: string
 }
 
-const props = defineProps<{ tasks: UploadTaskView[]; downloads?: DownloadTaskView[] }>()
+const props = defineProps<{
+  tasks: UploadTaskView[]
+  downloads?: DownloadTaskView[]
+  /** 重开信号（Home 命令面板「传输任务」bump）：面板被 X 关闭后的手动重开入口 */
+  reopenKey?: number
+}>()
 
 const emit = defineEmits<{
   /** 上传：暂停/继续/重试/取消单条（Home 接 queue.pause/resume/retry/abort） */
@@ -69,12 +74,18 @@ const DOWNLOAD_STATUS_KEY: Record<DownloadTaskView['status'], string> = {
 
 const isEmpty = computed(() => props.tasks.length === 0 && (props.downloads ?? []).length === 0)
 
-/** 收起态：点 X 关闭只留一条可点回的横条；新任务从 0→N 入列时自动展开 */
+/** 关闭态：点 X=整面板消失（不是折成一行）；新任务从 0→N 入列自动重现，命令面板「传输任务」可手动重开 */
 const closed = ref(false)
 const totalTasks = computed(() => props.tasks.length + (props.downloads ?? []).length)
 watch(totalTasks, (n, o) => {
   if (o === 0 && n > 0) closed.value = false
 })
+watch(
+  () => props.reopenKey,
+  () => {
+    closed.value = false
+  },
+)
 
 /** 面板高度：拖**顶缘**手柄改高（96–480px，面板贴底、上缘=唯一可见动缘），localStorage 持久化；
  *  null=默认不限制（跟随内容）。拖动即锁定固定 height（maxHeight 在内容不溢出时无视觉反馈——旧版「拖不动」根因） */
@@ -129,18 +140,7 @@ function downloadPercentOf(task: DownloadTaskView): number {
 </script>
 
 <template>
-  <section v-if="!isEmpty" class="upload-panel" data-testid="upload-panel">
-    <button
-      v-if="closed"
-      type="button"
-      class="upload-panel__collapsed"
-      data-testid="upload-reopen"
-      @click="closed = false"
-    >
-      <i class="ri-arrow-left-right-line upload-panel__title-icon" />
-      {{ t('transfer.collapsed', { n: totalTasks }) }}
-    </button>
-    <template v-else>
+  <section v-if="!isEmpty && !closed" class="upload-panel" data-testid="upload-panel">
     <!-- 顶缘拖高把手：面板贴底、上缘是唯一可见动缘（向上拖=变高；向下拖=变矮） -->
     <div
       class="upload-panel__resize"
@@ -178,110 +178,109 @@ function downloadPercentOf(task: DownloadTaskView): number {
         variant="text"
         size="sm"
         data-testid="upload-close"
-        :title="t('transfer.collapse')"
+        :title="t('transfer.close')"
         @click="closed = true"
       >
-        <i class="ri-close-line" />
+        <i class="ri-close-line upload-panel__close-icon" />
       </FcButton>
     </header>
-      <div ref="bodyEl" class="upload-panel__body" :style="bodyStyle">
+    <div ref="bodyEl" class="upload-panel__body" :style="bodyStyle">
       <ul class="upload-panel__list">
-      <li
-        v-for="task in tasks"
-        :key="task.id"
-        class="upload-panel__item"
-        :class="`is-${task.status}`"
-        data-testid="upload-item"
-      >
-        <i class="ri-upload-2-line upload-panel__icon" />
-        <span class="upload-panel__name" :title="task.name">{{ task.name }}</span>
-        <span class="upload-panel__bar" aria-hidden="true">
-          <span class="upload-panel__bar-fill" :style="{ width: uploadPercentOf(task) + '%' }" />
-        </span>
-        <span class="upload-panel__percent" data-testid="upload-percent">{{ uploadPercentOf(task) }}%</span>
-        <span
-          v-if="task.status === 'failed' && task.error"
-          class="upload-panel__error"
-          :title="task.error"
-        >{{ task.error }}</span>
-        <span class="upload-panel__status" :data-status="task.status">{{ t(UPLOAD_STATUS_KEY[task.status]) }}</span>
-        <span class="upload-panel__actions">
-          <FcButton
-            v-if="task.status === 'uploading'"
-            variant="text"
-            size="sm"
-            data-testid="upload-pause"
-            @click="emit('pause', task.id)"
-          >
-            {{ t('transfer.pause') }}
-          </FcButton>
-          <FcButton
-            v-if="task.status === 'paused'"
-            variant="text"
-            size="sm"
-            data-testid="upload-resume"
-            @click="emit('resume', task.id)"
-          >
-            {{ t('transfer.resume') }}
-          </FcButton>
-          <FcButton
-            v-if="task.status === 'failed'"
-            variant="text"
-            size="sm"
-            data-testid="upload-retry"
-            @click="emit('retry', task.id)"
-          >
-            {{ t('transfer.retry') }}
-          </FcButton>
-          <FcButton
-            v-if="task.status === 'uploading' || task.status === 'paused'"
-            variant="text"
-            size="sm"
-            data-testid="upload-cancel"
-            @click="emit('cancel', task.id)"
-          >
-            {{ t('files.upload.cancel') }}
-          </FcButton>
-        </span>
-      </li>
-      <li
-        v-for="dl in downloads ?? []"
-        :key="dl.id"
-        class="upload-panel__item"
-        :class="`is-${dl.status}`"
-        data-testid="download-item"
-      >
-        <i class="ri-download-2-line upload-panel__icon" />
-        <span class="upload-panel__name" :title="dl.name">{{ dl.name }}</span>
-        <span class="upload-panel__bar" aria-hidden="true">
-          <span class="upload-panel__bar-fill" :style="{ width: downloadPercentOf(dl) + '%' }" />
-        </span>
-        <span class="upload-panel__percent" data-testid="download-percent">{{ downloadPercentOf(dl) }}%</span>
-        <span class="upload-panel__status" :data-status="dl.status">{{ t(DOWNLOAD_STATUS_KEY[dl.status]) }}</span>
-        <span class="upload-panel__actions">
-          <FcButton
-            v-if="dl.status === 'active'"
-            variant="text"
-            size="sm"
-            data-testid="download-cancel"
-            @click="emit('download-cancel', dl.id)"
-          >
-            {{ t('files.upload.cancel') }}
-          </FcButton>
-          <FcButton
-            v-if="dl.status === 'failed' || dl.status === 'cancelled'"
-            variant="text"
-            size="sm"
-            data-testid="download-retry"
-            @click="emit('download-retry', dl.id)"
-          >
-            {{ t('transfer.retry') }}
-          </FcButton>
-        </span>
-      </li>
-    </ul>
-      </div>
-    </template>
+        <li
+          v-for="task in tasks"
+          :key="task.id"
+          class="upload-panel__item"
+          :class="`is-${task.status}`"
+          data-testid="upload-item"
+        >
+          <i class="ri-upload-2-line upload-panel__icon" />
+          <span class="upload-panel__name" :title="task.name">{{ task.name }}</span>
+          <span class="upload-panel__bar" aria-hidden="true">
+            <span class="upload-panel__bar-fill" :style="{ width: uploadPercentOf(task) + '%' }" />
+          </span>
+          <span class="upload-panel__percent" data-testid="upload-percent">{{ uploadPercentOf(task) }}%</span>
+          <span
+            v-if="task.status === 'failed' && task.error"
+            class="upload-panel__error"
+            :title="task.error"
+          >{{ task.error }}</span>
+          <span class="upload-panel__status" :data-status="task.status">{{ t(UPLOAD_STATUS_KEY[task.status]) }}</span>
+          <span class="upload-panel__actions">
+            <FcButton
+              v-if="task.status === 'uploading'"
+              variant="text"
+              size="sm"
+              data-testid="upload-pause"
+              @click="emit('pause', task.id)"
+            >
+              {{ t('transfer.pause') }}
+            </FcButton>
+            <FcButton
+              v-if="task.status === 'paused'"
+              variant="text"
+              size="sm"
+              data-testid="upload-resume"
+              @click="emit('resume', task.id)"
+            >
+              {{ t('transfer.resume') }}
+            </FcButton>
+            <FcButton
+              v-if="task.status === 'failed'"
+              variant="text"
+              size="sm"
+              data-testid="upload-retry"
+              @click="emit('retry', task.id)"
+            >
+              {{ t('transfer.retry') }}
+            </FcButton>
+            <FcButton
+              v-if="task.status === 'uploading' || task.status === 'paused'"
+              variant="text"
+              size="sm"
+              data-testid="upload-cancel"
+              @click="emit('cancel', task.id)"
+            >
+              {{ t('files.upload.cancel') }}
+            </FcButton>
+          </span>
+        </li>
+        <li
+          v-for="dl in downloads ?? []"
+          :key="dl.id"
+          class="upload-panel__item"
+          :class="`is-${dl.status}`"
+          data-testid="download-item"
+        >
+          <i class="ri-download-2-line upload-panel__icon" />
+          <span class="upload-panel__name" :title="dl.name">{{ dl.name }}</span>
+          <span class="upload-panel__bar" aria-hidden="true">
+            <span class="upload-panel__bar-fill" :style="{ width: downloadPercentOf(dl) + '%' }" />
+          </span>
+          <span class="upload-panel__percent" data-testid="download-percent">{{ downloadPercentOf(dl) }}%</span>
+          <span class="upload-panel__status" :data-status="dl.status">{{ t(DOWNLOAD_STATUS_KEY[dl.status]) }}</span>
+          <span class="upload-panel__actions">
+            <FcButton
+              v-if="dl.status === 'active'"
+              variant="text"
+              size="sm"
+              data-testid="download-cancel"
+              @click="emit('download-cancel', dl.id)"
+            >
+              {{ t('files.upload.cancel') }}
+            </FcButton>
+            <FcButton
+              v-if="dl.status === 'failed' || dl.status === 'cancelled'"
+              variant="text"
+              size="sm"
+              data-testid="download-retry"
+              @click="emit('download-retry', dl.id)"
+            >
+              {{ t('transfer.retry') }}
+            </FcButton>
+          </span>
+        </li>
+      </ul>
+    </div>
   </section>
 </template>
 
@@ -321,6 +320,12 @@ function downloadPercentOf(task: DownloadTaskView): number {
 
 .upload-panel__spacer {
   flex: 1;
+}
+
+/* 关闭钮：图标加大到 16px（默认继承 sm 按钮字号偏小，可点性/可读性差） */
+.upload-panel__close-icon {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .upload-panel__list {

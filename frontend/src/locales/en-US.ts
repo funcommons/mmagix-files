@@ -850,8 +850,7 @@ export default {
   },
   transfer: {
     title: 'Transfers',
-    collapse: 'Collapse panel',
-    collapsed: '{n} transfers · click to expand',
+    close: 'Close',
     retry: 'Retry',
     paused: 'Paused',
     pause: 'Pause',

@@ -25,7 +25,7 @@
  *    queue.status 轮询同步——bus.emit 仅外发宿主、本地 handler 不触发，故 upload* 事件不能作
  *    面板数据源）；下载任务来自 DownloadQueue（reactive 列表直读）。
  */
-import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { inject } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -641,15 +641,21 @@ async function onTrashEmpty(): Promise<void> {
  * 面板未渲染（无任何任务）时以 toast 兜底告知当前无传输任务。
  */
 function openTransferPanel(): void {
-  const el = document.querySelector('[data-testid="upload-panel"]')
-  if (!el) {
-    toast.info(t('transfer.title'))
-    return
-  }
-  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  el.classList.add('is-highlighted')
-  window.setTimeout(() => el.classList.remove('is-highlighted'), 2500)
+  transferReopen.value++ // 面板被 X 关闭时，命令面板「传输任务」= 手动重开入口（watch reopenKey → closed=false）
+  void nextTick(() => {
+    const el = document.querySelector('[data-testid="upload-panel"]')
+    if (!el) {
+      toast.info(t('transfer.title'))
+      return
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    el.classList.add('is-highlighted')
+    window.setTimeout(() => el.classList.remove('is-highlighted'), 2500)
+  })
 }
+
+/** 传输面板手动重开信号（命令面板「传输任务」bump；UploadPanel watch reopenKey 关→开） */
+const transferReopen = ref(0)
 
 /** 粘贴上传（Lane G1）：clipboardData.files>0 → 入队当前目录（features.upload 门控，卸载解绑） */
 function onPaste(e: ClipboardEvent): void {
@@ -1350,6 +1356,7 @@ if (ws) {
       <UploadPanel
         :tasks="uploadTasks"
         :downloads="downloads?.tasks ?? []"
+        :reopen-key="transferReopen"
         @pause="onPauseUpload"
         @resume="onResumeUpload"
         @retry="onRetryUpload"
