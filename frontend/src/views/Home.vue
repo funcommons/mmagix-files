@@ -32,7 +32,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { FcButton, FcDrawer, FcPopover, FcSectionCard, FcSegmented, toast } from '@/components/sdk'
 import { usePreferenceStore } from '@/store/preference'
 import { BOOT_KEY } from '@/boot'
-import { SdkError } from '@/sdk/errorCodes'
+import { SdkError, ERROR_CODES } from '@/sdk/errorCodes'
 import { setupWorkspace } from '@/files/setup'
 import { createPreview } from '@/files/preview'
 import { isMemKey, memDelete, setMemFileOpener } from '@/files/mem-store'
@@ -56,7 +56,9 @@ import type { MetaRow } from '@/files/search-index'
 import { registerCommandsProvider, registerFileSearchProvider } from '@/composables/useCommandPaletteState'
 import Toolbar from '@/files/ui/Toolbar.vue'
 import TreePanel from '@/files/ui/TreePanel.vue'
+import UploadDialog from '@/files/ui/UploadDialog.vue'
 import UploadPanel from '@/files/ui/UploadPanel.vue'
+import VersionPanel from '@/files/ui/VersionPanel.vue'
 import type { UploadTaskView } from '@/files/ui/UploadPanel.vue'
 import PreviewTabs, { applyOpenedTab, findTab, pickNeighbor, pinToggle } from '@/files/ui/PreviewTabs.vue'
 import type { PreviewTab } from '@/files/ui/PreviewTabs.vue'
@@ -64,7 +66,7 @@ import type { PreviewHandle } from '@/files/preview'
 import { UPLOAD_ABORTED_CODE } from '@/files/upload-queue'
 import type { ConflictEnqueueResult, ResumeCandidate } from '@/files/upload-queue'
 import { sha256HexSync } from '@/sdk/s3/sigv4'
-import type { S3ObjectSummary } from '@/sdk/types'
+import type { S3ObjectSummary, VersionRow } from '@/sdk/types'
 import type { TrashEntry } from '@/files/tree-store'
 import TrashPanel from '@/files/ui/TrashPanel.vue'
 
@@ -420,16 +422,110 @@ function parentPrefixOf(key: string): string {
   return i < 0 ? '' : key.slice(0, i + 1)
 }
 
+/** 上传确认弹窗（2026-10 订单）：树头钮/空白/行右键「上传」三入口统一先弹窗——
+ *  上半目标目录、下半拖放/点选区 + 已选清单，确认（confirm）才 trackedEnqueue 入队；
+ *  拖拽落树/粘贴上传为显式手势不走弹窗（目标即当前目录，保持直入）。 */
+const uploadDialogOpen = ref(false)
+const uploadDialogDir = ref('')
+function openUploadDialog(dir: string): void {
+  if (features.value.upload === false) return
+  uploadDialogDir.value = dir
+  uploadDialogOpen.value = true
+}
+/** 树头「上传」（TreePanel upload-request）：目标=当前目录 */
+function onTreeUploadRequest(): void {
+  if (!ws) return
+  openUploadDialog(ws.stores.tree.currentPath)
+}
+/** 弹窗确认：入队带任务登记/冲突确认（trackedEnqueue 收口，拒收 toast 自收敛）；关弹窗由 v-model:open 承接 */
+function onUploadDialogConfirm(files: File[]): void {
+  void trackedEnqueue(files, uploadDialogDir.value)
+}
+
 // ── M3 接线：回收站视图（TrashPanel 抽屉挂载；restore/purge 走 workspace-ops 收口） ──
 
 const trashOpen = ref(false)
 const trashEntries = ref<TrashEntry[]>([])
 const trashBusy = ref(false)
 
+// ── 版本能力探测（订单 2026-10：桶未开 Versioning / client 不支持 → 回收站入口与右键「历史版本」直接隐藏） ──
+// client 缺 listObjectVersions/getBucketVersioning、探测抛错（如 501）、状态 Disabled（未配置）→ 一律视为无能力。
+const versionCapable = ref(false)
+async function detectVersionCapable(): Promise<void> {
+  if (!ws) return
+  const client = ws.stores.client
+  if (!client.listObjectVersions || !client.getBucketVersioning) return
+  try {
+    const status = await client.getBucketVersioning()
+    versionCapable.value = status === 'Enabled' || status === 'Suspended'
+  } catch {
+    versionCapable.value = false
+  }
+}
+void detectVersionCapable()
+
 /** 进入回收站即拉取（listTrash({}) 全量；每次打开重拉，busy 全程禁面板三钮） */
 watch(trashOpen, (open) => {
   if (open) void reloadTrash()
 })
+
+// ── M3-F8 收口：版本历史（TreePanel open-history → VersionPanel 抽屉；list/restore/download 在此注入） ──
+
+const versionKey = ref<string | null>(null)
+const versionBusy = ref(false)
+const versionOpen = computed({
+  get: () => versionKey.value !== null,
+  set: (o: boolean) => {
+    if (!o) versionKey.value = null
+  },
+})
+
+/** 列指定 key 的全部版本（翻页聚合到尽 + lastModified 倒序；共享 prefix 的其它 key 行滤除） */
+async function listVersionsOf(key: string): Promise<VersionRow[]> {
+  const client = ws?.stores.client
+  if (!client?.listObjectVersions) {
+    throw new SdkError(ERROR_CODES.UNSUPPORTED_MODE, '当前连接不支持版本列表（需要桶版本控制）')
+  }
+  const out: VersionRow[] = []
+  let keyMarker: string | undefined
+  let vidMarker: string | undefined
+  do {
+    const page = await client.listObjectVersions({ prefix: key, keyMarker, versionIdMarker: vidMarker })
+    for (const r of page.versions) if (r.key === key) out.push(r)
+    if (!page.isTruncated) break
+    keyMarker = page.nextKeyMarker
+    vidMarker = page.nextVersionIdMarker
+  } while (keyMarker)
+  return out.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0))
+}
+
+/** 恢复到指定版本：服务端 copy（copy-source 带 ?versionId）→ 生成新 latest，不破坏任何历史 */
+async function restoreVersionOf(key: string, versionId: string): Promise<void> {
+  versionBusy.value = true
+  try {
+    await ws!.stores.client.copy(key, key, { fromVersionId: versionId })
+    toast.success(t('files.history.restored'))
+    onChanged(key) // 树缓存回流（恢复=put 语义）
+  } catch (e) {
+    toast.error(e instanceof Error && e.message ? e.message : t('files.msg.op-failed'))
+  } finally {
+    versionBusy.value = false
+  }
+}
+
+/** 下载指定版本：预签名 GET + versionId（response-content-disposition 定名）→ 浏览器保存 */
+async function downloadVersionOf(key: string, versionId: string): Promise<void> {
+  const client = ws?.stores.client
+  if (!client?.getPresignedUrl) return
+  const name = key.split('/').filter(Boolean).pop() ?? key
+  triggerDownload(
+    client.getPresignedUrl(key, undefined, undefined, {
+      versionId,
+      'response-content-disposition': `attachment; filename="${encodeURIComponent(name)}"`,
+    }),
+    name,
+  )
+}
 
 async function reloadTrash(): Promise<void> {
   const tree = ws?.stores.tree
@@ -678,7 +774,7 @@ async function onTabClose(entry: S3ObjectSummary): Promise<void> {
 /** 右键菜单动作 → workspace-ops 收口（与 Toolbar 同链）；结果维护选中集。
  *  2026-10：TreePanel menu-action 的 entry 变可选（mkdir 无 entry）；其余动作缺失 entry 静默忽略。 */
 async function onMenuAction(payload: {
-  action: 'rename' | 'delete' | 'download' | 'share' | 'mkdir'
+  action: 'upload' | 'rename' | 'delete' | 'download' | 'share' | 'mkdir'
   entry?: S3ObjectSummary
 }): Promise<void> {
   if (!ops) return
@@ -688,6 +784,11 @@ async function onMenuAction(payload: {
   }
   const { entry } = payload
   if (!entry) return
+  if (payload.action === 'upload') {
+    // 上传到该目录（目录=其内；文件=其所在目录）——行右键菜单入口，统一走上传确认弹窗
+    openUploadDialog(entry.isDir ? entry.key : parentPrefixOf(entry.key))
+    return
+  }
   if (payload.action === 'rename') {
     const r = await ops.renameEntry(entry)
     if (r) onChanged(r.from)
@@ -1066,13 +1167,17 @@ if (ws) {
           :tree-title="treeTitle"
           :selected="selected"
           :features="features"
+          :versioning="versionCapable"
           :registry="registry"
           @select="onSelect"
           @open="onOpen"
           @open-with="onOpenWith"
           @menu-action="onMenuAction"
           @drop-files="onDropFiles"
+          @upload-request="onTreeUploadRequest"
+          @open-history="versionKey = $event"
           @search="searchOpen = true"
+          @trash="trashOpen = true"
         />
         <div
           v-if="!isDrawerTree"
@@ -1126,17 +1231,8 @@ if (ws) {
               @share="openShare"
               @switch-app="onSwitchPreviewApp"
             />
-            <!-- M3：回收站入口（ghost 图标钮，同 fs-btn/info-btn 口径；抽屉承载 TrashPanel） -->
-            <button
-              type="button"
-              class="ws__trash-btn"
-              data-testid="trash-open"
-              :title="t('files.trash.title')"
-              :aria-label="t('files.trash.title')"
-              @click="trashOpen = true"
-            >
-              <i class="ri-delete-bin-line" />
-            </button>
+            <!-- M3：回收站入口 2026-10 迁入树头动作簇（TreePanel trash-open，ri-recycle-line）；
+                 抽屉仍在此承载 TrashPanel -->
             <!-- 全屏预览卡（2026-10：整卡放大；浏览器内全屏，Esc/再点退出；无文件也常驻，与 [i] 同列最右） -->
             <button
               type="button"
@@ -1195,13 +1291,17 @@ if (ws) {
               :tree-title="treeTitle"
               :selected="selected"
               :features="features"
+              :versioning="versionCapable"
               :registry="registry"
               @select="onSelect"
               @open="onDrawerOpen"
               @open-with="onDrawerOpenWith"
               @menu-action="onMenuAction"
               @drop-files="onDropFiles"
+              @upload-request="onTreeUploadRequest"
+              @open-history="versionKey = $event"
               @search="searchOpen = true"
+              @trash="trashOpen = true"
             />
           </div>
         </FcDrawer>
@@ -1279,6 +1379,18 @@ if (ws) {
           @empty="onTrashEmpty"
         />
       </FcDrawer>
+      <!-- M3-F8：版本历史抽屉（右键「历史版本」；入口显隐由 versionCapable 门控在 TreePanel 层） -->
+      <FcDrawer v-model:open="versionOpen" :title="t('files.history.title')" direction="rtl" size="480px">
+        <VersionPanel
+          v-if="versionKey"
+          :object-key="versionKey"
+          :list="listVersionsOf"
+          :restore="restoreVersionOf"
+          :download="downloadVersionOf"
+          :busy="versionBusy"
+          @close="versionKey = null"
+        />
+      </FcDrawer>
       <!-- 2026-10：底部状态栏已并入头部（存储桶 chip + ⓘ 弹窗），StatusBar 组件下线 -->
     </div>
 
@@ -1294,6 +1406,14 @@ if (ws) {
       <p class="home-hero__subtitle">{{ t('home.subtitle') }}</p>
       <FcButton variant="secondary" @click="localeModel = localeModel === 'zh-CN' ? 'en-US' : 'zh-CN'">{{ t('home.toggle-locale') }}</FcButton>
     </FcSectionCard>
+
+    <!-- 上传确认弹窗（置条件链外）：目标目录 + 拖放/点选区，confirm 才 trackedEnqueue 入队；
+         入口=树头「上传」/空白右键/行右键（upload-request / menu-action 统一汇入 openUploadDialog） -->
+    <UploadDialog
+      v-model:open="uploadDialogOpen"
+      :dir="uploadDialogDir"
+      @confirm="onUploadDialogConfirm"
+    />
   </div>
 </template>
 
@@ -1626,26 +1746,6 @@ if (ws) {
 
   /* 全屏预览卡：ghost 图标钮（口径同 ws-toolbar__act）；margin-left:auto 由它承担推右
     （[i] 的 auto 已移除——双 auto 会平分空隙导致按钮悬在中间） */
-  .ws__trash-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    flex: none;
-    border: none;
-    border-radius: var(--app-radius-sm);
-    background: transparent;
-    color: var(--app-text-secondary);
-    cursor: pointer;
-    font-size: 16px;
-
-    &:hover {
-      background: color-mix(in srgb, var(--app-primary) 10%, transparent);
-      color: var(--app-text);
-    }
-  }
-
   .ws__fs-btn {
     display: inline-flex;
     align-items: center;

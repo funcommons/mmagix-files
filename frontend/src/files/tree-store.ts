@@ -422,19 +422,19 @@ export function createFileTree(options: FileTreeOptions): FileTreeWithTrash {
   // 语义：恢复 = 删 latest DeleteMarker（marker 一删，该 key 实体版本重新可见）；
   //       彻底删除 = 清该 key 全部版本（Version+DeleteMarker 逐 versionId 删，清完 key 即消失）。
 
-  /** 版本域可选能力守卫：client 未实现时明确报错（而非 "undefined is not a function"） */
+  /** 版本域可选能力守卫：client 未实现时明确报错（而非 "undefined is not a function"）；bind 防脱 this（方法内走 this.request） */
   function requireListObjectVersions(): NonNullable<S3Client['listObjectVersions']> {
     if (!client.listObjectVersions) {
       throw new SdkError(ERROR_CODES.UNSUPPORTED_MODE, '当前 client 不支持 listObjectVersions（回收站需要桶版本控制）')
     }
-    return client.listObjectVersions
+    return client.listObjectVersions.bind(client)
   }
 
   function requireDeleteVersion(): NonNullable<S3Client['deleteVersion']> {
     if (!client.deleteVersion) {
       throw new SdkError(ERROR_CODES.UNSUPPORTED_MODE, '当前 client 不支持 deleteVersion（回收站需要桶版本控制）')
     }
-    return client.deleteVersion
+    return client.deleteVersion.bind(client)
   }
 
   /**

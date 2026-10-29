@@ -17,6 +17,16 @@ import {
 
 const floc = (page: import('@playwright/test').Page) => page.frameLocator('#mmf')
 
+/** 上传弹窗流（2026-10：上传先弹窗确认）：点树头「上传」→ 弹窗拖放区 input 灌文件 → 确认入队 */
+async function dialogUpload(
+  root: import('@playwright/test').FrameLocator | import('@playwright/test').Page,
+  files: Parameters<import('@playwright/test').Locator['setInputFiles']>[0],
+) {
+  await root.locator('[data-testid="tree-upload"]').click()
+  await root.locator('[data-testid="upload-dialog-zone"] input[type="file"]').setInputFiles(files)
+  await root.locator('[data-testid="upload-dialog-confirm"]').click()
+}
+
 async function openHostWorkspace(page: import('@playwright/test').Page, cfgOverrides: Record<string, unknown> = {}) {
   const state = await installS3Mock(page, { seed: defaultSeed() })
   await page.goto(hostConfigUrl(workspaceConfig(cfgOverrides)))
@@ -30,7 +40,7 @@ test.describe('业务线5：上传', () => {
     const state = await openHostWorkspace(page)
     const frame = floc(page)
 
-    await frame.locator('[data-testid="upload-input"]').setInputFiles({
+    await dialogUpload(frame, {
       name: 'uploaded.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('uploaded via e2e\n', 'utf8'),
@@ -58,7 +68,7 @@ test.describe('业务线5：上传', () => {
     const state = await openHostWorkspace(page, { permissions: { denyExts: ['exe'] } })
     const frame = floc(page)
 
-    await frame.locator('[data-testid="upload-input"]').setInputFiles({
+    await dialogUpload(frame, {
       name: 'evil.exe',
       mimeType: 'application/octet-stream',
       buffer: Buffer.from('MZfakebinary'),
@@ -74,7 +84,7 @@ test.describe('业务线5：上传', () => {
     const state = await openHostWorkspace(page, { params: { uploadMaxBytes: 10 } })
     const frame = floc(page)
 
-    await frame.locator('[data-testid="upload-input"]').setInputFiles({
+    await dialogUpload(frame, {
       name: 'big.txt',
       mimeType: 'text/plain',
       buffer: Buffer.alloc(1024, 'a'),
@@ -94,7 +104,7 @@ test.describe('业务线5：上传', () => {
     const conflictKey = `${MOCK_PREFIX}notes.txt`
 
     // ① 跳过：对话框出现（文件名冲突 + {n} 文案）→ 点「跳过」→ 无 PUT、无面板行
-    await frame.locator('[data-testid="upload-input"]').setInputFiles({
+    await dialogUpload(frame, {
       name: 'notes.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('conflict probe', 'utf8'),
@@ -115,7 +125,7 @@ test.describe('业务线5：上传', () => {
     await shot(page, 'up-04a-conflict-skip-no-put.png', false)
 
     // ② 覆盖：同名再传 → 点「覆盖」→ PUT 覆盖 + uploadDone + 面板终态
-    await frame.locator('[data-testid="upload-input"]').setInputFiles({
+    await dialogUpload(frame, {
       name: 'notes.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('overwritten via e2e\n', 'utf8'),

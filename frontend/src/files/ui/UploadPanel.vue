@@ -9,7 +9,7 @@
  * upload-clear（wb-04 e2e 依赖）；下载侧行新增 download-* 前缀。
  * 无任务不渲染；i18n 用 transfer.*（预置词典）+ 既有 files.upload.*；风格对齐 Fc*。
  */
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FcButton } from '@/components/sdk'
 
@@ -69,6 +69,54 @@ const DOWNLOAD_STATUS_KEY: Record<DownloadTaskView['status'], string> = {
 
 const isEmpty = computed(() => props.tasks.length === 0 && (props.downloads ?? []).length === 0)
 
+/** 收起态：点 X 关闭只留一条可点回的横条；新任务从 0→N 入列时自动展开 */
+const closed = ref(false)
+const totalTasks = computed(() => props.tasks.length + (props.downloads ?? []).length)
+watch(totalTasks, (n, o) => {
+  if (o === 0 && n > 0) closed.value = false
+})
+
+/** 面板高度：拖**顶缘**手柄改高（96–480px，面板贴底、上缘=唯一可见动缘），localStorage 持久化；
+ *  null=默认不限制（跟随内容）。拖动即锁定固定 height（maxHeight 在内容不溢出时无视觉反馈——旧版「拖不动」根因） */
+const HEIGHT_KEY = 'mmagic:transfer-panel-height'
+const HEIGHT_MIN = 96
+const HEIGHT_MAX = 480
+const bodyEl = ref<HTMLElement | null>(null)
+const heightPx = ref<number | null>(readHeight())
+const bodyStyle = computed(() => (heightPx.value != null ? { height: `${heightPx.value}px` } : undefined))
+
+function readHeight(): number | null {
+  try {
+    const v = Number(localStorage.getItem(HEIGHT_KEY))
+    return Number.isFinite(v) && v >= HEIGHT_MIN && v <= HEIGHT_MAX ? Math.round(v) : null
+  } catch {
+    return null
+  }
+}
+function persistHeight(v: number) {
+  try {
+    localStorage.setItem(HEIGHT_KEY, String(v))
+  } catch {
+    // quota / 隐私模式静默
+  }
+}
+let dragFromY = 0
+let dragFromH = 0
+function onResizeDown(e: PointerEvent) {
+  dragFromY = e.clientY
+  dragFromH = bodyEl.value?.offsetHeight ?? 160
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+function onResizeMove(e: PointerEvent) {
+  if (!(e.currentTarget as HTMLElement).hasPointerCapture?.(e.pointerId)) return
+  // 顶缘手柄：向上拖（clientY 减小）= 面板变高
+  heightPx.value = Math.min(HEIGHT_MAX, Math.max(HEIGHT_MIN, Math.round(dragFromH - (e.clientY - dragFromY))))
+}
+function onResizeUp(e: PointerEvent) {
+  ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+  if (heightPx.value != null) persistHeight(heightPx.value)
+}
+
 function uploadPercentOf(task: UploadTaskView): number {
   if (task.total <= 0) return task.status === 'done' ? 100 : 0
   return Math.min(100, Math.round((task.loaded / task.total) * 100))
@@ -82,6 +130,27 @@ function downloadPercentOf(task: DownloadTaskView): number {
 
 <template>
   <section v-if="!isEmpty" class="upload-panel" data-testid="upload-panel">
+    <button
+      v-if="closed"
+      type="button"
+      class="upload-panel__collapsed"
+      data-testid="upload-reopen"
+      @click="closed = false"
+    >
+      <i class="ri-arrow-left-right-line upload-panel__title-icon" />
+      {{ t('transfer.collapsed', { n: totalTasks }) }}
+    </button>
+    <template v-else>
+    <!-- 顶缘拖高把手：面板贴底、上缘是唯一可见动缘（向上拖=变高；向下拖=变矮） -->
+    <div
+      class="upload-panel__resize"
+      data-testid="upload-resize"
+      role="separator"
+      aria-orientation="horizontal"
+      @pointerdown="onResizeDown"
+      @pointermove="onResizeMove"
+      @pointerup="onResizeUp"
+    />
     <header class="upload-panel__head">
       <i class="ri-arrow-left-right-line upload-panel__title-icon" />
       <span class="upload-panel__title">{{ t('transfer.title') }}</span>
@@ -105,8 +174,18 @@ function downloadPercentOf(task: DownloadTaskView): number {
       >
         {{ t('files.upload.clear') }}
       </FcButton>
+      <FcButton
+        variant="text"
+        size="sm"
+        data-testid="upload-close"
+        :title="t('transfer.collapse')"
+        @click="closed = true"
+      >
+        <i class="ri-close-line" />
+      </FcButton>
     </header>
-    <ul class="upload-panel__list">
+      <div ref="bodyEl" class="upload-panel__body" :style="bodyStyle">
+      <ul class="upload-panel__list">
       <li
         v-for="task in tasks"
         :key="task.id"
@@ -201,6 +280,8 @@ function downloadPercentOf(task: DownloadTaskView): number {
         </span>
       </li>
     </ul>
+      </div>
+    </template>
   </section>
 </template>
 
@@ -246,6 +327,53 @@ function downloadPercentOf(task: DownloadTaskView): number {
   margin: 4px 0 0;
   padding: 0;
   list-style: none;
+}
+
+.upload-panel__body {
+  overflow-y: auto;
+}
+
+/* 顶缘拖高把手：8px 命中条 + 居中视觉握把（吃掉面板顶部 4px 内边距，贴住面板上缘） */
+.upload-panel__resize {
+  height: 8px;
+  margin: -4px -8px 2px;
+  border-radius: var(--app-section-radius) var(--app-section-radius) 0 0;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.upload-panel__resize::after {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 3px;
+  margin: 2px auto 0;
+  border-radius: 2px;
+  background: var(--app-section-border-color);
+  transition: background 0.15s;
+}
+
+.upload-panel__resize:hover::after,
+.upload-panel__resize:active::after {
+  background: var(--app-primary);
+}
+
+.upload-panel__collapsed {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.upload-panel__collapsed:hover {
+  color: var(--app-text-primary);
 }
 
 .upload-panel__item {

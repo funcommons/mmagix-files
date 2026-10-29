@@ -302,12 +302,15 @@ describe('TreePanel', () => {
 
   // ── 2026-10 布局改版：创建簇（上传/新建目录/刷新/搜索）自旧顶部工具条迁入树头 ──
 
-  it('树头动作：features 缺省渲染 tree-upload/tree-mkdir/tree-refresh/tree-search 四钮（隐藏 file input 同在树面板，testid 仍 upload-input）；features.upload=false 时 tree-upload 不渲染', () => {
+  it('树头动作：features 缺省渲染 tree-upload/tree-mkdir/tree-refresh/tree-search/trash-open 五钮；点上传/回收站=emit upload-request/trash（选文件弹窗在 Home 层）；features.upload=false 时 tree-upload 不渲染', async () => {
     const w = mount(TreePanel, { props: { controller: fakeTree({ bucket: mixedBucket() }) } })
-    for (const tid of ['tree-upload', 'tree-mkdir', 'tree-refresh', 'tree-search']) {
+    for (const tid of ['tree-upload', 'tree-mkdir', 'tree-refresh', 'tree-search', 'trash-open']) {
       expect(w.find(`[data-testid="${tid}"]`).exists()).toBe(true)
     }
-    expect(w.find('input[type="file"][data-testid="upload-input"]').exists()).toBe(true)
+    await w.find('[data-testid="tree-upload"]').trigger('click')
+    expect(w.emitted('upload-request')).toHaveLength(1)
+    await w.find('[data-testid="trash-open"]').trigger('click')
+    expect(w.emitted('trash')).toHaveLength(1)
     w.unmount()
 
     const off = mount(TreePanel, {
@@ -316,7 +319,38 @@ describe('TreePanel', () => {
     expect(off.find('[data-testid="tree-upload"]').exists()).toBe(false)
     expect(off.find('[data-testid="tree-mkdir"]').exists()).toBe(true)
     expect(off.find('[data-testid="tree-refresh"]').exists()).toBe(true)
+    // 回收站入口独立于 upload 门控（features.trash 才管它）
+    expect(off.find('[data-testid="trash-open"]').exists()).toBe(true)
     off.unmount()
+
+    const noTrash = mount(TreePanel, {
+      props: { controller: fakeTree({ bucket: mixedBucket() }), features: { trash: false } },
+    })
+    expect(noTrash.find('[data-testid="trash-open"]').exists()).toBe(false)
+    noTrash.unmount()
+  })
+
+  it('versioning=false（桶未开 Versioning/client 不支持）：回收站入口与右键「历史版本」均隐藏；缺省（undefined）=显示', async () => {
+    const off = mount(TreePanel, {
+      props: { controller: fakeTree({ bucket: mixedBucket() }), versioning: false },
+      global: { stubs: { teleport: true } },
+    })
+    expect(off.find('[data-testid="trash-open"]').exists()).toBe(false)
+    // 行右键菜单仍开（其它动作不受影响），但无「历史版本」项（row[1]=文件行）
+    await off.findAll('[data-testid="row"]')[1]!.trigger('contextmenu', { clientX: 10, clientY: 10 })
+    const menu = off.find('.fc-menu')
+    expect(menu.exists()).toBe(true)
+    expect(menu.text()).not.toContain('files.history.menu')
+    off.unmount()
+
+    const on = mount(TreePanel, {
+      props: { controller: fakeTree({ bucket: mixedBucket() }) },
+      global: { stubs: { teleport: true } },
+    })
+    expect(on.find('[data-testid="trash-open"]').exists()).toBe(true)
+    await on.findAll('[data-testid="row"]')[1]!.trigger('contextmenu', { clientX: 10, clientY: 10 })
+    expect(on.find('.fc-menu').text()).toContain('files.history.menu')
+    on.unmount()
   })
 
   it('空白右键：.tree-panel contextmenu（非 ctrl）→ 空白菜单含 上传/新建目录/刷新 三项；features.openWithMenu=false 时不拦截（无菜单）', async () => {

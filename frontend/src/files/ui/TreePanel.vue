@@ -15,7 +15,8 @@ export const TYPE_AHEAD_WINDOW_MS = 500
  *    历史版本（文件条目）→ emit('menu-action'/'open-with'/'open-history')
  *    （操作链在 Home 层经 workspace-ops 收口；历史版本接 VersionPanel）；
  *    空白处右键=上传/新建目录/刷新（同门控）；
- *  - 树头动作（创建簇小图标）：上传（隐藏 input→emit drop-files）/新建目录/刷新/搜索（emit search）；
+ *  - 树头动作（创建簇小图标）：上传/新建目录/刷新/搜索/回收站（emit upload-request/search/trash；
+ *    上传确认弹窗 UploadDialog 在 Home 层承载——面板只举手，选文件不入面板）；
  *  - 容器拖拽文件=上传 → emit('drop-files', {files, path})（enqueue+拒收 toast 在 Home 收口）；
  *  - 未加载/加载中 FcSkeleton、空态/失败态 FcEmpty(error)+重试；
  *  - 键盘流（shortcuts.ts 纯工具）：Esc=清空选中、字母/数字 type-ahead 循环跳转（500ms 接续）、
@@ -32,10 +33,12 @@ import type { FileTreeController } from '../tree-store'
 import type { S3ObjectSummary } from '@/sdk/types'
 import { isTypingTarget, matchesHotkey } from './shortcuts'
 
-const props = defineProps<{
-  controller: FileTreeController
-  /** 树根域（面包屑从此截断显示；默认 bucket 根） */
-  rootPrefix?: string
+/** withDefaults 仅兜 versioning：纯 Boolean prop 缺省会被 Vue 转型为 false，而本 prop 契约是「不传=有能力」 */
+const props = withDefaults(
+  defineProps<{
+    controller: FileTreeController
+    /** 树根域（面包屑从此截断显示；默认 bucket 根） */
+    rootPrefix?: string
   /** 树标题覆写（ui.treeTitle；缺省=rootPrefix 末段，根=t('files.tree.root')「根目录」） */
   treeTitle?: string
   /** 当前选中集（多选数组；父层持有并回传高亮） */
@@ -44,7 +47,11 @@ const props = defineProps<{
   features?: Record<string, boolean>
   /** 应用注册表（「打开方式」列全部命中应用；缺省=不出应用子列） */
   registry?: AppRegistry | null
-}>()
+  /** 版本能力（桶 Versioning 已开启且 client 支持）；false=隐藏回收站入口与「历史版本」菜单（订单 2026-10） */
+    versioning?: boolean
+  }>(),
+  { versioning: true },
+)
 
 const emit = defineEmits<{
   /** 选中集变化（单击/ctrl/shift 多选） */
@@ -55,12 +62,16 @@ const emit = defineEmits<{
   'open-with': [payload: { entry: S3ObjectSummary; appId: string }]
   /** 「历史版本」（文件条目右键菜单，M3-F8）；Home 接 VersionPanel（objectKey=key） */
   'open-history': [key: string]
-  /** 菜单动作（重命名/删除/下载/分享/新建目录）；操作链在 Home 层收口 */
-  'menu-action': [payload: { action: 'rename' | 'delete' | 'download' | 'share' | 'mkdir'; entry?: S3ObjectSummary }]
+  /** 菜单动作（上传/重命名/删除/下载/分享/新建目录）；操作链在 Home 层收口 */
+  'menu-action': [payload: { action: 'upload' | 'rename' | 'delete' | 'download' | 'share' | 'mkdir'; entry?: S3ObjectSummary }]
   /** 拖拽落文件（Home 接 queue.enqueue + 拒收 toast） */
   'drop-files': [payload: { files: File[]; path: string }]
   /** 打开全局搜索面板（树头搜索图标；面板与数据流在 Home 收口，与旧 Toolbar search 同链） */
   search: []
+  /** 请求上传（树头钮/空白菜单；选文件弹窗 UploadDialog 在 Home 层，确认后才入队） */
+  'upload-request': []
+  /** 打开回收站抽屉（树头回收图标；数据链 listTrash/restore/purge 在 Home 收口） */
+  trash: []
 }>()
 
 const { t, te } = useI18n()
@@ -71,6 +82,9 @@ const { t, te } = useI18n()
  * 不随 currentPath 漂移）。可见行 = 从根深度优先走 expanded 集；目录子级由 nodes 缓存懒加载。
  */
 const rootPrefix = normalizePrefix(props.rootPrefix ?? props.controller.currentPath)
+
+/** 版本能力开关（versioning!==false 即视为开；Home 层探测 Versioning 后下发）——树头回收站入口/右键「历史版本」共用 */
+const versioningOn = computed(() => props.versioning !== false)
 
 /** 已展开目录 key 集（indirection ref 保证整集替换可触发 rows 重算） */
 const expanded = ref<Set<string>>(new Set())
@@ -294,6 +308,8 @@ const menuItems = computed<MenuItem[]>(() => {
   const f = props.features ?? {}
   const items: MenuItem[] = [
     { value: 'open', label: t('files.menu.open'), icon: m.entry.isDir ? 'ri-folder-open-line' : 'ri-eye-line' },
+    // 上传到该目录（目录=其内；文件=其所在目录）
+    { value: 'upload', label: t('files.menu.upload'), icon: 'ri-upload-2-line' },
   ]
   if (!m.entry.isDir) {
     const matches = props.registry?.listMatches({ name: m.entry.name, mime: m.entry.mime, size: m.entry.size }) ?? []
@@ -316,8 +332,10 @@ const menuItems = computed<MenuItem[]>(() => {
   }
   // Lane H-2：分享（仅文件；目录→前缀分享列 P2，简化口径不出口）
   if (!m.entry.isDir) items.push({ value: 'share', label: t('files.menu.share'), icon: 'ri-share-line' })
-  // M3-F8：历史版本（仅文件；版本列表/恢复链路在 Home 层接 VersionPanel 收口）
-  if (!m.entry.isDir) items.push({ value: 'history', label: t('files.history.menu'), icon: 'ri-history-line' })
+  // M3-F8：历史版本（仅文件；版本列表/恢复链路在 Home 层接 VersionPanel 收口）；无版本能力不出口
+  if (!m.entry.isDir && props.versioning !== false) {
+    items.push({ value: 'history', label: t('files.history.menu'), icon: 'ri-history-line' })
+  }
   if (f.mkdir !== false) items.push({ value: 'mkdir', label: t('files.menu.mkdir'), icon: 'ri-folder-add-line' })
   return items
 })
@@ -339,6 +357,10 @@ function onMenuSelect(value: string): void {
     emit('open-history', m.entry.key)
     return
   }
+  if (value === 'upload') {
+    emit('menu-action', { action: 'upload', entry: m.entry })
+    return
+  }
   if (value === 'rename' || value === 'delete' || value === 'download' || value === 'share' || value === 'mkdir') {
     emit('menu-action', { action: value, entry: m.entry })
   }
@@ -357,16 +379,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onWindowKeydown))
 
 /** 操作链本面板自持（mkdir 即席建目录；与 Home/Toolbar 的 ops 同一 workspace-ops 收口，零复制） */
 const ops = createWorkspaceOps({ tree: props.controller, t })
-const uploadInput = ref<HTMLInputElement | null>(null)
-function pickUpload(): void {
-  uploadInput.value?.click()
-}
-function onUploadPicked(e: Event): void {
-  const input = e.target as HTMLInputElement
-  const files = Array.from(input.files ?? [])
-  if (files.length > 0) emit('drop-files', { files, path: props.controller.currentPath })
-  input.value = '' // 清空以便同一文件可重复选择
-}
 function refreshDir(): void {
   void props.controller.loadDir(props.controller.currentPath, { force: true })
 }
@@ -393,7 +405,7 @@ const blankMenuItems = computed<MenuItem[]>(() => {
 
 function onBlankMenuSelect(value: string): void {
   blankMenu.value = null
-  if (value === 'upload') pickUpload()
+  if (value === 'upload') emit('upload-request')
   else if (value === 'mkdir') void ops.createDir()
   else if (value === 'refresh') refreshDir()
 }
@@ -427,16 +439,8 @@ onMounted(() => {
   >
     <div class="tree-panel__head">
       <span class="tree-panel__title" data-testid="tree-title">{{ props.treeTitle ?? rootName }}</span>
-      <!-- 树头动作（创建簇小图标，2026-10 自 Toolbar 迁入）：上传/新建目录/刷新/搜索 -->
+      <!-- 树头动作（创建簇小图标，2026-10 自 Toolbar 迁入）：上传/新建目录/刷新/搜索/回收站 -->
       <span class="tree-panel__tools">
-        <input
-          ref="uploadInput"
-          class="tree-panel__upload-input"
-          type="file"
-          multiple
-          data-testid="upload-input"
-          @change="onUploadPicked"
-        />
         <button
           v-if="features?.upload !== false"
           type="button"
@@ -444,7 +448,7 @@ onMounted(() => {
           data-testid="tree-upload"
           :title="t('files.toolbar.upload')"
           :aria-label="t('files.toolbar.upload')"
-          @click="pickUpload"
+          @click="emit('upload-request')"
         >
           <i class="ri-upload-2-line" />
         </button>
@@ -478,6 +482,19 @@ onMounted(() => {
           @click="emit('search')"
         >
           <i class="ri-search-line" />
+        </button>
+        <!-- M3 回收站入口（2026-10 自预览头迁入树头簇；ri-recycle-line 回收语义，抽屉在 Home 承载）；
+             versioning=false（桶未开版本控制/client 不支持）整入口隐藏 -->
+        <button
+          v-if="features?.trash !== false && versioningOn"
+          type="button"
+          class="tree-panel__act"
+          data-testid="trash-open"
+          :title="t('files.trash.title')"
+          :aria-label="t('files.trash.title')"
+          @click="emit('trash')"
+        >
+          <i class="ri-recycle-line" />
         </button>
       </span>
     </div>
@@ -518,7 +535,7 @@ onMounted(() => {
         v-for="(r, i) in rows"
         :key="r.entry.key"
         class="tree-panel__row"
-        :class="{ 'is-dir': r.entry.isDir, 'is-selected': selectedKeys.has(r.entry.key) }"
+        :class="{ 'is-dir': r.entry.isDir, 'is-selected': selectedKeys.has(r.entry.key), 'is-menu-target': menu?.entry.key === r.entry.key }"
         :style="{ paddingLeft: 10 + r.depth * 16 + 'px' }"
         data-testid="row"
         @click="onRowClick($event, r.entry, i)"
@@ -661,14 +678,6 @@ onMounted(() => {
   }
 }
 
-.tree-panel__upload-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .tree-panel__crumb.is-current {
   font-weight: 600;
   color: var(--app-text-primary);
@@ -713,6 +722,12 @@ onMounted(() => {
 
   &.is-selected {
     background: var(--brand-primary-soft, var(--el-color-primary-light-9));
+  }
+
+  /* 右键菜单目标：实线外框叠加（菜单关闭即随 menu ref 清除） */
+  &.is-menu-target {
+    outline: 2px solid var(--app-primary);
+    outline-offset: -2px;
   }
 }
 

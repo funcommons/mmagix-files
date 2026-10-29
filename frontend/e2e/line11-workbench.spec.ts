@@ -26,6 +26,16 @@ import {
   waitTreeLoaded,
 } from './fixtures/host'
 
+/** 上传弹窗流（2026-10：上传先弹窗确认）：点树头「上传」→ 弹窗拖放区 input 灌文件 → 确认入队 */
+async function dialogUpload(
+  root: import('@playwright/test').FrameLocator | import('@playwright/test').Page,
+  files: Parameters<import('@playwright/test').Locator['setInputFiles']>[0],
+) {
+  await root.locator('[data-testid="tree-upload"]').click()
+  await root.locator('[data-testid="upload-dialog-zone"] input[type="file"]').setInputFiles(files)
+  await root.locator('[data-testid="upload-dialog-confirm"]').click()
+}
+
 async function openWorkspace(
   page: import('@playwright/test').Page,
   opts: { delayPutKeys?: Record<string, number> } = {},
@@ -119,7 +129,7 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
     const cap = attachConsole(page)
     await openWorkspace(page, { delayPutKeys: { [`${MOCK_PREFIX}slow.txt`]: 8000 } })
 
-    await page.locator('[data-testid="upload-input"]').setInputFiles([
+    await dialogUpload(page, [
       { name: 'quick.txt', mimeType: 'text/plain', buffer: Buffer.from('quick') },
       { name: 'slow.txt', mimeType: 'text/plain', buffer: Buffer.from('slow payload') },
     ])
@@ -255,7 +265,7 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
     const MOD_KEY = os.platform() === 'darwin' ? 'Meta' : 'Control'
     // 慢上传在途 → 传输面板可见（cmd:transfers 执行后可断言高亮）
     await openWorkspace(page, { delayPutKeys: { [`${MOCK_PREFIX}slow.txt`]: 12000 } })
-    await page.locator('[data-testid="upload-input"]').setInputFiles([
+    await dialogUpload(page, [
       { name: 'quick.txt', mimeType: 'text/plain', buffer: Buffer.from('quick') },
       { name: 'slow.txt', mimeType: 'text/plain', buffer: Buffer.from('slow payload') },
     ])

@@ -8,13 +8,13 @@
  *
  *   GET/PUT/DELETE /<bucket>/<key>   匿名即可（本服务不做鉴权）
  */
-import pkg from 's3rver' // CJS 包：named export 需经 default 解构（Node ESM 互操作）
-const { S3rver } = pkg
+import s3rverPkg from 's3rver' // CJS 包：Node 26 互操作下 default 可能是类本体或命名空间，双形态兼容
+const S3rver = typeof s3rverPkg === 'function' ? s3rverPkg : (s3rverPkg.S3rver ?? s3rverPkg.default ?? s3rverPkg)
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 
-const PORT = 9000
+const PORT = Number(process.env.S3RVER_PORT || 9000)
 const BUCKET = 'mmagic-demo'
 const here = dirname(fileURLToPath(import.meta.url))
 const dataDir = join(here, '..', 's3-data')

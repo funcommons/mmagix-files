@@ -185,7 +185,7 @@ export interface S3Client {
   get(key: string, opts?: { rangeHeader?: string }): Promise<Response>
   put(key: string, body: Blob | ArrayBuffer, contentType?: string): Promise<{ etag: string }>
   head(key: string): Promise<{ exists: boolean; size?: number; contentType?: string; etag?: string }>
-  copy(from: string, to: string): Promise<void>
+  copy(from: string, to: string, opts?: { fromVersionId?: string }): Promise<void>
   remove(keys: string[]): Promise<void>
   createMultipart(key: string, contentType?: string): Promise<{ uploadId: string }>
   uploadPart(key: string, uploadId: string, partNumber: number, body: Blob): Promise<{ etag: string }>

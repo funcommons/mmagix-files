@@ -434,3 +434,32 @@ describe('评审守卫（R1+R2 修复语义钉）', () => {
     expect(stub.deleteVersion).not.toHaveBeenCalledWith('stale.txt', expect.anything())
   })
 })
+
+describe('回归钉：client 方法脱 this 调用（2026-10-29 demo 实证）', () => {
+  it('listTrash/restoreTrash 以绑定形态调用——client 方法可依赖 this（方法内走 this.request）', async () => {
+    // 真 client 的 S3 方法全走 this.request；require* 助手若返回未绑定引用，this 即 undefined
+    const calls: string[] = []
+    const boundClient = {
+      ...({} as S3Client),
+      listObjectVersions: function (this: { tag: string }) {
+        calls.push(`list:${this.tag}`)
+        return Promise.resolve({
+          versions: [], deleteMarkers: [
+            { key: 'a.txt', versionId: 'mk-1', isLatest: true, lastModified: 1_700_000_000_000 },
+          ],
+          isTruncated: false,
+        })
+      },
+      deleteVersion: function (this: { tag: string }, _k: string, _v: string) {
+        calls.push(`del:${this.tag}`)
+        return Promise.resolve()
+      },
+    } as S3Client & { tag?: string }
+    Object.defineProperty(boundClient, 'tag', { value: 'bound' })
+    const tree = createFileTree({ client: boundClient })
+
+    const entries = await tree.listTrash!()
+    await tree.restoreTrash!(entries)
+    expect(calls).toEqual(['list:bound', 'del:bound'])
+  })
+})

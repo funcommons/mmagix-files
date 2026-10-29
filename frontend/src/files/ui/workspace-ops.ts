@@ -6,6 +6,7 @@
  * 删除多选（>1）确认用 files.msg.delete-multi-confirm({n})，单选沿用 files.msg.delete-confirm({name})。
  */
 import { ElMessageBox } from 'element-plus'
+import { h, ref } from 'vue'
 import { toast } from '@/components/sdk'
 import { trashFace } from '../commands'
 import type { S3ObjectSummary } from '@/sdk/types'
@@ -54,11 +55,27 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps): WorkspaceOps {
   }
 
   async function createDir(): Promise<string | null> {
+    // 弹窗实时预览新建后的完整路径（订单 2026-10）：当前目录 + 输入名随打随显
+    const nameRef = ref('')
+    const MkdirHint = () =>
+      h('div', null, [
+        h('div', null, t('files.prompt.mkdir-hint')),
+        h(
+          'div',
+          {
+            style:
+              'margin-top:6px;font-size:12px;word-break:break-all;color:var(--app-text-secondary, #909399)',
+          },
+          `${t('files.prompt.mkdir-full')}${tree.currentPath}${nameRef.value || '…'}/`,
+        ),
+      ])
     try {
-      const { value } = await ElMessageBox.prompt(t('files.prompt.mkdir-hint'), t('files.prompt.mkdir-title'), {
+      const { value } = await ElMessageBox.prompt(h(MkdirHint), t('files.prompt.mkdir-title'), {
         ...PROMPT_OPTS,
-        inputPattern: /\S/,
-        inputErrorMessage: t('files.prompt.name-required'),
+        inputValidator: (v: string) => {
+          nameRef.value = (v ?? '').trim()
+          return /\S/.test(v ?? '') ? true : t('files.prompt.name-required')
+        },
       })
       return await tree.mkdir(tree.currentPath, value.trim())
     } catch (e) {

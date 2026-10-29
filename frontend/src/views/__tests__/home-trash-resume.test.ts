@@ -142,7 +142,12 @@ function makeBoot() {
   }
 }
 
-/** 挂载（stub 面沿 home.test.ts：teleport: true + 重 UI 子组件布尔 stub；TrashPanel/FcDrawer 真实） */
+/** 挂载（stub 面沿 home.test.ts：teleport: true + 重 UI 子组件布尔 stub；TrashPanel/FcDrawer 真实）。
+ *  TreePanel 不能布尔 stub：回收站入口 2026-10 迁入树头簇（trash-open），stub 需渲染入口钮并转发 trash。 */
+const TreePanelStub = {
+  name: 'TreePanel',
+  template: `<button type="button" data-testid="trash-open" @click="$emit('trash')" />`,
+}
 function mountHome(candidates: ResumeCandidate[]) {
   const entries = trashEntries()
   const tree = makeTree(entries)
@@ -152,7 +157,7 @@ function mountHome(candidates: ResumeCandidate[]) {
     global: {
       stubs: {
         teleport: true,
-        TreePanel: true,
+        TreePanel: TreePanelStub,
         Toolbar: true,
         UploadPanel: true,
         SearchDialog: true,

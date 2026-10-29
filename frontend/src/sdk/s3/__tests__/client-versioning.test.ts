@@ -317,3 +317,20 @@ describe('listMultipartUploads（孤儿 uploadId 清理）', () => {
     expect((err as SdkError).detail).toEqual({ status: 0 })
   })
 })
+
+describe('copy 源版本恢复（M3-F8：VersionPanel 恢复链）', () => {
+  it('copy(from, to, { fromVersionId }) → copy-source 带 ?versionId=（RFC3986 编码，目标 URL 不变）', async () => {
+    const { client, fetcher } = makeClient([xml('<CopyObjectResult><ETag>"e"</ETag></CopyObjectResult>')])
+    await client.copy('docs/a.txt', 'docs/a.txt', { fromVersionId: 'vid 1?x' })
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toContain('/docs/a.txt')
+    expect((init?.headers as Record<string, string>)['x-amz-copy-source']).toBe('/bkt/docs/a.txt?versionId=vid%201%3Fx')
+  })
+
+  it('copy 不传 opts → copy-source 无 query（逐字节回归既有行为）', async () => {
+    const { client, fetcher } = makeClient([xml('<CopyObjectResult><ETag>"e"</ETag></CopyObjectResult>')])
+    await client.copy('a.txt', 'b.txt')
+    const [, init] = fetcher.mock.calls[0]!
+    expect((init?.headers as Record<string, string>)['x-amz-copy-source']).toBe('/bkt/a.txt')
+  })
+})

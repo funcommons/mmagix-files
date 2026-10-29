@@ -272,10 +272,11 @@ export class S3SigV4Client implements S3Client {
     }
   }
 
-  /** 服务端复制（x-amz-copy-source：/bucket/源key，源路径逐段编码） */
-  async copy(from: string, to: string): Promise<void> {
+  /** 服务端复制（x-amz-copy-source：/bucket/源key，源路径逐段编码）；fromVersionId=恢复历史版本（copy-source 带 ?versionId=） */
+  async copy(from: string, to: string, opts?: { fromVersionId?: string }): Promise<void> {
+    const srcVersion = opts?.fromVersionId ? `?versionId=${encodeRfc3986(opts.fromVersionId)}` : ''
     await this.request('PUT', this.objectUrl(to), {
-      headers: { 'x-amz-copy-source': `/${this.bucket}/${encodeKeyPath(from)}` },
+      headers: { 'x-amz-copy-source': `/${this.bucket}/${encodeKeyPath(from)}${srcVersion}` },
     })
   }
 
