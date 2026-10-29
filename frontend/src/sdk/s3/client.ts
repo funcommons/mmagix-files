@@ -7,7 +7,15 @@
  * - 其他非 2xx → S3_ERROR(4101, detail={status})；网络异常 → S3_ERROR(detail={status:0})
  */
 import { ERROR_CODES, SdkError } from '../errorCodes'
-import type { BackendConfig, S3Client, S3ListResult, S3ObjectSummary } from '../types'
+import type {
+  BackendConfig,
+  DeleteMarkerRow,
+  S3Client,
+  S3ListResult,
+  S3ObjectSummary,
+  VersionListResult,
+  VersionRow,
+} from '../types'
 import { encodeRfc3986, observeServerDate, presignGet, presignPut, signRequest } from './sigv4'
 import type { SigV4Body } from './sigv4'
 
@@ -335,28 +343,137 @@ export class S3SigV4Client implements S3Client {
     await this.request('DELETE', `${this.objectUrl(key)}?uploadId=${encodeRfc3986(uploadId)}`)
   }
 
+  // ── v1.2 版本管理（回收站/版本历史/孤儿 uploadId 清理）──
+
+  /** GET ?versioning：桶版本控制状态；无 <Status>（未配置版本控制）= 'Disabled' */
+  async getBucketVersioning(): Promise<'Enabled' | 'Suspended' | 'Disabled'> {
+    const res = await this.request('GET', this.bucketUrl('versioning'))
+    const status = textOf(parseXml(await res.text(), res.status), 'Status')
+    return status === 'Enabled' ? 'Enabled' : status === 'Suspended' ? 'Suspended' : 'Disabled'
+  }
+
+  /**
+   * GET ?versions：版本 + 删除标记混排，按 Version/DeleteMarker 子项分拣。
+   * IsLatest 文本→布尔、LastModified→epoch ms、Size→数值；分页标记仅 isTruncated 时透出。
+   */
+  async listObjectVersions(
+    opts: { prefix?: string; keyMarker?: string; versionIdMarker?: string; maxKeys?: number } = {},
+  ): Promise<VersionListResult> {
+    const query = [
+      'versions',
+      ...(opts.prefix ? [`prefix=${encodeRfc3986(opts.prefix)}`] : []),
+      ...(opts.keyMarker ? [`key-marker=${encodeRfc3986(opts.keyMarker)}`] : []),
+      ...(opts.versionIdMarker ? [`version-id-marker=${encodeRfc3986(opts.versionIdMarker)}`] : []),
+      ...(opts.maxKeys !== undefined ? [`max-keys=${opts.maxKeys}`] : []),
+    ].join('&')
+    const res = await this.request('GET', this.bucketUrl(query))
+    const doc = parseXml(await res.text(), res.status)
+
+    const versions: VersionRow[] = []
+    for (const el of Array.from(doc.getElementsByTagName('Version'))) {
+      const key = textOf(el, 'Key')
+      if (!key) continue
+      versions.push({
+        key,
+        versionId: textOf(el, 'VersionId'),
+        isLatest: textOf(el, 'IsLatest').toLowerCase() === 'true',
+        lastModified: dateMsOf(el, 'LastModified'),
+        size: Number(textOf(el, 'Size') || '0'),
+      })
+    }
+
+    const deleteMarkers: DeleteMarkerRow[] = []
+    for (const el of Array.from(doc.getElementsByTagName('DeleteMarker'))) {
+      const key = textOf(el, 'Key')
+      if (!key) continue
+      deleteMarkers.push({
+        key,
+        versionId: textOf(el, 'VersionId'),
+        isLatest: textOf(el, 'IsLatest').toLowerCase() === 'true',
+        lastModified: dateMsOf(el, 'LastModified'),
+      })
+    }
+
+    const truncated = textOf(doc, 'IsTruncated').toLowerCase() === 'true'
+    const nextKeyMarker = textOf(doc, 'NextKeyMarker')
+    const nextVersionIdMarker = textOf(doc, 'NextVersionIdMarker')
+    return {
+      versions,
+      deleteMarkers,
+      isTruncated: truncated,
+      nextKeyMarker: truncated && nextKeyMarker ? nextKeyMarker : undefined,
+      nextVersionIdMarker: truncated && nextVersionIdMarker ? nextVersionIdMarker : undefined,
+    }
+  }
+
+  /** DELETE /{key}?versionId=…：删 DeleteMarker 即「恢复」、带版本号即彻底删除；2xx 即成功（无响应体） */
+  async deleteVersion(key: string, versionId: string): Promise<void> {
+    await this.request('DELETE', `${this.objectUrl(key)}?versionId=${encodeRfc3986(versionId)}`)
+  }
+
+  /**
+   * GET ?uploads：进行中的分片上传（Initiated 按 ISO 字符串透传，不转数值）。
+   * 内部循环翻页聚合至 IsTruncated=false——单页默认 1000 条，静默截断会让上游
+   * （orphan-sweeper / resumeCheckpoints）把仍在清单外的活断点误判为孤儿而误删，不可逆。
+   * 翻页标记：NextKeyMarker/NextUploadIdMarker → key-marker/upload-id-marker（从上一页尾项之后续列）。
+   */
+  async listMultipartUploads(): Promise<{ key: string; uploadId: string; initiated?: string }[]> {
+    const uploads: { key: string; uploadId: string; initiated?: string }[] = []
+    let truncated = true
+    let keyMarker: string | undefined
+    let uploadIdMarker: string | undefined
+    do {
+      const query = [
+        'uploads',
+        ...(keyMarker !== undefined ? [`key-marker=${encodeRfc3986(keyMarker)}`] : []),
+        ...(uploadIdMarker !== undefined ? [`upload-id-marker=${encodeRfc3986(uploadIdMarker)}`] : []),
+      ].join('&')
+      const res = await this.request('GET', this.bucketUrl(query))
+      const doc = parseXml(await res.text(), res.status)
+      for (const el of Array.from(doc.getElementsByTagName('Upload'))) {
+        const key = textOf(el, 'Key')
+        if (!key) continue
+        uploads.push({ key, uploadId: textOf(el, 'UploadId'), initiated: textOf(el, 'Initiated') || undefined })
+      }
+      truncated = textOf(doc, 'IsTruncated').toLowerCase() === 'true'
+      keyMarker = textOf(doc, 'NextKeyMarker') || undefined
+      uploadIdMarker = textOf(doc, 'NextUploadIdMarker') || undefined
+      // IsTruncated=true 但响应缺翻页标记（非标实现）→ 防御性终止（宁少列，不可死循环）
+      if (truncated && keyMarker === undefined && uploadIdMarker === undefined) break
+    } while (truncated)
+    return uploads
+  }
+
   /**
    * 预签名 GET URL（S3Client 可选能力，查询串 SigV4）。
    * 同步契约 → sigv4.presignGet（纯 JS SHA-256，WebCrypto 无同步面）；零网络请求。
    * 有效期：默认 3600s；上限对齐会话 TTL 语义（config.ttlSeconds，未配置对齐 AWS 7 天硬上限）——
    * 预签名 URL 不应比凭证活得久，越界必然 403。
    * nowMs 仅测试注入（与 signRequest 同口径）；clockOffsetMs 走 §4.3 校准值。
+   * extraQuery 追加进签名查询串的业务参数（versionId/partNumber/response-content-disposition 等场景），不传=行为逐字节不变。
    */
-  getPresignedUrl(key: string, expiresSec?: number, nowMs?: number): string {
-    return this.presignedUrl('GET', key, expiresSec, nowMs)
+  getPresignedUrl(key: string, expiresSec?: number, nowMs?: number, extraQuery?: Record<string, string>): string {
+    return this.presignedUrl('GET', key, expiresSec, nowMs, extraQuery)
   }
 
   /**
    * 预签名 PUT URL（S3Client 可选能力；Lane H-2 分享对话框「上传链接」——
    * 对方无需凭证即可向该 key 直传）。与 getPresignedUrl 完全同构：
    * 同默认 3600s / 同 TTL 钳制 / 同 clockOffset 校准 / 同 key 逐段编码，仅 method=PUT。
+   * extraQuery 追加进签名查询串的业务参数（uploadId/partNumber 等分片直传场景），不传=行为逐字节不变。
    */
-  presignPutUrl(key: string, expiresSec?: number, nowMs?: number): string {
-    return this.presignedUrl('PUT', key, expiresSec, nowMs)
+  presignPutUrl(key: string, expiresSec?: number, nowMs?: number, extraQuery?: Record<string, string>): string {
+    return this.presignedUrl('PUT', key, expiresSec, nowMs, extraQuery)
   }
 
   /** 预签名统一口（GET/PUT 同构收口）：有效期钳制与参数组装仅此一份，两出口零复制 */
-  private presignedUrl(method: 'GET' | 'PUT', key: string, expiresSec?: number, nowMs?: number): string {
+  private presignedUrl(
+    method: 'GET' | 'PUT',
+    key: string,
+    expiresSec?: number,
+    nowMs?: number,
+    extraQuery?: Record<string, string>,
+  ): string {
     const cap = Math.min(this.ttlSeconds ?? AWS_MAX_PRESIGN_EXPIRES_SEC, AWS_MAX_PRESIGN_EXPIRES_SEC)
     const requested = Math.max(1, Math.floor(expiresSec ?? DEFAULT_PRESIGN_EXPIRES_SEC))
     const presign = method === 'GET' ? presignGet : presignPut
@@ -367,6 +484,7 @@ export class S3SigV4Client implements S3Client {
       region: this.region,
       clockOffsetMs: this.clockOffsetMs,
       ...(nowMs !== undefined ? { nowMs } : {}),
+      ...(extraQuery ? { extraQuery } : {}),
     })
   }
 }

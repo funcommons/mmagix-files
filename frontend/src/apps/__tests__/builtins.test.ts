@@ -1,14 +1,14 @@
 /**
  * 内置应用预置表单测（Wave2-A11）
  * 契约正本：builtins.ts 文件头注释——「正本：《docs/product/PRD.md》§一应用清单」
- * （正本 docs/product/PRD.md §3.2；测试侧以 builtins.ts 头注释口径为核对基准：13 个内置 + fallback 常量不入表）
+ * （正本 docs/product/PRD.md §3.2；测试侧以 builtins.ts 头注释口径为核对基准：14 个内置 + fallback 常量不入表）
  *
  * 覆盖点：
  *  1. 表完整性——code 无重复；每项 code/labelKey/matcher/actions 齐全；actions 与 type 语义一致
  *     （edit 类含 'edit'、view 类含 'preview'，互不串）
- *  2. id 集合 = 13 个内置；FALLBACK_APP_ID='fallback-download' 是独立常量，不入表
+ *  2. id 集合 = 14 个内置；FALLBACK_APP_ID='fallback-download' 是独立常量，不入表
  *     （空 matcher 语义=不命中，防吞所有类型，走 resolveOrFallback 链）
- *  3. registerBuiltins——新 AppRegistry 返回全集 13 个（注册序）；注册序=默认应用优先级：
+ *  3. registerBuiltins——新 AppRegistry 返回全集 14 个（注册序）；注册序=默认应用优先级：
  *     a.png→image-viewer（首个图片类）；a.md 双命中 markdown-renderer+code-editor 且默认=前者；
  *     a.csv/a.tsv 默认=csv-table（F3 契约：渲染类先于 code-editor 注册，文本态经「打开方式」）；
  *     a.heic→heic-viewer；a.unknown→null
@@ -27,14 +27,16 @@ import {
   HEIC_VIEWER_MAX_BYTES,
   MARKDOWN_MAX_BYTES,
   registerBuiltins,
+  ZIP_BROWSER_MAX_BYTES,
 } from '../builtins'
 import { PROTOCOL_VERSION } from '../../sdk/constants'
 import type { AppCtx, AppInstance } from '../../sdk/types'
 
-/** 计划 §一表口径：13 个内置应用 id（image-painter 已拆除）（即注册序；fallback-download 不入表）。
+/** 计划 §一表口径：14 个内置应用 id（image-painter 已拆除）（即注册序；fallback-download 不入表）。
  *  F3 修订：csv-table/html-viewer 先于 code-editor（注册序=默认应用优先级，渲染类默认可达——
  *  html 默认进净化式预览，源码/三态编辑经「打开方式」）；
- *  图示双应用（flow-editor/mermaid-viewer）依据《../../../../docs/design/flow-editor-design.md》V1.0 增补 */
+ *  图示双应用（flow-editor/mermaid-viewer）依据《../../../../docs/design/flow-editor-design.md》V1.0 增补；
+ *  M4-UI 增补：zip-browser 末位注册（edit 类，解出写 `<zip名>/` 前缀对象） */
 const EXPECTED_IDS = [
   'image-viewer',
   'video-player',
@@ -49,6 +51,7 @@ const EXPECTED_IDS = [
   'heic-viewer',
   'docx-viewer',
   'xlsx-viewer',
+  'zip-browser',
 ]
 
 /** AppCtx 桩：占位渲染器不触达 ctx，只需形状完整供调用侧类型收窄 */
@@ -66,8 +69,8 @@ function noopCtx(): AppCtx {
 const RENDER_FILE = { key: 'dir/a.txt', name: 'a.txt', size: 3 }
 
 describe('BUILTIN_APP_SPECS 表完整性', () => {
-  it('共 13 项，id 集合与计划 §一表一致（注册序），fallback-download 不入表', () => {
-    expect(BUILTIN_APP_SPECS).toHaveLength(13)
+  it('共 14 项，id 集合与计划 §一表一致（注册序），fallback-download 不入表', () => {
+    expect(BUILTIN_APP_SPECS).toHaveLength(14)
     expect(BUILTIN_APP_SPECS.map((s) => s.code)).toEqual(EXPECTED_IDS)
     expect(BUILTIN_APP_SPECS.map((s) => s.code)).not.toContain(FALLBACK_APP_ID)
     expect(FALLBACK_APP_ID).toBe('fallback-download')
@@ -110,7 +113,7 @@ describe('BUILTIN_APP_SPECS 表完整性', () => {
 describe('渲染器字节限额登记（R2-03：预览闸与渲染器单一事实源）', () => {
   const MB = 1024 * 1024
 
-  it('spec maxBytes 值：markdown=code=5MiB、csv=20MiB、heic=32MiB；其余应用不登记（undefined）', () => {
+  it('spec maxBytes 值：markdown=code=5MiB、csv=20MiB、heic=32MiB、zip=512MiB；其余应用不登记（undefined）', () => {
     const byCode = new Map(BUILTIN_APP_SPECS.map((s) => [s.code, s]))
     expect(byCode.get('markdown-renderer')?.maxBytes).toBe(5 * MB)
     expect(byCode.get('code-editor')?.maxBytes).toBe(5 * MB)
@@ -118,6 +121,7 @@ describe('渲染器字节限额登记（R2-03：预览闸与渲染器单一事�
     expect(byCode.get('heic-viewer')?.maxBytes).toBe(32 * MB)
     expect(byCode.get('mermaid-viewer')?.maxBytes).toBe(5 * MB)
     expect(byCode.get('flow-editor')?.maxBytes).toBe(5 * MB)
+    expect(byCode.get('zip-browser')?.maxBytes).toBe(512 * MB)
     for (const noLimit of ['image-viewer', 'video-player', 'audio-player', 'pdf-viewer', 'docx-viewer', 'xlsx-viewer']) {
       expect(byCode.get(noLimit)?.maxBytes, `${noLimit}: 不登记 maxBytes`).toBeUndefined()
     }
@@ -128,6 +132,7 @@ describe('渲染器字节限额登记（R2-03：预览闸与渲染器单一事�
     expect(CODE_MAX_BYTES).toBe(5 * MB)
     expect(CSV_TABLE_MAX_BYTES).toBe(20 * MB)
     expect(HEIC_VIEWER_MAX_BYTES).toBe(32 * MB)
+    expect(ZIP_BROWSER_MAX_BYTES).toBe(512 * MB)
   })
 
   it('registerBuiltins 把 spec.maxBytes 透传到 AppDefinition（预览闸读取入口）', () => {
@@ -142,10 +147,10 @@ describe('渲染器字节限额登记（R2-03：预览闸与渲染器单一事�
 })
 
 describe('registerBuiltins', () => {
-  it('新 AppRegistry：返回全集 13 个（注册序），registry.list 同长', () => {
+  it('新 AppRegistry：返回全集 14 个（注册序），registry.list 同长', () => {
     const registry = new AppRegistry()
     expect(registerBuiltins(registry)).toEqual(EXPECTED_IDS)
-    expect(registry.list()).toHaveLength(13)
+    expect(registry.list()).toHaveLength(14)
   })
 
   it('spec → AppDefinition 映射：label=词典 key、matcher/actions 透传、requiresSdk=协议主版本', () => {
@@ -201,7 +206,7 @@ describe('registerBuiltins', () => {
     const registry = new AppRegistry()
     const spy = vi.fn(() => undefined)
     const registered = registerBuiltins(registry, { 'image-viewer': spy })
-    expect(registered).toHaveLength(13)
+    expect(registered).toHaveLength(14)
     expect(registry.get('image-viewer')?.renderer).toBe(spy)
     expect(spy).not.toHaveBeenCalled()
 
@@ -225,9 +230,9 @@ describe('registerBuiltins', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       expect(registerBuiltins(registry)).toEqual([])
-      expect(registry.list()).toHaveLength(13)
-      // registry 仅在 id 冲突时 warn → 13 条 warn 覆盖全部 code，即拒载原因=duplicate-id
-      expect(warn).toHaveBeenCalledTimes(13)
+      expect(registry.list()).toHaveLength(14)
+      // registry 仅在 id 冲突时 warn → 14 条 warn 覆盖全部 code，即拒载原因=duplicate-id
+      expect(warn).toHaveBeenCalledTimes(14)
       const warned = warn.mock.calls.map((c) => String(c[0])).join('\n')
       for (const id of EXPECTED_IDS) expect(warned, `warn 含 ${id}`).toContain(id)
       // 拒载不覆盖：首注册注入的 renderer 保持不变

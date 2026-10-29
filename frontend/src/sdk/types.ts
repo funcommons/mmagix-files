@@ -26,6 +26,8 @@ export type CommandName =
   | 'createFolder' | 'uploadFiles' | 'download' | 'rename' | 'remove'
   | 'registerApp' | 'setTheme' | 'setLocale' | 'getInfo' | 'destroy'
   | 'setCredentials' | 'getApps'
+  // v1.2 回收站命令（恢复/彻底删除；实现在 M1 overrides）
+  | 'restore' | 'purge'
 
 export type EventName =
   | 'ready' | 'pathChanged' | 'fileOpened' | 'tabClosed'
@@ -148,6 +150,32 @@ export interface S3ListResult {
   continuationToken?: string
 }
 
+/** 对象版本行（ListVersionsResult 的 <Version> 子项；lastModified=epoch ms） */
+export interface VersionRow {
+  key: string
+  versionId: string
+  isLatest: boolean
+  lastModified?: number
+  size: number
+}
+
+/** 删除标记行（ListVersionsResult 的 <DeleteMarker> 子项——删掉标记版本即「恢复」） */
+export interface DeleteMarkerRow {
+  key: string
+  versionId: string
+  isLatest: boolean
+  lastModified?: number
+}
+
+/** ListObjectVersions 响应（回收站/版本历史；分页标记仅 isTruncated 时透出） */
+export interface VersionListResult {
+  versions: VersionRow[]
+  deleteMarkers: DeleteMarkerRow[]
+  isTruncated: boolean
+  nextKeyMarker?: string
+  nextVersionIdMarker?: string
+}
+
 /**
  * S3 客户端接口（A3 实现 SigV4Client、A5/files 层消费；单文件模式另有 URL provider）
  * 错误映射：非 2xx → SdkError(S3_ERROR, detail=status)；403/凭证类 → CREDENTIAL_INVALID/CREDENTIAL_EXPIRED
@@ -163,10 +191,24 @@ export interface S3Client {
   uploadPart(key: string, uploadId: string, partNumber: number, body: Blob): Promise<{ etag: string }>
   completeMultipart(key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void>
   abortMultipart(key: string, uploadId: string): Promise<void>
-  /** 预签名 GET URL（查询串 SigV4；媒体渲染器用 <video src> 拿浏览器原生 Range/渐进加载）。可选能力 */
-  getPresignedUrl?(key: string, expiresSec?: number): string
-  /** 预签名 PUT URL（查询串 SigV4；分享对话框「上传链接」用——对方无需凭证即可向该 key 直传）。可选能力 */
-  presignPutUrl?(key: string, expiresSec?: number): string
+  /**
+   * 预签名 GET URL（查询串 SigV4；媒体渲染器用 <video src> 拿浏览器原生 Range/渐进加载）。可选能力
+   * extraQuery 追加进签名查询串的业务参数（versionId/partNumber/response-content-disposition 等场景），不传=行为逐字节不变；nowMs 仅测试注入。
+   */
+  getPresignedUrl?(key: string, expiresSec?: number, nowMs?: number, extraQuery?: Record<string, string>): string
+  /**
+   * 预签名 PUT URL（查询串 SigV4；分享对话框「上传链接」用——对方无需凭证即可向该 key 直传）。可选能力
+   * extraQuery 追加进签名查询串的业务参数（uploadId/partNumber 等分片直传场景），不传=行为逐字节不变；nowMs 仅测试注入。
+   */
+  presignPutUrl?(key: string, expiresSec?: number, nowMs?: number, extraQuery?: Record<string, string>): string
+  /** 桶版本控制状态（回收站前置检测；无 <Status>/未配置 = 'Disabled'）。可选能力 */
+  getBucketVersioning?(): Promise<'Enabled' | 'Suspended' | 'Disabled'>
+  /** 列举对象版本 + 删除标记（回收站/版本历史）。可选能力 */
+  listObjectVersions?(opts?: { prefix?: string; keyMarker?: string; versionIdMarker?: string; maxKeys?: number }): Promise<VersionListResult>
+  /** 删除指定版本（删 DeleteMarker=恢复可见性；带 versionId=彻底删除）。可选能力 */
+  deleteVersion?(key: string, versionId: string): Promise<void>
+  /** 列举进行中的分片上传（孤儿 uploadId 清理；initiated=ISO 字符串透传）。可选能力 */
+  listMultipartUploads?(): Promise<{ key: string; uploadId: string; initiated?: string }[]>
 }
 
 // ───────────────────────── 命令/事件 payload ─────────────────────────

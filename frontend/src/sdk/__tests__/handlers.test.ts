@@ -1,6 +1,6 @@
 /**
  * createCommandHandlers 单测（契约《docs/design/jsdk-api.md》§四/§五/§七）
- * 覆盖：16 键命令表形状（含 v1.1 setCredentials）/ 单文件模式 4305 / 工作台桩 4301 / 终态 5000 / getInfo / destroy / setTheme / setLocale
+ * 覆盖：19 键命令表形状（含 v1.1 setCredentials、v1.2 getApps/restore/purge）/ 单文件模式 4305 / 工作台桩 4301 / 终态 5000 / getInfo / destroy / setTheme / setLocale
  */
 import { describe, expect, it, vi } from 'vitest'
 import { SdkError } from '../errorCodes'
@@ -67,14 +67,14 @@ function makeDeps(
 }
 
 describe('createCommandHandlers', () => {
-  it('表形状：恰含 17 个命令键（含 v1.1 setCredentials、v1.2 getApps）；未知名不在表内（由调用方兜 4005）', () => {
+  it('表形状：恰含 19 个命令键（含 v1.1 setCredentials、v1.2 getApps/restore/purge）；未知名不在表内（由调用方兜 4005）', () => {
     const handlers = createCommandHandlers(makeDeps({ mode: 'workspace' }).deps)
     const names = Object.keys(handlers)
-    expect(names).toHaveLength(17)
+    expect(names).toHaveLength(19)
     expect(new Set(names)).toEqual(
       new Set([
         'navigate', 'openFile', 'closeTab', 'getTabs', 'select', 'createFolder',
-        'uploadFiles', 'download', 'rename', 'remove', 'registerApp',
+        'uploadFiles', 'download', 'rename', 'remove', 'restore', 'purge', 'registerApp',
         'setTheme', 'setLocale', 'getInfo', 'destroy', 'setCredentials', 'getApps',
       ]),
     )
@@ -85,7 +85,7 @@ describe('createCommandHandlers', () => {
     const handlers = createCommandHandlers(makeDeps({ mode: 'file' }).deps)
     const gated: CommandName[] = [
       'navigate', 'openFile', 'closeTab', 'getTabs', 'select', 'createFolder',
-      'download', 'rename', 'remove',
+      'download', 'rename', 'remove', 'restore', 'purge',
     ]
     for (const name of gated) {
       expect(codeOf(() => handlers[name](undefined))).toBe(4305)

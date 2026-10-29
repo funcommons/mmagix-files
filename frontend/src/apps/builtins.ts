@@ -24,6 +24,9 @@ export const CSV_TABLE_MAX_BYTES = 20 * 1024 * 1024
 export const HTML_VIEWER_MAX_BYTES = 20 * 1024 * 1024
 export const HEIC_VIEWER_MAX_BYTES = 32 * 1024 * 1024
 export const MERMAID_MAX_BYTES = 5 * 1024 * 1024
+/** zip-browser 预览上限（M4-UI：在线解压按 Range 读，不做整包入内存；embed 可经 openFile 的
+ *  appOptions.unzipMaxBytes 覆盖渲染器内防线值，缺省同源此常量——见 renderers/zip.ts） */
+export const ZIP_BROWSER_MAX_BYTES = 512 * 1024 * 1024
 
 export interface BuiltinAppSpec {
   code: string
@@ -70,6 +73,8 @@ export const BUILTIN_APP_SPECS: BuiltinAppSpec[] = [
   { code: 'heic-viewer', labelKey: 'app.heic-viewer', type: 'view', matcher: { ext: ['heic', 'heif'] }, actions: ['preview'], maxBytes: HEIC_VIEWER_MAX_BYTES },
   { code: 'docx-viewer', labelKey: 'app.docx-viewer', type: 'view', matcher: { ext: ['docx'] }, actions: ['preview'] },
   { code: 'xlsx-viewer', labelKey: 'app.xlsx-viewer', type: 'view', matcher: { ext: ['xlsx', 'xls'] }, actions: ['preview'] },
+  // M4-UI：zip 在线解压浏览器——type=edit 诚实口径（解出会向会话目录写 `<zip名>/` 前缀对象）
+  { code: 'zip-browser', labelKey: 'app.zip-browser', type: 'edit', matcher: { ext: ['zip'] }, actions: ['edit'], maxBytes: ZIP_BROWSER_MAX_BYTES },
 ]
 
 /** 占位渲染器（M2 逐应用替换；保证注册表先通、渲染后行） */

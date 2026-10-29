@@ -294,6 +294,12 @@ export interface PresignInput {
   clockOffsetMs?: number
   /** 注入当前时间 ms，缺省 Date.now()；测试确定性用（同 signRequest） */
   nowMs?: number
+  /**
+   * 追加进 canonical query 的业务查询参数（versionId / partNumber / uploadId / response-content-*…）：
+   * 与 X-Amz-* 同通道合并——名值 RFC3986 编码后按编码键名升序混排，一并参与签名；
+   * X-Amz-Signature 仍恒在末尾、不参与排序。缺省/空对象时输出与无此字段逐字节一致。
+   */
+  extraQuery?: Record<string, string>
 }
 
 /**
@@ -301,17 +307,26 @@ export interface PresignInput {
  * 凭证全部进查询串（X-Amz-Algorithm/Credential/Date/Expires/Security-Token/SignedHeaders），
  * 请求头只签 host（SignedHeaders=host，host 仅参与 CanonicalHeaders、不出现在查询串），
  * payload 哈希按 AWS 预签名口径恒为 UNSIGNED-PAYLOAD，X-Amz-Signature 追加在查询串末尾。
+ * extraQuery 业务参数与 X-Amz-* 同通道合并排序、一并参与签名（缺省/空对象输出不变）。
  * 与 signRequest 的分工：后者签 fetch 头（Authorization），本函数产出可直接作
  * `<video>/<audio>/<img> src` 的 URL——浏览器原生请求（含 Range 拖动）无需 JS 参与。
  */
 export function presignGet(input: PresignInput): string {
+  // 保留键守卫：extraQuery 与 X-Amz-* 同通道合并排序，喂了保留前缀会与预签名自身参数双写
+  // （同名双参数 → 服务端取值不确定且签名被污染）。入口显式拒绝、先于任何签名计算；
+  // presignPut 与 S3Client.presignedUrl 两出口均经此口，守卫一处收口。
+  for (const name of Object.keys(input.extraQuery ?? {})) {
+    if (/^X-Amz-/i.test(name)) {
+      throw new Error(`extraQuery 含保留前缀键「${name}」：X-Amz-* 为预签名保留参数，禁止通过 extraQuery 传入`)
+    }
+  }
   const service = input.service ?? 's3'
   const url = new URL(input.url)
   const method = (input.method ?? 'GET').toUpperCase()
   const amzDate = formatAmzDate((input.nowMs ?? Date.now()) + (input.clockOffsetMs ?? 0))
   const scope = `${amzDate.slice(0, 8)}/${input.region}/${service}/aws4_request`
 
-  // 1. 预签名参数（Signature 除外）：名值 RFC3986 编码后按名升序（CanonicalQueryString 口径）
+  // 1. 预签名参数 + extraQuery（Signature 除外）：名值 RFC3986 编码后按编码键名升序（CanonicalQueryString 口径）
   const pairs: Array<[string, string]> = [
     ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
     ['X-Amz-Credential', `${input.credentials.accessKeyId}/${scope}`],
@@ -320,6 +335,8 @@ export function presignGet(input: PresignInput): string {
     ['X-Amz-SignedHeaders', 'host'],
   ]
   if (input.credentials.sessionToken) pairs.push(['X-Amz-Security-Token', input.credentials.sessionToken])
+  // 业务附加参数与 X-Amz-* 同通道合并（原始名值入列，下方统一编码 + 混排，一并参与签名）
+  for (const [name, value] of Object.entries(input.extraQuery ?? {})) pairs.push([name, value])
   const canonicalQuery = pairs
     .map(([n, v]) => [encodeRfc3986(n), encodeRfc3986(v)] as const)
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))

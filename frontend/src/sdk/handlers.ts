@@ -86,6 +86,9 @@ const M1_STUB_NAMES = [
   'download',
   'rename',
   'remove',
+  // v1.2 回收站命令：工作台 tree/IO 类，同属 M1 桩面（实现在 M3 overrides，files/commands.ts createM1Overrides）
+  'restore',
+  'purge',
   'registerApp',
   'setCredentials',
   'getApps',
@@ -142,6 +145,9 @@ export function createCommandHandlers(deps: HandlerDeps): Record<CommandName, Co
     download: m1Stub('download'),
     rename: m1Stub('rename'),
     remove: m1Stub('remove'),
+    // v1.2 回收站命令：桩兜 4301（overrides 注入 createM1Overrides 的 trashBatch 实做后接管）
+    restore: m1Stub('restore'),
+    purge: m1Stub('purge'),
     registerApp: m1Stub('registerApp'),
     // v1.1：核心命令但实现在装配层 overrides（main.ts：热替换 client 凭证 + session.extend）——
     // 桩兜 4301（workspace 未接管/单文件模式走 FILE_MODE 门 4305），凭证校验在 override 内做

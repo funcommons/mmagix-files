@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
  * Home.vue — 工作台根页（Wave2-T2；Lane F3 消费层接线；Lane F5 交互面改版；Lane H1 预览 Tab 条；
- * Lane H-2 分享生成器接线：Toolbar/右键菜单两入口 → 单实例 ShareDialog）。
+ * Lane H-2 分享生成器接线：Toolbar/右键菜单两入口 → 单实例 ShareDialog；
+ * M2/M3 接线：resume 断点续传面包条（指纹/partSize 校验 → 续传/放弃）+ 回收站视图
+ * （TrashPanel 抽屉挂载，restore/purge 走 workspace-ops 收口，刷新链 applyChange+loadDir(force)+重拉闭环））。
  * !ok → 配置错误卡（保留 M0）；ok+workspace → SessionBanner+TreePanel+UploadPanel
  * （左树可拖宽/可隐藏，预览卡头=PreviewTabs|Toolbar 同一行——Toolbar 挂预览区头右侧（2026-10），
  * 旧顶部工具条已解散）；ok+file → 单文件预览（urlDataSource+registry 按 name 解析默认
@@ -60,8 +62,11 @@ import PreviewTabs, { applyOpenedTab, findTab, pickNeighbor, pinToggle } from '@
 import type { PreviewTab } from '@/files/ui/PreviewTabs.vue'
 import type { PreviewHandle } from '@/files/preview'
 import { UPLOAD_ABORTED_CODE } from '@/files/upload-queue'
-import type { ConflictEnqueueResult } from '@/files/upload-queue'
+import type { ConflictEnqueueResult, ResumeCandidate } from '@/files/upload-queue'
+import { sha256HexSync } from '@/sdk/s3/sigv4'
 import type { S3ObjectSummary } from '@/sdk/types'
+import type { TrashEntry } from '@/files/tree-store'
+import TrashPanel from '@/files/ui/TrashPanel.vue'
 
 const { t } = useI18n()
 const preference = usePreferenceStore()
@@ -316,6 +321,223 @@ function onRetryDownload(id: string): void {
 }
 function onClearDownloads(): void {
   downloads?.clearTerminal()
+}
+
+// ── M2 接线：resume 断点续传面包条（resumeCheckpoints 探活 → 重选文件 → 校验 → 续传/放弃） ──
+
+/** 指纹复算编码器（与 upload-queue taskFingerprint 同构：sha256(`${key}:${size}:${lastModified}`)） */
+const FP_TE = new TextEncoder()
+
+/** 续传候选（onMounted 探活一次；横幅关闭=保留断点下次再提示，不删库内断点行） */
+const resumeCandidates = ref<ResumeCandidate[]>([])
+const resumeBannerClosed = ref(false)
+const showResumeBanner = computed(() => !resumeBannerClosed.value && resumeCandidates.value.length > 0)
+/** 「重选文件续传」的挂起候选：file input change 时对齐（input 常驻 template，与横幅显隐解耦） */
+const pendingResume = ref<ResumeCandidate | null>(null)
+const resumeFileInput = ref<HTMLInputElement | null>(null)
+
+function removeResumeCandidate(fingerprint: string): void {
+  resumeCandidates.value = resumeCandidates.value.filter((c) => c.fingerprint !== fingerprint)
+}
+
+/** 挂载后探活断点（resumeCheckpoints 内部已保守：探活接口失败不动断点；此处再防网络级异常静默） */
+onMounted(() => {
+  const queue = ws?.stores.queue
+  if (!queue) return
+  queue
+    .resumeCheckpoints()
+    .then((candidates) => {
+      resumeCandidates.value = candidates
+    })
+    .catch(() => { /* 探活失败不弹横幅：断点保留在库，下次进入再试 */ })
+})
+
+/** 「重选文件续传」：触发常驻 file input（multipart 断点无法凭空取回 File 句柄，必须用户重选） */
+function pickResumeFile(c: ResumeCandidate): void {
+  pendingResume.value = c
+  resumeFileInput.value?.click()
+}
+
+/**
+ * 用户选完文件后的三路径校验（M2 接线硬性要求）：
+ * ① 指纹校验：fingerprint=sha256(`${path}:${size}:${lastModified}`)，与 upload-queue taskFingerprint
+ *    同构（File.lastModified 跨会话稳定可复算）——不一致 toast 提示并保留断点（可能只是选错文件）；
+ * ② partSize 硬性校验（UI 波次契约/评审 P2-3）：候选 partSize 是构造期冻结值，partSize/maxParts
+ *    配置变更后跨会话必漂移；分片号↔字节区间错位会把新旧分片拼成坏对象——必须弃旧断点 +
+ *    abort 旧 uploadId 整件重传（discardCheckpoint 双清后走 trackedEnqueue 正常入队）；
+ * ③ 匹配：以 checkpoint 续传入队（enqueueResume 复用 uploadId+已传分片，只补缺失分片），
+ *    任务登记对齐 trackedEnqueue 口径（进度从断点字节继续而非归零）。
+ */
+async function onResumeFilePicked(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  const candidate = pendingResume.value
+  input.value = '' // 复位以允许再次选择同一文件（change 依赖值变化）
+  pendingResume.value = null
+  const queue = ws?.stores.queue
+  if (!queue || !file || !candidate) return
+  // ① 指纹校验（path+size+lastModified 一致性）
+  const fingerprint = sha256HexSync(FP_TE.encode(`${candidate.path}:${file.size}:${file.lastModified}`))
+  if (fingerprint !== candidate.fingerprint) {
+    toast.warning(t('transfer.resume-mismatch')) // 文件不一致无法续传：断点保留
+    return
+  }
+  // ② partSize 硬性校验：不一致=旧分片字节区间全部作废，弃断点整件重传
+  if (candidate.partSize !== queue.partSizeFor(file.size)) {
+    await queue.discardCheckpoint(candidate) // abortMultipart 销毁服务端会话 + remove 移除断点行（双清）
+    removeResumeCandidate(candidate.fingerprint)
+    toast.info(t('transfer.resume-restart'))
+    void trackedEnqueue([file], parentPrefixOf(candidate.path)) // 整件重传（带任务登记/冲突探测/拒收 toast）
+    return
+  }
+  // ③ 匹配：以 checkpoint 续传入队（队列侧指纹复核兜底，返回 null=不一致，理论不可达）
+  const resumed = queue.enqueueResume(file, candidate)
+  if (!resumed) {
+    toast.warning(t('transfer.resume-mismatch'))
+    return
+  }
+  removeResumeCandidate(candidate.fingerprint)
+  const loaded = candidate.parts.reduce((sum, p) => {
+    const start = (p.number - 1) * candidate.partSize
+    return sum + (Math.min(start + candidate.partSize, file.size) - start)
+  }, 0)
+  uploadTasks.value.push({ id: resumed.id, name: file.name, loaded, total: file.size, status: 'uploading' })
+  ensureUploadPoller()
+}
+
+/** 「放弃」断点候选：abortMultipart+checkpointStore.remove（queue.discardCheckpoint 双清收口） */
+async function onDiscardResume(c: ResumeCandidate): Promise<void> {
+  const queue = ws?.stores.queue
+  if (!queue) return
+  await queue.discardCheckpoint(c)
+  removeResumeCandidate(c.fingerprint)
+  toast.info(t('transfer.resume-discarded'))
+}
+
+/** key 所属父目录前缀（partSize 漂移整件重传时 trackedEnqueue 的 prefix 入参） */
+function parentPrefixOf(key: string): string {
+  const i = key.lastIndexOf('/')
+  return i < 0 ? '' : key.slice(0, i + 1)
+}
+
+// ── M3 接线：回收站视图（TrashPanel 抽屉挂载；restore/purge 走 workspace-ops 收口） ──
+
+const trashOpen = ref(false)
+const trashEntries = ref<TrashEntry[]>([])
+const trashBusy = ref(false)
+
+/** 进入回收站即拉取（listTrash({}) 全量；每次打开重拉，busy 全程禁面板三钮） */
+watch(trashOpen, (open) => {
+  if (open) void reloadTrash()
+})
+
+async function reloadTrash(): Promise<void> {
+  const tree = ws?.stores.tree
+  if (!tree) return
+  trashBusy.value = true
+  try {
+    trashEntries.value = await tree.listTrash({})
+  } catch (e) {
+    toast.error(e instanceof Error && e.message ? e.message : t('files.msg.op-failed'))
+  } finally {
+    trashBusy.value = false
+  }
+}
+
+/**
+ * restore/purge/empty 后的刷新链闭环（reviewer-C P2-2 归口：restore/purge 后节点回流）：
+ * ① 树缓存最小维护走 applyChange（tree 现有通道；put=恢复回流、delete=清除；对未缓存父目录是
+ *    空操作，懒加载打开即最新）——已知边界：purge 复验跳过的活 key 若在其他已缓存目录存在陈旧
+ *    缺失窗口（跳过仅发生在 listTrash 后该 key 被恢复/重传的并发场景，cmd:refresh 可兜底）；
+ * ② 当前目录 loadDir(force) 兜底权威数据（恢复回流 size=0 最小条目由此校正）；
+ * ③ 恢复方向补 bus 'fileChanged'(put)：宿主此前经树删除链收到过 delete，恢复后同步回流
+ *    （purge 方向 key 本就不可见，不重复外发）；
+ * ④ 回收站列表重拉（reloadTrash 收口）。
+ */
+async function afterTrashChanged(keys: string[], action: 'put' | 'delete', emitHost: boolean): Promise<void> {
+  const tree = ws?.stores.tree
+  if (tree) {
+    for (const key of keys) tree.applyChange({ key, action })
+    void tree.loadDir(tree.currentPath, { force: true })
+  }
+  if (emitHost) {
+    const bootHandle = boot && boot.ok ? boot.handle : null
+    for (const key of keys) {
+      try {
+        bootHandle?.bus.emit('fileChanged', { key, action })
+      } catch {
+        // 事件通道不可用不影响本地刷新链
+      }
+    }
+  }
+  await reloadTrash()
+}
+
+/**
+ * @restore → workspace-ops.restoreEntries。
+ * 接线对齐点（并行 agent 正实现 workspace-ops，缺导出为中间态红）：契约签名
+ * restoreEntries(entries: TrashEntry[]): Promise<…>，取消/失败返回 null/抛错沿用
+ * removeEntries 惯例（null 不得回流树缓存——防幽灵节点），故成功与否按非 null 判定。
+ */
+async function onTrashRestore(sel: TrashEntry[]): Promise<void> {
+  if (!ops || sel.length === 0) return
+  trashBusy.value = true
+  let done = false
+  try {
+    const r: unknown = await ops.restoreEntries(sel)
+    done = r !== null && r !== undefined
+  } catch {
+    done = false // 聚合错（TrashBatchError 部分成功）由 ops 层 toast；列表下方重拉对齐真实状态
+  }
+  if (done) await afterTrashChanged(sel.map((e) => e.key), 'put', true)
+  else await reloadTrash()
+  trashBusy.value = false
+}
+
+/** @purge → workspace-ops.purgeEntries（内部含确认框；接线对齐点同 onTrashRestore） */
+async function onTrashPurge(sel: TrashEntry[]): Promise<void> {
+  if (!ops || sel.length === 0) return
+  trashBusy.value = true
+  let done = false
+  try {
+    const r: unknown = await ops.purgeEntries(sel)
+    done = r !== null && r !== undefined
+  } catch {
+    done = false
+  }
+  if (done) await afterTrashChanged(sel.map((e) => e.key), 'delete', false)
+  else await reloadTrash()
+  trashBusy.value = false
+}
+
+/**
+ * @empty → 确认框（TrashPanel 纯展示不做确认，文案硬性要求「清空回收站不可恢复」）→
+ * tree.emptyTrash() → 刷新链（applyChange delete + loadDir force + 列表重拉）。
+ */
+async function onTrashEmpty(): Promise<void> {
+  const tree = ws?.stores.tree
+  if (!tree) return
+  try {
+    await toast.confirm({
+      title: t('files.trash.empty'),
+      message: t('files.trash.empty-confirm'),
+      type: 'warning',
+    })
+  } catch {
+    return // 取消
+  }
+  trashBusy.value = true
+  try {
+    const keys = trashEntries.value.map((e) => e.key)
+    const { purged } = await tree.emptyTrash({})
+    toast.success(t('files.trash.empty-done', { n: purged }))
+    await afterTrashChanged(keys, 'delete', false)
+  } catch (e) {
+    toast.error(e instanceof Error && e.message ? e.message : t('files.msg.op-failed'))
+    await reloadTrash() // 失败可能是部分清空（TrashBatchError 聚合）：重拉对齐
+  } finally {
+    trashBusy.value = false
+  }
 }
 
 /**
@@ -804,6 +1026,8 @@ if (ws) {
     { id: 'cmd:toggle-locale', labelKey: 'home.toggle-locale', icon: 'ri-translate-2', handler: () => { localeModel.value = localeModel.value === 'zh-CN' ? 'en-US' : 'zh-CN' } },
     // R2-01 顺带：传输面板入口（此前唯一入口是底部常驻面板条本身）
     { id: 'cmd:transfers', labelKey: 'statusbar.transfers', icon: 'ri-arrow-left-right-line', handler: () => openTransferPanel() },
+    // M3：回收站入口（预览头回收站钮之外的第二入口）
+    { id: 'cmd:trash', labelKey: 'files.trash.title', icon: 'ri-delete-bin-line', handler: () => { trashOpen.value = true } },
   ])
 }
 </script>
@@ -902,6 +1126,17 @@ if (ws) {
               @share="openShare"
               @switch-app="onSwitchPreviewApp"
             />
+            <!-- M3：回收站入口（ghost 图标钮，同 fs-btn/info-btn 口径；抽屉承载 TrashPanel） -->
+            <button
+              type="button"
+              class="ws__trash-btn"
+              data-testid="trash-open"
+              :title="t('files.trash.title')"
+              :aria-label="t('files.trash.title')"
+              @click="trashOpen = true"
+            >
+              <i class="ri-delete-bin-line" />
+            </button>
             <!-- 全屏预览卡（2026-10：整卡放大；浏览器内全屏，Esc/再点退出；无文件也常驻，与 [i] 同列最右） -->
             <button
               type="button"
@@ -971,6 +1206,46 @@ if (ws) {
           </div>
         </FcDrawer>
       </div>
+      <!-- M2 接线：resume 断点续传面包条（候选列表 path/size + 重选文件续传/放弃；关闭=保留断点） -->
+      <div v-if="showResumeBanner" class="ws__resume" data-testid="resume-banner">
+        <div class="ws__resume-head">
+          <i class="ri-upload-cloud-line ws__resume-icon" />
+          <span class="ws__resume-title">{{ t('transfer.resume-title', { n: resumeCandidates.length }) }}</span>
+          <span class="ws__resume-spacer" />
+          <button
+            type="button"
+            class="ws__resume-close"
+            data-testid="resume-dismiss"
+            :title="t('transfer.resume-dismiss')"
+            :aria-label="t('transfer.resume-dismiss')"
+            @click="resumeBannerClosed = true"
+          >
+            <i class="ri-close-line" />
+          </button>
+        </div>
+        <ul class="ws__resume-list">
+          <li v-for="c in resumeCandidates" :key="c.fingerprint" class="ws__resume-item" data-testid="resume-item">
+            <span class="ws__resume-path" :title="c.path">{{ c.path }}</span>
+            <span class="ws__resume-size">{{ formatBytes(c.size) }}</span>
+            <FcButton variant="text" size="sm" data-testid="resume-resume" @click="pickResumeFile(c)">
+              {{ t('transfer.resume-pick') }}
+            </FcButton>
+            <FcButton variant="text" size="sm" data-testid="resume-discard" @click="onDiscardResume(c)">
+              {{ t('transfer.resume-discard') }}
+            </FcButton>
+          </li>
+        </ul>
+        <p class="ws__resume-hint">{{ t('transfer.resume-hint') }}</p>
+      </div>
+      <!-- 「重选文件续传」的常驻隐藏 input（与横幅显隐解耦；change → onResumeFilePicked 三路径校验） -->
+      <input
+        ref="resumeFileInput"
+        type="file"
+        class="ws__resume-input"
+        aria-hidden="true"
+        tabindex="-1"
+        @change="onResumeFilePicked"
+      />
       <!-- Lane G1：传输任务中心（上传 + 下载统一视图；终态清除，进行中/暂停保留） -->
       <UploadPanel
         :tasks="uploadTasks"
@@ -994,6 +1269,16 @@ if (ws) {
       />
       <!-- Lane H-2：分享链接生成器（GET/PUT 预签名；client 缺能力/目录条目=禁用态） -->
       <ShareDialog v-model:open="shareOpen" :client="ws.stores.client" :entry="shareEntry" />
+      <!-- M3：回收站抽屉（TrashPanel 纯展示：restore/purge/empty 三路 emit 全接，业务执行在 Home/workspace-ops 收口） -->
+      <FcDrawer v-model:open="trashOpen" :title="t('files.trash.title')" direction="rtl" size="480px">
+        <TrashPanel
+          :entries="trashEntries"
+          :busy="trashBusy"
+          @restore="onTrashRestore"
+          @purge="onTrashPurge"
+          @empty="onTrashEmpty"
+        />
+      </FcDrawer>
       <!-- 2026-10：底部状态栏已并入头部（存储桶 chip + ⓘ 弹窗），StatusBar 组件下线 -->
     </div>
 
@@ -1175,6 +1460,87 @@ if (ws) {
   font-size: 13px;
 }
 
+/* M2：resume 断点续传面包条（警示色调对齐 expire-hint；候选行 path/size + 双动作） */
+.ws__resume {
+  padding: 8px 12px;
+  border: 1px solid var(--el-color-warning-light-5, #f3d19e);
+  border-radius: var(--app-radius-md, 8px);
+  background: var(--el-color-warning-light-9, #fdf6ec);
+  color: var(--el-color-warning-dark-2, #b88230);
+  font-size: 13px;
+}
+
+.ws__resume-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws__resume-title {
+  font-weight: 600;
+}
+
+.ws__resume-spacer {
+  flex: 1;
+}
+
+.ws__resume-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: var(--app-radius-button, 6px);
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+
+  &:hover {
+    background: color-mix(in srgb, var(--el-color-warning-dark-2, #b88230) 12%, transparent);
+  }
+}
+
+.ws__resume-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws__resume-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.ws__resume-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--app-text-primary);
+}
+
+.ws__resume-size {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws__resume-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+/* 「重选文件续传」常驻隐藏 input（视觉隐藏即可，click() 派发依赖其不在 display:none 之外的
+   特殊处理——原生 file input 在 display:none 下 click() 仍可弹窗，故直接隐藏） */
+.ws__resume-input {
+  display: none;
+}
+
 /* 2026-10：grid → flex（树宽 inline style 可拖 + 分隔条；预览侧 min-width:0 承接旧 minmax(0,1fr)） */
 .ws__body {
   display: flex;
@@ -1260,6 +1626,26 @@ if (ws) {
 
   /* 全屏预览卡：ghost 图标钮（口径同 ws-toolbar__act）；margin-left:auto 由它承担推右
     （[i] 的 auto 已移除——双 auto 会平分空隙导致按钮悬在中间） */
+  .ws__trash-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: transparent;
+    color: var(--app-text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+
+    &:hover {
+      background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+      color: var(--app-text);
+    }
+  }
+
   .ws__fs-btn {
     display: inline-flex;
     align-items: center;

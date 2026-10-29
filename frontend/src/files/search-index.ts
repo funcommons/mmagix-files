@@ -219,8 +219,50 @@ export function createMemoryMetaStore(): MetaStore {
   }
 }
 
-const IDB_DB_NAME = 'mmagic-search'
+/** 索引库与两张表：objects=搜索元数据（v1 起）；uploads=上传断点（v2 起，见 checkpoint-store.ts） */
+export const IDB_DB_NAME = 'mmagic-search'
 const IDB_STORE = 'objects'
+export const IDB_UPLOADS_STORE = 'uploads'
+/** 库版本：v1=objects；v2=+uploads（schema 升级收口在 openSearchDb，调用方不得各开各的版本号） */
+const IDB_DB_VERSION = 2
+
+/**
+ * 打开（或按需升级）索引库，schema 升级唯一收口于此（meta 与 checkpoint 两个实现共用）：
+ *  - 全新库：一次建齐 objects + uploads（v0→v2）；
+ *  - v1 旧库（仅 objects）：升 v2 补建 uploads，objects 及其数据原样保留；
+ * 两处建表前均判 objectStoreNames.contains——升级事件只由首个打开者触发一次，
+ * 但无论谁触发都必须建齐两表，否则后开的一方会在事务期报 store 不存在。
+ */
+export function openSearchDb(dbName: string = IDB_DB_NAME): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(dbName, IDB_DB_VERSION)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(IDB_UPLOADS_STORE)) {
+        db.createObjectStore(IDB_UPLOADS_STORE, { keyPath: 'fingerprint' })
+      }
+    }
+    // 升级被旧标签页的旧版本连接阻塞 → 显式拒绝（否则 Promise 永不落定，搜索与断点全静默挂起）；
+    // blocked → reject（快速失败+上层可见报错）；内存降级仅适用于环境无 indexedDB 的情形
+    req.onblocked = () =>
+      reject(
+        new Error(
+          `indexedDB.open('${dbName}', ${IDB_DB_VERSION}) 被其他标签页的旧版本连接阻塞（onblocked），请关闭旧标签页后重试`,
+        ),
+      )
+    req.onsuccess = () => {
+      const db = req.result
+      // 自有连接让位：别处请求升级版本时主动关闭本连接（closed 后进行中的事务照常完成，仅不再发起新事务），
+      // 避免反向把对方的 open 卡死在 blocked
+      db.onversionchange = () => db.close()
+      resolve(db)
+    }
+    req.onerror = () => reject(req.error ?? new Error(`indexedDB.open('${dbName}') 失败`))
+  })
+}
 
 /**
  * IndexedDB 实现（原生 API，库/表：'mmagic-search'/'objects'，keyPath 'key'）。
@@ -231,20 +273,7 @@ export function createIdbMetaStore(dbName: string = IDB_DB_NAME): MetaStore {
   if (typeof indexedDB === 'undefined') return createMemoryMetaStore()
 
   let dbPromise: Promise<IDBDatabase> | null = null
-  const open = (): Promise<IDBDatabase> => {
-    dbPromise ??= new Promise((resolve, reject) => {
-      const req = indexedDB.open(dbName, 1)
-      req.onupgradeneeded = () => {
-        const db = req.result
-        if (!db.objectStoreNames.contains(IDB_STORE)) {
-          db.createObjectStore(IDB_STORE, { keyPath: 'key' })
-        }
-      }
-      req.onsuccess = () => resolve(req.result)
-      req.onerror = () => reject(req.error ?? new Error(`indexedDB.open('${dbName}') 失败`))
-    })
-    return dbPromise
-  }
+  const open = (): Promise<IDBDatabase> => (dbPromise ??= openSearchDb(dbName))
 
   /** 单事务封装：run 发起请求（可无返回，如批量 put），complete 即 resolve */
   async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T> | void): Promise<T> {

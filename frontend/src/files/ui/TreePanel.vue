@@ -11,8 +11,9 @@ export const TYPE_AHEAD_WINDOW_MS = 500
  *  - 目录：单击名字/chevron=选中+原位展开/收起（loadDir 懒加载；激活目录 currentPath 随动，
  *    上传/新建目录/拖拽落点跟随）；双击目录=展开/收起；Alt+↓/↑=展开/收起首个选中目录；
  *  - 文件：单击=选中（ctrl/cmd 切换、shift 自锚点范围）→ emit('select')；双击/回车=emit('open')；
- *  - 行右键=上下文菜单（features.openWithMenu!==false 门控）：打开/打开方式/重命名/删除/下载/分享
- *    → emit('menu-action'/'open-with')（操作链在 Home 层经 workspace-ops 收口）；
+ *  - 行右键=上下文菜单（features.openWithMenu!==false 门控）：打开/打开方式/重命名/删除/下载/分享/
+ *    历史版本（文件条目）→ emit('menu-action'/'open-with'/'open-history')
+ *    （操作链在 Home 层经 workspace-ops 收口；历史版本接 VersionPanel）；
  *    空白处右键=上传/新建目录/刷新（同门控）；
  *  - 树头动作（创建簇小图标）：上传（隐藏 input→emit drop-files）/新建目录/刷新/搜索（emit search）；
  *  - 容器拖拽文件=上传 → emit('drop-files', {files, path})（enqueue+拒收 toast 在 Home 收口）；
@@ -52,6 +53,8 @@ const emit = defineEmits<{
   open: [entry: S3ObjectSummary]
   /** 「打开方式」指定应用；Home 接 preview.open(entry, { appId }) */
   'open-with': [payload: { entry: S3ObjectSummary; appId: string }]
+  /** 「历史版本」（文件条目右键菜单，M3-F8）；Home 接 VersionPanel（objectKey=key） */
+  'open-history': [key: string]
   /** 菜单动作（重命名/删除/下载/分享/新建目录）；操作链在 Home 层收口 */
   'menu-action': [payload: { action: 'rename' | 'delete' | 'download' | 'share' | 'mkdir'; entry?: S3ObjectSummary }]
   /** 拖拽落文件（Home 接 queue.enqueue + 拒收 toast） */
@@ -313,6 +316,8 @@ const menuItems = computed<MenuItem[]>(() => {
   }
   // Lane H-2：分享（仅文件；目录→前缀分享列 P2，简化口径不出口）
   if (!m.entry.isDir) items.push({ value: 'share', label: t('files.menu.share'), icon: 'ri-share-line' })
+  // M3-F8：历史版本（仅文件；版本列表/恢复链路在 Home 层接 VersionPanel 收口）
+  if (!m.entry.isDir) items.push({ value: 'history', label: t('files.history.menu'), icon: 'ri-history-line' })
   if (f.mkdir !== false) items.push({ value: 'mkdir', label: t('files.menu.mkdir'), icon: 'ri-folder-add-line' })
   return items
 })
@@ -328,6 +333,10 @@ function onMenuSelect(value: string): void {
   }
   if (value.startsWith('open-with:')) {
     emit('open-with', { entry: m.entry, appId: value.slice('open-with:'.length) })
+    return
+  }
+  if (value === 'history') {
+    emit('open-history', m.entry.key)
     return
   }
   if (value === 'rename' || value === 'delete' || value === 'download' || value === 'share' || value === 'mkdir') {

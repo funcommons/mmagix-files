@@ -10,14 +10,17 @@
 import type { BootHandle } from '@/boot'
 import { S3SigV4Client } from '@/sdk/s3/client'
 import type { EventName } from '@/sdk/types'
+import { createIdbCheckpointStore } from './checkpoint-store'
 import { createUploadHooks, joinKey } from './commands'
 import { createFileTree } from './tree-store'
-import type { FileTreeController } from './tree-store'
+import type { FileTreeWithTrash } from './tree-store'
 import { UploadQueue } from './upload-queue'
 
 export interface WorkspaceStores {
   client: S3SigV4Client
-  tree: FileTreeController
+  /** P2-3 放宽：createFileTree 本就返回 FileTreeWithTrash 全量面，此处如实标注——
+   *  trash 四方法（listTrash/restoreTrash/purgeTrash/emptyTrash）自装配面可达（FileTreeController 消费方不受影响：全量面是其超集） */
+  tree: FileTreeWithTrash
   queue: UploadQueue
 }
 
@@ -57,6 +60,8 @@ export function setupStores(
       uploadMaxBytes: config.params?.uploadMaxBytes,
       uploadConcurrency: config.params?.uploadConcurrency,
       denyExts: config.permissions?.denyExts,
+      // 跨会话断点续传（IDB store，与 tree/client 同装配作用域）
+      checkpointStore: createIdbCheckpointStore(),
     },
     hooks: {
       ...hooks,
@@ -76,6 +81,15 @@ export function setupStores(
 export function setupWorkspace(handle: BootHandle): WorkspaceStores | null {
   if (handle.config.mode !== 'workspace') return null
   return setupStores(handle.config, (evt, payload) => handle.bus.emit(evt, payload))
+}
+
+/**
+ * 渲染器侧只读取口：返回已装配单例（未装配/file 模式=null）。只读不构造——装配链仍由
+ * boot/main.ts 驱动，本函数不产生副作用。消费方：apps/renderers/zip.ts 的 extract 队列链
+ * （store 可得 → 逐条入队 UploadQueue；null → 渲染器内置直连 putObject 兜底）。
+ */
+export function peekWorkspaceStores(): WorkspaceStores | null {
+  return singleton
 }
 
 /** 清单例（仅测试/强制重装配用；生产勿调） */

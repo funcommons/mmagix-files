@@ -15,7 +15,7 @@ import { triggerDownload } from '@/utils/download'
 import { memPut, notifyMemFileAdded } from './mem-store'
 import type { CommandHandler } from '@/sdk/handlers'
 import type { CommandName, EventName, S3Client, UploadFilesReply, UploadRejected } from '@/sdk/types'
-import type { FileTreeController } from './tree-store'
+import type { FileTreeController, FileTreeWithTrash } from './tree-store'
 import { normalizePrefix } from './tree-store'
 import type { EnqueueResult, UploadQueue, UploadHooks } from './upload-queue'
 
@@ -32,6 +32,19 @@ function splitPath(full: string): { parent: string; name: string } {
   return { parent: full.slice(0, i + 1), name: full.slice(i + 1) }
 }
 
+/**
+ * FileTreeWithTrash 面收窄（M3 评审 P2-3 DI 放宽的运行时半边）：trash 四方法挂在 FileTreeWithTrash，
+ * 而 FileTreeController 消费面（既有测试桩、Toolbar/TreePanel 的 controller prop）保持窄面不破坏——
+ * 依赖位收两面并集，restore/purge 入口经此收窄。生产链 createFileTree 恒返回全量面；缺面=装配降级，
+ * 4305 明确报错（同 tree-store 的可选能力守卫手法，而非 "undefined is not a function"）。
+ */
+export function trashFace(tree: FileTreeController | FileTreeWithTrash): FileTreeWithTrash {
+  if (!('listTrash' in tree) || !('restoreTrash' in tree) || !('purgeTrash' in tree)) {
+    throw new SdkError(ERROR_CODES.UNSUPPORTED_MODE, '当前 tree 不支持回收站操作（restore/purge 需 FileTreeWithTrash 面）')
+  }
+  return tree
+}
+
 let downloadSeq = 0
 function nextId(): string {
   downloadSeq += 1
@@ -39,7 +52,9 @@ function nextId(): string {
 }
 
 export interface M1OverridesDeps {
-  tree: FileTreeController
+  /** P2-3 放宽：两面并集——既有 FileTreeController 窄面装配（测试桩/外部传入）不受影响，
+   *  trash 命令（restore/purge）入口经 trashFace 收窄为 FileTreeWithTrash */
+  tree: FileTreeController | FileTreeWithTrash
   queue: UploadQueue
   client: S3Client
   /** JSSDK 相对路径的树根（=config.backend.prefix） */
@@ -49,8 +64,14 @@ export interface M1OverridesDeps {
   emit(evt: EventName, payload: unknown): void
 }
 
-/** M1 实做命令：navigate/createFolder/rename/remove/uploadFiles/download */
-export function createM1Overrides(deps: M1OverridesDeps): Partial<Record<CommandName, CommandHandler>> {
+/**
+ * M3 回收站命令名：restore/purge 尚未收录进 CommandName（sdk/types.ts 主线持有、子 agent 只读）——
+ * 本地扩名注册；主线收录后 TrashCommandName 整体退化为 CommandName 即可（仅类型面改动）。
+ */
+type TrashCommandName = CommandName | 'restore' | 'purge'
+
+/** M1 实做命令：navigate/createFolder/rename/remove/uploadFiles/download + M3 restore/purge */
+export function createM1Overrides(deps: M1OverridesDeps): Partial<Record<TrashCommandName, CommandHandler>> {
   const { tree, queue, client, rootPrefix, features, emit } = deps
 
   /**
@@ -86,6 +107,33 @@ export function createM1Overrides(deps: M1OverridesDeps): Partial<Record<Command
     }
     return { accepted: result.accepted, rejected }
   }
+
+  /**
+   * M3 restore/purge 共用骨架：feature 门控（缺省放行、显式 false=4301，与 mkdir/rename/delete 同构）→
+   * paths 校验（同 remove：字符串数组；空批零调用直回 {}）→ tree.listTrash({}) 全量取 entries 按 key
+   * 过滤（JSSDK 相对路径经 joinKey 对齐 TrashEntry.key=bucket 全键；不在回收站的路径静默落空——
+   * 过滤后为空时批方法对空数组零调用）→ 批方法。TrashBatchError（SdkError 子类）原样冒泡不吞——
+   * 错误回报沿用 wrapCommand 现有管道（按 err.code 回 reply）。
+   */
+  const trashBatch = (feature: 'restore' | 'purge', method: 'restoreTrash' | 'purgeTrash'): CommandHandler =>
+    (payload) => {
+      requireFeature(features, feature)
+      const paths = (payload as { paths?: unknown })?.paths
+      if (!Array.isArray(paths) || paths.some((p) => typeof p !== 'string')) {
+        throw new SdkError(ERROR_CODES.BAD_PARAM, `${feature}.paths 必须是字符串数组`)
+      }
+      if (paths.length === 0) return {}
+      const want = new Set(paths.map((p) => joinKey(rootPrefix, p as string)))
+      const face = trashFace(tree)
+      // 门控/校验同步抛（与 remove 同构）；批调用走 async 链——face[method] 联合返回经 await 收敛，
+      // 绕开 .then 对 Promise 联合返回的推断坍缩
+      const run = async (): Promise<Record<string, never>> => {
+        const entries = await face.listTrash({})
+        await face[method](entries.filter((e) => want.has(e.key)))
+        return {}
+      }
+      return run()
+    }
 
   return {
     navigate: (payload) => {
@@ -125,6 +173,10 @@ export function createM1Overrides(deps: M1OverridesDeps): Partial<Record<Command
       if (paths.length === 0) return {}
       return tree.remove(paths.map((p) => joinKey(rootPrefix, p as string))).then(() => ({}))
     },
+
+    restore: trashBatch('restore', 'restoreTrash'),
+
+    purge: trashBatch('purge', 'purgeTrash'),
 
     uploadFiles: (payload) => {
       requireFeature(features, 'upload')

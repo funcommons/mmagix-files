@@ -16,6 +16,7 @@ import { docxRenderer } from './docx'
 import { xlsxRenderer } from './xlsx'
 import { mermaidViewerRenderer } from './mermaid'
 import { flowEditorRenderer } from './flow-editor'
+import { zipBrowserRenderer } from './zip'
 
 export const RENDERERS: Partial<Record<string, AppDefinition['renderer']>> = {
   'markdown-renderer': markdownRenderer,
@@ -31,4 +32,5 @@ export const RENDERERS: Partial<Record<string, AppDefinition['renderer']>> = {
   'heic-viewer': heicViewerRenderer, // Lane F6
   'flow-editor': flowEditorRenderer,
   'mermaid-viewer': mermaidViewerRenderer,
+  'zip-browser': zipBrowserRenderer, // M4-UI
 }
