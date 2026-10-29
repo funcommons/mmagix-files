@@ -24,7 +24,8 @@ export interface LoadJSONOptions {
 export function loadJSON<T>(key: string, fallback: T, options: LoadJSONOptions = {}): T {
   if (typeof window === 'undefined') return fallback
   try {
-    const raw = window.localStorage.getItem(options.prefix + key)
+    // prefix 缺省时不得字符串拼接出 'undefined' 前缀（历史 bug：'undefined'+key 污染存储键）
+    const raw = window.localStorage.getItem((options.prefix ?? '') + key)
     if (raw === null) return fallback
     return JSON.parse(raw) as T
   } catch {
@@ -39,7 +40,7 @@ export interface SaveJSONOptions {
 export function saveJSON<T>(key: string, value: T, options: SaveJSONOptions = {}): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(options.prefix + key, JSON.stringify(value))
+    window.localStorage.setItem((options.prefix ?? '') + key, JSON.stringify(value))
   } catch {
     // quota exceeded / private mode — silent
   }

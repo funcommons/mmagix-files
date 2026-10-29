@@ -24,7 +24,6 @@
  *   <FcImagePicker :recent-provider="createLocalStorageRecentProvider(`fc:recent:${userId}`)" />
  */
 import { ref, type Ref } from 'vue'
-import { useRecentList } from './recentList'
 
 export interface RecentProvider<T> {
   /** 拉取当前完整列表 (顺序敏感, 业务自行维护 LRU 顺序). */
@@ -44,22 +43,58 @@ export interface LocalStorageRecentOptions<T> {
   validate?: (item: T) => boolean
 }
 
-/** 默认实现: 内部走 useRecentList (localStorage), 对外暴露 async 接口. */
+/**
+ * 默认实现: 自含 localStorage LRU（去重前置 + 截断），对外暴露 async 接口.
+ *
+ * 2026-10-29 修复：原实现走 useRecentList 但调了其上不存在的 list.add/list.getAll/
+ * list.clear（实际为 pick/list/clear——pick 存）→ load/add 一调即抛 TypeError，
+ * useRecentProvider 的 catch 全部吞掉 → 「最近使用」静默失效。本实现不依赖 useRecentList，
+ * 直接 loadJSON/saveJSON 精确对齐 RecentProvider 契约（T 为 string URL 或带 id 对象均可——
+ * 去重按全等比较）。存储键沿用 'ux:recent:<key>' 形状（旧实现从未写成功，无数据迁移面）。
+ */
 export function createLocalStorageRecentProvider<T>(
   key: string,
   options: LocalStorageRecentOptions<T> = {},
 ): RecentProvider<T> {
-  const list = useRecentList<T>({
-    key,
-    limit: options.limit,
-    validate: options.validate,
-  })
+  const storageKey = `ux:recent:${key}`
+  const limit = options.limit ?? 12
+
+  const readAll = (): T[] => {
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      const parsed = raw === null ? [] : (JSON.parse(raw) as T[])
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  const writeAll = (items: T[]): void => {
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(items.slice(0, limit)))
+    } catch {
+      // quota / private mode — silent
+    }
+  }
+
+  /** 条目等价：string 直等；对象经 JSON 持久化往返后引用不同 → 序列化比较 */
+  const same = (a: T, b: T): boolean => a === b || JSON.stringify(a) === JSON.stringify(b)
 
   return {
-    load: async () => list.getAll(),
-    add: async (item: T) => { list.add(item) },
-    remove: async (item: T) => { list.remove(item) },
-    clear: async () => { list.clear() },
+    load: async () => readAll(),
+    add: async (item: T) => {
+      if (options.validate && !options.validate(item)) return
+      writeAll([item, ...readAll().filter((x) => !same(x, item))])
+    },
+    remove: async (item: T) => {
+      writeAll(readAll().filter((x) => !same(x, item)))
+    },
+    clear: async () => {
+      try {
+        window.localStorage.removeItem(storageKey)
+      } catch {
+        // silent
+      }
+    },
   }
 }
 
