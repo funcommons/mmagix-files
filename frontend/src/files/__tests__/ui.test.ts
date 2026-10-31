@@ -44,7 +44,7 @@ function fakeTree(opts: { bucket?: DirBucket; loading?: boolean } = {}): FileTre
     error: null,
     nodes,
     loadDir: vi.fn(async () => {}),
-    mkdir: vi.fn(async (_p: string, name: string) => `root/${name}/`),
+    mkdir: vi.fn(async (p: string, name: string) => `${p}${name}/`),
     rename: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
   }) as unknown as FileTreeController
@@ -638,6 +638,19 @@ describe('workspace-ops（Toolbar 与右键菜单共用操作链）', () => {
     expect(toast.error).toHaveBeenCalledWith('boom')
   })
 
+  it('createDir(target)：右键目录=其内建（mkdir 收 entry.key）；文件=其所在目录（与上传同口径）', async () => {
+    setup()
+    const tree = fakeTree()
+    const ops = createWorkspaceOps({ tree, t })
+    vi.mocked(ElMessageBox.prompt).mockResolvedValue({ value: 'sub' } as never)
+    // 目录行右键 → 建在它里面
+    expect(await ops.createDir(dir('root/apps-demo/', 'apps-demo'))).toBe('root/apps-demo/sub/')
+    expect(tree.mkdir).toHaveBeenCalledWith('root/apps-demo/', 'sub')
+    // 文件行右键 → 建在其所在目录
+    expect(await ops.createDir(file('root/x/b.txt', 'b.txt'))).toBe('root/x/sub/')
+    expect(tree.mkdir).toHaveBeenCalledWith('root/x/', 'sub')
+  })
+
   it('renameEntry：成功返回 {from,to}（目录保尾 /）；取消返回 null', async () => {
     setup()
     const tree = fakeTree()
@@ -701,6 +714,17 @@ describe('UploadPanel', () => {
   it('无任务时不渲染', () => {
     const w = mount(UploadPanel, { props: { tasks: [] } })
     expect(w.find('[data-testid="upload-panel"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('embedded（弹窗「传输」页签嵌入）：无面板头/无拖高把手/无关闭钮，仅裸任务清单', () => {
+    const w = mount(UploadPanel, { props: { tasks: [task()], embedded: true } })
+    expect(w.find('[data-testid="upload-panel"]').exists()).toBe(true)
+    expect(w.find('[data-testid="upload-resize"]').exists()).toBe(false)
+    expect(w.find('[data-testid="upload-close"]').exists()).toBe(false)
+    expect(w.find('.upload-panel__head').exists()).toBe(false)
+    expect(w.findAll('[data-testid="upload-item"]').length).toBe(1)
+    expect(w.find('.upload-panel.is-embedded').exists()).toBe(true)
     w.unmount()
   })
 

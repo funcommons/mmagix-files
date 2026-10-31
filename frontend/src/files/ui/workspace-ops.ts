@@ -15,6 +15,12 @@ import type { FileTreeController, FileTreeWithTrash, TrashEntry } from '../tree-
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
+/** key 所属父目录前缀（文件行右键 mkdir/upload 的「所在目录」口径，与 Home 同款） */
+function parentPrefixOf(key: string): string {
+  const i = key.lastIndexOf('/')
+  return i < 0 ? '' : key.slice(0, i + 1)
+}
+
 export interface WorkspaceOpsDeps {
   /** P2-3 放宽：两面并集——Toolbar/TreePanel 的 FileTreeController 窄面 prop 照常装配；
    *  回收站入口（restoreEntries/purgeEntries）经 trashFace 收窄（缺面=4305 明确报错，
@@ -29,8 +35,8 @@ export interface RenameResult {
 }
 
 export interface WorkspaceOps {
-  /** 新建目录（当前目录下）；取消/失败返回 null，成功返回新目录 key */
-  createDir(): Promise<string | null>
+  /** 新建目录（右键目录=其内、文件=其所在目录、无 target=当前目录）；取消/失败返回 null，成功返回新目录 key */
+  createDir(target?: S3ObjectSummary): Promise<string | null>
   /** 重命名；取消/失败返回 null，成功返回 {from,to} */
   renameEntry(entry: S3ObjectSummary): Promise<RenameResult | null>
   /** 删除（支持多选）；取消/失败返回 null，成功返回调用方 keys */
@@ -54,21 +60,20 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps): WorkspaceOps {
     cancelButtonText: t('common.cancel'),
   }
 
-  async function createDir(): Promise<string | null> {
-    // 弹窗实时预览新建后的完整路径（订单 2026-10）：当前目录 + 输入名随打随显
+  async function createDir(target?: S3ObjectSummary): Promise<string | null> {
+    // 父目录：右键目录=其内（文件=其所在目录，与上传同口径）；无 target（树头/空白菜单）=当前目录
+    const parent = target ? (target.isDir ? target.key : parentPrefixOf(target.key)) : tree.currentPath
+    // 弹窗实时预览新建后的完整路径（「请输入目录名」提示行已裁掉）：父目录 + 输入名随打随显；
+    // 父目录空串（桶根）→ 显示 '/'
     const nameRef = ref('')
     const MkdirHint = () =>
-      h('div', null, [
-        h('div', null, t('files.prompt.mkdir-hint')),
-        h(
-          'div',
-          {
-            style:
-              'margin-top:6px;font-size:12px;word-break:break-all;color:var(--app-text-secondary, #909399)',
-          },
-          `${t('files.prompt.mkdir-full')}${tree.currentPath}${nameRef.value || '…'}/`,
-        ),
-      ])
+      h(
+        'div',
+        {
+          style: 'font-size:13px;word-break:break-all;color:var(--app-text-secondary, #909399)',
+        },
+        `${t('files.prompt.mkdir-full')}${parent || '/'}${nameRef.value ? `${nameRef.value}/` : ''}`,
+      )
     try {
       const { value } = await ElMessageBox.prompt(h(MkdirHint), t('files.prompt.mkdir-title'), {
         ...PROMPT_OPTS,
@@ -77,7 +82,7 @@ export function createWorkspaceOps(deps: WorkspaceOpsDeps): WorkspaceOps {
           return /\S/.test(v ?? '') ? true : t('files.prompt.name-required')
         },
       })
-      return await tree.mkdir(tree.currentPath, value.trim())
+      return await tree.mkdir(parent, value.trim())
     } catch (e) {
       fail(e)
       return null

@@ -27,9 +27,16 @@ const confirmBtn = (w: VueWrapper) => w.find('[data-testid="upload-dialog-confir
 const countEl = (w: VueWrapper) => w.find('[data-testid="upload-dialog-count"]')
 const targetEl = (w: VueWrapper) => w.find('[data-testid="upload-dialog-target"]')
 
-/** 直挂 open=true 内容不渲染（el-dialog 懒渲染）——false 挂载后翻转开启 */
-async function mountOpen(props: { open?: boolean; dir: string } = { dir: 'docs/' }) {
-  const w = mount(UploadDialog, { props: { open: false, ...props }, global: { stubs: { teleport: true } } })
+/** 直挂 open=true 内容不渲染（el-dialog 懒渲染）——false 挂载后翻转开启；slots 可注传输页签内容 */
+async function mountOpen(
+  props: { open?: boolean; dir: string; tab?: 'upload' | 'transfer' } = { dir: 'docs/' },
+  slots: Record<string, string> = {},
+) {
+  const w = mount(UploadDialog, {
+    props: { open: false, ...props },
+    slots,
+    global: { stubs: { teleport: true } },
+  })
   await w.setProps({ open: true })
   return w
 }
@@ -74,10 +81,10 @@ describe('UploadDialog（上传确认弹窗：目录展示 + 选文件 + 确认�
     w.unmount()
   })
 
-  it('确认：emit confirm(File[])（顺序保持）+ update:open(false)；取消：只 update:open(false) 不 emit confirm', async () => {
+  it('确认：emit confirm(File[])（顺序保持）+ update:open(false) 关门（重开传输页签由 Home 编排）；取消：只关门不 emit confirm', async () => {
     const f1 = mkFile('a.txt', 3)
     const f2 = mkFile('b.txt', 3)
-    const w = await mountOpen({ dir: 'root/x/' })
+    const w = await mountOpen({ dir: 'root/x/' }, { transfer: '<div data-testid="slot-tasks">TASKS</div>' })
     await dropFiles(w, [f1, f2])
     await confirmBtn(w).trigger('click')
     const confirmed = w.emitted('confirm')
@@ -105,5 +112,33 @@ describe('UploadDialog（上传确认弹窗：目录展示 + 选文件 + 确认�
     expect(countEl(w).text()).toContain('files.upload.dialog-selected')
     expect(targetEl(w).text()).toContain('other/')
     w.unmount()
+  })
+
+  it('双 Tab（上传|传输）：默认落上传页（确认钮在上传页）；点击「传输」切页渲染 #transfer 槽、无确认钮；tab=transfer 直落传输页', async () => {
+    // 默认：上传页——拖放区 + 确认钮在
+    const w = await mountOpen({ dir: 'docs/' }, { transfer: '<div data-testid="slot-tasks">TASKS</div>' })
+    expect(w.find('[data-testid="upload-dialog-zone"]').exists()).toBe(true)
+    expect(confirmBtn(w).exists()).toBe(true)
+    expect(w.find('[data-testid="slot-tasks"]').exists()).toBe(false)
+    // 点「传输」段钮（FcSegmented option button）→ 上传内容收起、槽内容渲染、确认钮消失（取消仍在）
+    const segBtns = w.findAll('.fc-segmented__item')
+    expect(segBtns).toHaveLength(2)
+    await segBtns[1]!.trigger('click')
+    expect(w.find('[data-testid="upload-dialog-zone"]').exists()).toBe(false)
+    expect(w.find('[data-testid="slot-tasks"]').exists()).toBe(true)
+    expect(confirmBtn(w).exists()).toBe(false)
+    expect(w.find('[data-testid="upload-dialog-cancel"]').exists()).toBe(true)
+    // 切回上传页：内容与确认钮恢复
+    await w.findAll('.fc-segmented__item')[0]!.trigger('click')
+    expect(w.find('[data-testid="upload-dialog-zone"]').exists()).toBe(true)
+    expect(confirmBtn(w).exists()).toBe(true)
+    w.unmount()
+
+    // tab=transfer 打开直落传输页
+    const w2 = await mountOpen({ dir: 'docs/', tab: 'transfer' }, { transfer: '<div data-testid="slot-tasks2">TASKS2</div>' })
+    expect(w2.find('[data-testid="upload-dialog-zone"]').exists()).toBe(false)
+    expect(w2.find('[data-testid="slot-tasks2"]').exists()).toBe(true)
+    expect(confirmBtn(w2).exists()).toBe(false)
+    w2.unmount()
   })
 })

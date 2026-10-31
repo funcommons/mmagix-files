@@ -25,11 +25,11 @@
  *    queue.status 轮询同步——bus.emit 仅外发宿主、本地 handler 不触发，故 upload* 事件不能作
  *    面板数据源）；下载任务来自 DownloadQueue（reactive 列表直读）。
  */
-import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { inject } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { FcButton, FcDrawer, FcPopover, FcSectionCard, FcSegmented, toast } from '@/components/sdk'
+import { FcButton, FcDrawer, FcEmpty, FcPopover, FcSectionCard, FcSegmented, toast } from '@/components/sdk'
 import { usePreferenceStore } from '@/store/preference'
 import { BOOT_KEY } from '@/boot'
 import { SdkError, ERROR_CODES } from '@/sdk/errorCodes'
@@ -427,9 +427,11 @@ function parentPrefixOf(key: string): string {
  *  拖拽落树/粘贴上传为显式手势不走弹窗（目标即当前目录，保持直入）。 */
 const uploadDialogOpen = ref(false)
 const uploadDialogDir = ref('')
+const uploadDialogTab = ref<'upload' | 'transfer'>('upload')
 function openUploadDialog(dir: string): void {
   if (features.value.upload === false) return
   uploadDialogDir.value = dir
+  uploadDialogTab.value = 'upload'
   uploadDialogOpen.value = true
 }
 /** 树头「上传」（TreePanel upload-request）：目标=当前目录 */
@@ -437,10 +439,32 @@ function onTreeUploadRequest(): void {
   if (!ws) return
   openUploadDialog(ws.stores.tree.currentPath)
 }
-/** 弹窗确认：入队带任务登记/冲突确认（trackedEnqueue 收口，拒收 toast 自收敛）；关弹窗由 v-model:open 承接 */
+/** 弹窗确认（订单 2026-10 流程：确认即关窗）：
+ *  关窗 → trackedEnqueue（重名冲突提示此时不再被弹窗遮挡，与旧直传链同观感）→
+ *  「成功开始入队」（accepted>0）才重开弹窗落在传输页签；全部被拒/用户取消 → 保持关门（toast 自收敛） */
 function onUploadDialogConfirm(files: File[]): void {
-  void trackedEnqueue(files, uploadDialogDir.value)
+  uploadDialogOpen.value = false
+  void trackedEnqueue(files, uploadDialogDir.value).then((r) => {
+    if (r.accepted.length > 0) {
+      uploadDialogTab.value = 'transfer'
+      uploadDialogOpen.value = true
+    }
+  })
 }
+/** 传输任务中心（2026-10 并入上传弹窗「传输」页签；底部悬浮面板退役） */
+function openTransferPanel(): void {
+  uploadDialogTab.value = 'transfer'
+  uploadDialogOpen.value = true
+}
+/** 进行中传输数（上传 uploading/paused + 下载 active）——传输入口钮角标 */
+const activeTransferCount = computed(() => {
+  const up = uploadTasks.value.filter((x) => x.status === 'uploading' || x.status === 'paused').length
+  const down = (downloads?.tasks ?? []).filter((x) => x.status === 'active').length
+  return up + down
+})
+const transferEmpty = computed(
+  () => uploadTasks.value.length === 0 && (downloads?.tasks ?? []).length === 0,
+)
 
 // ── M3 接线：回收站视图（TrashPanel 抽屉挂载；restore/purge 走 workspace-ops 收口） ──
 
@@ -640,23 +664,6 @@ async function onTrashEmpty(): Promise<void> {
  * R2-01：命令面板「打开传输面板」（cmd:transfers）——滚动定位 + 短暂高亮；
  * 面板未渲染（无任何任务）时以 toast 兜底告知当前无传输任务。
  */
-function openTransferPanel(): void {
-  transferReopen.value++ // 面板被 X 关闭时，命令面板「传输任务」= 手动重开入口（watch reopenKey → closed=false）
-  void nextTick(() => {
-    const el = document.querySelector('[data-testid="upload-panel"]')
-    if (!el) {
-      toast.info(t('transfer.title'))
-      return
-    }
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    el.classList.add('is-highlighted')
-    window.setTimeout(() => el.classList.remove('is-highlighted'), 2500)
-  })
-}
-
-/** 传输面板手动重开信号（命令面板「传输任务」bump；UploadPanel watch reopenKey 关→开） */
-const transferReopen = ref(0)
-
 /** 粘贴上传（Lane G1）：clipboardData.files>0 → 入队当前目录（features.upload 门控，卸载解绑） */
 function onPaste(e: ClipboardEvent): void {
   if (!ws || features.value.upload === false) return
@@ -785,7 +792,8 @@ async function onMenuAction(payload: {
 }): Promise<void> {
   if (!ops) return
   if (payload.action === 'mkdir') {
-    await ops.createDir()
+    // 右键目录=其内建（文件=其所在目录，与上传同口径）；entry 缺失（异常路径）=当前目录
+    await ops.createDir(payload.entry)
     return
   }
   const { entry } = payload
@@ -1250,6 +1258,20 @@ if (ws) {
             >
               <i :class="previewFullscreen ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'" />
             </button>
+            <!-- 传输任务中心入口（2026-10 并入上传弹窗「传输」页签；角标=进行中任务数） -->
+            <button
+              type="button"
+              class="ws__transfer-btn"
+              data-testid="transfers-open"
+              :title="t('transfer.title')"
+              :aria-label="t('transfer.title')"
+              @click="openTransferPanel"
+            >
+              <i class="ri-arrow-left-right-line" />
+              <span v-if="activeTransferCount > 0" class="ws__transfer-badge" data-testid="transfers-badge">
+                {{ activeTransferCount > 99 ? '99+' : activeTransferCount }}
+              </span>
+            </button>
             <!-- ⓘ 状态弹窗（2026-10 迁入文件工具栏最右侧；无文件时常显） -->
             <span class="ws__info-wrap">
               <FcPopover trigger="click" placement="bottom-end" :width="264">
@@ -1352,20 +1374,36 @@ if (ws) {
         tabindex="-1"
         @change="onResumeFilePicked"
       />
-      <!-- Lane G1：传输任务中心（上传 + 下载统一视图；终态清除，进行中/暂停保留） -->
-      <UploadPanel
-        :tasks="uploadTasks"
-        :downloads="downloads?.tasks ?? []"
-        :reopen-key="transferReopen"
-        @pause="onPauseUpload"
-        @resume="onResumeUpload"
-        @retry="onRetryUpload"
-        @cancel="onCancelUpload"
-        @clear="onClearUploads"
-        @download-cancel="onCancelDownload"
-        @download-retry="onRetryDownload"
-        @download-clear="onClearDownloads"
-      />
+      <!-- Lane G1：传输任务中心 2026-10 并入上传弹窗「传输」页签（底部悬浮面板退役）；
+           入口=预览头传输钮（角标=进行中数）/⌘K「传输任务」/上传弹窗切页签 -->
+      <UploadDialog
+        v-model:open="uploadDialogOpen"
+        :dir="uploadDialogDir"
+        :tab="uploadDialogTab"
+        @confirm="onUploadDialogConfirm"
+      >
+        <template #transfer>
+          <UploadPanel
+            embedded
+            :tasks="uploadTasks"
+            :downloads="downloads?.tasks ?? []"
+            @pause="onPauseUpload"
+            @resume="onResumeUpload"
+            @retry="onRetryUpload"
+            @cancel="onCancelUpload"
+            @clear="onClearUploads"
+            @download-cancel="onCancelDownload"
+            @download-retry="onRetryDownload"
+            @download-clear="onClearDownloads"
+          />
+          <FcEmpty
+            v-if="transferEmpty"
+            type="no-data"
+            :title="t('transfer.empty')"
+            data-testid="transfer-empty"
+          />
+        </template>
+      </UploadDialog>
       <!-- Lane G2：全局搜索面板（扫描/过滤/打开/定位） -->
       <SearchDialog
         v-model:open="searchOpen"
@@ -1413,14 +1451,6 @@ if (ws) {
       <p class="home-hero__subtitle">{{ t('home.subtitle') }}</p>
       <FcButton variant="secondary" @click="localeModel = localeModel === 'zh-CN' ? 'en-US' : 'zh-CN'">{{ t('home.toggle-locale') }}</FcButton>
     </FcSectionCard>
-
-    <!-- 上传确认弹窗（置条件链外）：目标目录 + 拖放/点选区，confirm 才 trackedEnqueue 入队；
-         入口=树头「上传」/空白右键/行右键（upload-request / menu-action 统一汇入 openUploadDialog） -->
-    <UploadDialog
-      v-model:open="uploadDialogOpen"
-      :dir="uploadDialogDir"
-      @confirm="onUploadDialogConfirm"
-    />
   </div>
 </template>
 
@@ -1772,6 +1802,44 @@ if (ws) {
       background: color-mix(in srgb, var(--app-primary) 10%, transparent);
       color: var(--app-text);
     }
+  }
+
+  /* 传输任务中心入口：ghost 图标钮（口径同 fs-btn）+ 右上角进行中数角标 */
+  .ws__transfer-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border: none;
+    border-radius: var(--app-radius-sm);
+    background: transparent;
+    color: var(--app-text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+
+    &:hover {
+      background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+      color: var(--app-text);
+    }
+  }
+
+  .ws__transfer-badge {
+    position: absolute;
+    top: -3px;
+    right: -4px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: var(--app-primary);
+    color: var(--app-on-primary, #fff);
+    font-size: 10px;
+    line-height: 14px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
   /* ⓘ 恒居最右（tabs flex:1 占满时自然靠右；无 tab 时由 auto 推右） */

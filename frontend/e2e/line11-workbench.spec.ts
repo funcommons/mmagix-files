@@ -36,6 +36,12 @@ async function dialogUpload(
   await root.locator('[data-testid="upload-dialog-confirm"]').click()
 }
 
+/** 打开传输任务中心（2026-10：并入上传弹窗「传输」页签）：点预览头传输钮 → 弹窗内任务面板可见 */
+async function openTransfers(root: import('@playwright/test').FrameLocator | import('@playwright/test').Page) {
+  await root.locator('[data-testid="transfers-open"]').click()
+  await expect(root.locator('[data-testid="upload-panel"]')).toBeVisible()
+}
+
 async function openWorkspace(
   page: import('@playwright/test').Page,
   opts: { delayPutKeys?: Record<string, number> } = {},
@@ -91,8 +97,8 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
       .poll(async () => state.putRequests.includes(`${MOCK_PREFIX}dropped-dnd.txt`), { timeout: 15_000 })
       .toBe(true)
     await expect(page.locator('[data-testid="row"]', { hasText: 'dropped-dnd.txt' })).toBeVisible({ timeout: 10_000 })
+    await openTransfers(page)
     const panel = page.locator('[data-testid="upload-panel"]')
-    await expect(panel).toBeVisible()
     await expect(panel.locator('[data-testid="upload-item"]', { hasText: 'dropped-dnd.txt' })).toContainText('已完成')
     await shot(page, 'wb-02-dragdrop-upload-pass.png')
     console.log('[wb-02] console 证据：\n' + consoleEvidence(cap))
@@ -133,8 +139,8 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
       { name: 'quick.txt', mimeType: 'text/plain', buffer: Buffer.from('quick') },
       { name: 'slow.txt', mimeType: 'text/plain', buffer: Buffer.from('slow payload') },
     ])
+    await openTransfers(page)
     const panel = page.locator('[data-testid="upload-panel"]')
-    await expect(panel).toBeVisible()
     await expect(panel.locator('[data-testid="upload-item"]', { hasText: 'quick.txt' })).toContainText('已完成', {
       timeout: 10_000,
     })
@@ -166,8 +172,8 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
       .poll(async () => state.putRequests.includes(`${MOCK_PREFIX}pasted-clip.txt`), { timeout: 15_000 })
       .toBe(true)
     await expect(page.locator('[data-testid="row"]', { hasText: 'pasted-clip.txt' })).toBeVisible({ timeout: 10_000 })
+    await openTransfers(page)
     const panel = page.locator('[data-testid="upload-panel"]')
-    await expect(panel).toBeVisible()
     await expect(panel.locator('[data-testid="upload-item"]', { hasText: 'pasted-clip.txt' })).toContainText('已完成')
     await shot(page, 'wb-05-paste-upload-pass.png', false)
     console.log('[wb-05] console 证据：\n' + consoleEvidence(cap))
@@ -269,8 +275,8 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
       { name: 'quick.txt', mimeType: 'text/plain', buffer: Buffer.from('quick') },
       { name: 'slow.txt', mimeType: 'text/plain', buffer: Buffer.from('slow payload') },
     ])
+    await openTransfers(page)
     const panel = page.locator('[data-testid="upload-panel"]')
-    await expect(panel).toBeVisible()
     await expect(panel.locator('[data-testid="upload-item"]', { hasText: 'quick.txt' })).toContainText('已完成', {
       timeout: 10_000,
     })
@@ -291,7 +297,7 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
     await page.keyboard.press('Escape')
     await expect(page.locator('.fc-cp')).toBeHidden()
 
-    // ④ cmd:transfers：命令模式 >传输 → 「传输任务」命令 → 回车执行 → 面板滚动定位 + 短暂高亮
+    // ④ cmd:transfers：命令模式 >传输 → 「传输任务」命令 → 回车执行 → 传输弹窗（任务面板可见）
     await page.keyboard.press(`${MOD_KEY}+k`)
     await expect(page.locator('.fc-cp')).toBeVisible()
     await paletteInput.fill('>传输')
@@ -299,7 +305,8 @@ test.describe('业务线11：工作台交互面（Lane F5）', () => {
     await expect(transfersCmd).toBeVisible()
     await page.keyboard.press('Enter')
     await expect(page.locator('.fc-cp')).toBeHidden()
-    await expect(panel).toHaveClass(/is-highlighted/)
+    // 2026-10：任务中心并入上传弹窗「传输」页签——命令直达弹窗内任务面板（此前=底部面板高亮）
+    await expect(page.locator('[data-testid="upload-panel"]')).toBeVisible()
 
     await shot(page, 'wb-08-command-palette-pass.png', false)
     console.log('[wb-08] console 证据：\n' + consoleEvidence(cap))

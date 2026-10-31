@@ -33,12 +33,15 @@ export interface DownloadTaskView {
   error?: string
 }
 
-const props = defineProps<{
-  tasks: UploadTaskView[]
-  downloads?: DownloadTaskView[]
-  /** 重开信号（Home 命令面板「传输任务」bump）：面板被 X 关闭后的手动重开入口 */
-  reopenKey?: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    tasks: UploadTaskView[]
+    downloads?: DownloadTaskView[]
+    /** 嵌入模式（UploadDialog「传输」页签）：裸任务清单——无面板头/拖高把手/底色边框 */
+    embedded?: boolean
+  }>(),
+  { embedded: false },
+)
 
 const emit = defineEmits<{
   /** 上传：暂停/继续/重试/取消单条（Home 接 queue.pause/resume/retry/abort） */
@@ -74,18 +77,12 @@ const DOWNLOAD_STATUS_KEY: Record<DownloadTaskView['status'], string> = {
 
 const isEmpty = computed(() => props.tasks.length === 0 && (props.downloads ?? []).length === 0)
 
-/** 关闭态：点 X=整面板消失（不是折成一行）；新任务从 0→N 入列自动重现，命令面板「传输任务」可手动重开 */
+/** 关闭态：点 X=整面板消失（不是折成一行）；新任务从 0→N 入列自动重现；嵌入模式无 X 不可关 */
 const closed = ref(false)
 const totalTasks = computed(() => props.tasks.length + (props.downloads ?? []).length)
 watch(totalTasks, (n, o) => {
   if (o === 0 && n > 0) closed.value = false
 })
-watch(
-  () => props.reopenKey,
-  () => {
-    closed.value = false
-  },
-)
 
 /** 面板高度：拖**顶缘**手柄改高（96–480px，面板贴底、上缘=唯一可见动缘），localStorage 持久化；
  *  null=默认不限制（跟随内容）。拖动即锁定固定 height（maxHeight 在内容不溢出时无视觉反馈——旧版「拖不动」根因） */
@@ -94,7 +91,9 @@ const HEIGHT_MIN = 96
 const HEIGHT_MAX = 480
 const bodyEl = ref<HTMLElement | null>(null)
 const heightPx = ref<number | null>(readHeight())
-const bodyStyle = computed(() => (heightPx.value != null ? { height: `${heightPx.value}px` } : undefined))
+const bodyStyle = computed(() =>
+  props.embedded || heightPx.value == null ? undefined : { height: `${heightPx.value}px` },
+)
 
 function readHeight(): number | null {
   try {
@@ -140,9 +139,15 @@ function downloadPercentOf(task: DownloadTaskView): number {
 </script>
 
 <template>
-  <section v-if="!isEmpty && !closed" class="upload-panel" data-testid="upload-panel">
-    <!-- 顶缘拖高把手：面板贴底、上缘是唯一可见动缘（向上拖=变高；向下拖=变矮） -->
+  <section
+    v-if="!isEmpty && !closed"
+    class="upload-panel"
+    :class="{ 'is-embedded': embedded }"
+    data-testid="upload-panel"
+  >
+    <!-- 顶缘拖高把手：面板贴底、上缘是唯一可见动缘（向上拖=变高；向下拖=变矮）；嵌入模式无把手 -->
     <div
+      v-if="!embedded"
       class="upload-panel__resize"
       data-testid="upload-resize"
       role="separator"
@@ -151,7 +156,7 @@ function downloadPercentOf(task: DownloadTaskView): number {
       @pointermove="onResizeMove"
       @pointerup="onResizeUp"
     />
-    <header class="upload-panel__head">
+    <header v-if="!embedded" class="upload-panel__head">
       <i class="ri-arrow-left-right-line upload-panel__title-icon" />
       <span class="upload-panel__title">{{ t('transfer.title') }}</span>
       <span class="upload-panel__hint">{{ t('transfer.paste-hint') }}</span>
@@ -291,6 +296,13 @@ function downloadPercentOf(task: DownloadTaskView): number {
   border: 1px solid var(--app-section-border-color);
   border-radius: var(--app-section-radius);
   color: var(--app-text-primary);
+}
+
+/* 嵌入模式（弹窗「传输」页签）：裸清单——去面板底色/边框/内边距 */
+.upload-panel.is-embedded {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .upload-panel__head {

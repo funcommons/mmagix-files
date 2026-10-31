@@ -751,12 +751,14 @@ export default {
       cancelled: 'Cancelled',
       cancel: 'Cancel',
       clear: 'Clear finished',
-      'dialog-title': 'Upload files',
+      'dialog-title': 'Files',
       'dialog-target': 'Upload to',
       'dialog-hint': 'Click to browse, or drop files here',
       'dialog-drop': 'Release to add files',
       'dialog-selected': '{n} file(s) selected',
       'dialog-confirm': 'Start upload',
+      'dialog-tab-upload': 'Upload',
+      'dialog-tab-transfer': 'Transfers',
     },
     menu: {
       open: 'Open',
@@ -851,6 +853,7 @@ export default {
   transfer: {
     title: 'Transfers',
     close: 'Close',
+    empty: 'No transfer tasks',
     retry: 'Retry',
     paused: 'Paused',
     pause: 'Pause',

@@ -135,6 +135,8 @@ test.describe('业务线5：上传', () => {
     await expect.poll(async () => state.putRequests.filter((k) => k === conflictKey).length, { timeout: 15_000 }).toBe(1)
     const evt = await findEvent(page, 'uploadDone')
     expect(evt.payload).toMatchObject({ key: conflictKey })
+    // 2026-10：任务中心并入上传弹窗「传输」页签——开传输页签后断言终态
+    await frame.locator('[data-testid="transfers-open"]').click()
     await expect(panel.locator('[data-testid="upload-item"]', { hasText: 'notes.txt' })).toContainText('已完成', {
       timeout: 10_000,
     })

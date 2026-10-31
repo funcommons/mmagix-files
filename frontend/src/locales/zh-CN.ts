@@ -751,12 +751,14 @@ export default {
       cancelled: '已取消',
       cancel: '取消',
       clear: '清除记录',
-      'dialog-title': '上传文件',
+      'dialog-title': '文件',
       'dialog-target': '上传到',
       'dialog-hint': '点击选择文件，或拖拽文件到此处',
       'dialog-drop': '松开添加到列表',
       'dialog-selected': '已选 {n} 个文件',
       'dialog-confirm': '开始上传',
+      'dialog-tab-upload': '上传',
+      'dialog-tab-transfer': '传输',
     },
     menu: {
       open: '打开',
@@ -851,6 +853,7 @@ export default {
   transfer: {
     title: '传输任务',
     close: '关闭',
+    empty: '暂无传输任务',
     retry: '重试',
     paused: '已暂停',
     pause: '暂停',
