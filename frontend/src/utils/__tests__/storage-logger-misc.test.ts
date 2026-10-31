@@ -89,7 +89,6 @@ describe('download：triggerDownload（锚点挂载→click→移除）', () => 
 
   it('SSR（无 document）静默', () => {
     const doc = globalThis.document
-    // @ts-expect-error 测试性删除
     delete (globalThis as { document?: unknown }).document
     expect(() => triggerDownload('u', 'n')).not.toThrow()
     globalThis.document = doc

@@ -36,7 +36,15 @@ function makeQueue() {
     resumeCheckpoints: vi.fn(async () => []),
     discardCheckpoint: vi.fn(async () => {}),
     partSizeFor: vi.fn(() => 8 * 1024 * 1024),
-    enqueue: vi.fn(async () => ({ accepted: [{ id: 'u1' }], rejected: [] })),
+    enqueue: vi.fn(
+      async (
+        _files: File[] = [],
+        _prefix?: string,
+      ): Promise<{ accepted: { id: string }[]; rejected: { name: string; reason: string }[] }> => ({
+        accepted: [],
+        rejected: [],
+      }),
+    ),
     enqueueResume: vi.fn(() => null),
     status: vi.fn(() => undefined),
     errorOf: vi.fn(() => undefined),
@@ -111,6 +119,13 @@ describe('Home × UploadDialog：开始上传 → enqueue + 转传输页不关�
 
   it('确认 → 先关窗 → enqueue(files, 当前目录) 成功开始 → 重开弹窗落传输页签', async () => {
     const { w, queue } = mountHome()
+    // 入队延迟 500ms：把「关窗（~300ms 过渡可观察）」与「重开」在时间轴上分离（模拟真实冲突 HEAD 探测间隔）
+    queue.enqueue.mockImplementationOnce(
+      () =>
+        new Promise((r) =>
+          setTimeout(() => r({ accepted: [{ id: 'u1' }, { id: 'u2' }], rejected: [] }), 500),
+        ),
+    )
     await flushPromises()
 
     // 树头「上传」→ 弹窗开（上传页）
@@ -125,16 +140,17 @@ describe('Home × UploadDialog：开始上传 → enqueue + 转传输页不关�
     await flushPromises()
     expect(w.findAll('[data-testid="upload-dialog-file"]')).toHaveLength(2)
 
-    // 开始上传 → 立即关门 →（enqueue 即时 resolve 的 jsdom 里关门是瞬态，无法观察；
-    // 真实浏览器由冲突 HEAD 网络间隔保证「关窗→提示→开传输页」的观感）→ accepted>0 重开
+    // 开始上传 → 关窗（冲突提示不再被遮挡）；t≈380ms 时 enqueue 未返回 → 弹窗应处于关闭态
     await w.find('[data-testid="upload-dialog-confirm"]').trigger('click')
     await flushPromises()
     await settle()
-
-    // enqueue 带文件与当前目录前缀；accepted>0 → 重开弹窗落传输页签
     expect(queue.enqueue).toHaveBeenCalledTimes(1)
+    expect(w.find('[data-testid="upload-dialog-cancel"]').isVisible()).toBe(false)
+
+    // t>500ms 入队成功返回（accepted>0）→ 重开弹窗落传输页签
+    await settle(500)
     const [files, prefix] = queue.enqueue.mock.calls[0]!
-    expect((files as File[]).map((f) => f.name)).toEqual(['a.txt', 'b.txt'])
+    expect((files ?? []).map((f) => f.name)).toEqual(['a.txt', 'b.txt'])
     expect(prefix).toBe('docs/')
     expect(w.find('[data-testid="upload-dialog-transfer"]').isVisible()).toBe(true)
     expect(w.find('[data-testid="upload-dialog-cancel"]').isVisible()).toBe(true)

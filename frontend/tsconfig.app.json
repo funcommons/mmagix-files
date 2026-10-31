@@ -27,5 +27,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  /* 测试文件不进 vue-tsc -b 构建门禁：测试运行时门禁是 vitest（含 runtime 断言）；
+     noUncheckedIndexedAccess 对既有测试的索引访问写法过严（zip-reader 等百处二进制下标），
+     发布构建只验 src 产物代码（2026-10-31 发版 v1.3.0 起） */
+  "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.spec.ts"]
 }

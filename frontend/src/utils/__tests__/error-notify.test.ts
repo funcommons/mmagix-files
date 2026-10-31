@@ -28,7 +28,7 @@ import { getFriendlyMessage, isKnownCode } from '../errorMessages'
 import { useIdempotentSubmit } from '../idempotency'
 
 beforeEach(() => {
-  elMessage.mockClear()
+  ;(elMessage as unknown as { mockClear(): void }).mockClear() // fn 本体是 vi.fn（手塑类型藏了 Mock 面）
   elMessage.error.mockClear()
   elMessage.success.mockClear()
   elMessage.warning.mockClear()
@@ -55,11 +55,11 @@ describe('handleError：统一错误入口', () => {
         details: [
           { field: 'code', message: '不能为空' },
           { field: 'name', message: '过长', rejectedValue: 'x'.repeat(70) },
-          { message: '无名错误' },
+          { message: '无名错误' } as never, // 无字段名条目（渲染时不带 field 前缀）
         ],
       }),
     )
-    const msg = elMessage.mock.calls[0]![0] as { message: string }
+    const msg = (elMessage.mock as { calls: unknown[][] }).calls[0]![0] as { message: string; duration: number }
     const lines = msg.message.split('\n')
     expect(lines).toHaveLength(4)
     expect(lines[0]).toBe('校验失败')

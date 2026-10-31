@@ -21,7 +21,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      /* element-plus peer 断链补桥：pnpm 严格隔离下 element-plus@2.14.7 自身无 @vue/shared，
+         rollup 从其目录解析必炸（锁文件重算遗留坑，同 xlsx-viewer 线 vitest 断链同源）——
+         alias 直连本仓根级 @vue/shared（版本恒随 vue@3.5.44） */
+      '@vue/shared': resolve(__dirname, 'node_modules/@vue/shared')
     }
   },
   css: {

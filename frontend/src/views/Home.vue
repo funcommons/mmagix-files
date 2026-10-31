@@ -1398,7 +1398,7 @@ if (ws) {
           />
           <FcEmpty
             v-if="transferEmpty"
-            type="no-data"
+            type="empty"
             :title="t('transfer.empty')"
             data-testid="transfer-empty"
           />

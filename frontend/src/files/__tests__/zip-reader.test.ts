@@ -306,7 +306,7 @@ describe('zip-reader（M4 在线解压解析器）', () => {
       const data = TE.encode('a'.repeat(2048))
       const zip = zipSync({ 't.txt': data }, { level: 0 })
       const central = await parseCentralDirectory(readerOf(zip))
-      const e = central.entries[0]
+      const e = central.entries[0]!
       expect(e.method).toBe(0)
       expect(e.size).toBe(2048)
       expect(e.compressedSize).toBe(2048)
@@ -324,15 +324,15 @@ describe('zip-reader（M4 在线解压解析器）', () => {
       const zip = buildRawZip([{ name: GBK_NAME, data: TE.encode('中文内容'), flags: 0 }]) // bit11=0
       const central = await parseCentralDirectory(readerOf(zip))
       expect(central.entries.length).toBe(1)
-      expect(central.entries[0].name).toBe('报表.txt')
-      expect(central.entries[0].size).toBe(TE.encode('中文内容').length)
+      expect(central.entries[0]!.name).toBe('报表.txt')
+      expect(central.entries[0]!.size).toBe(TE.encode('中文内容').length)
     })
 
     it('flag bit11=1：名字为 UTF-8 字节 → 走 flag 通道直接 UTF-8 解码（对照用例）', async () => {
       const zip = buildRawZip([{ name: UTF8_NAME, data: TE.encode('中文内容'), flags: 0x0800 }]) // bit11=1
       const central = await parseCentralDirectory(readerOf(zip))
       expect(central.entries.length).toBe(1)
-      expect(central.entries[0].name).toBe('报表.txt')
+      expect(central.entries[0]!.name).toBe('报表.txt')
     })
   })
 
@@ -340,8 +340,8 @@ describe('zip-reader（M4 在线解压解析器）', () => {
     it('bit0=1 → meta.encrypted=true；extractEntry 对加密条目 reject（UI 先拦的兜底）', async () => {
       const zip = buildRawZip([{ name: TE.encode('secret.txt'), data: TE.encode('ciphertext-here'), flags: 0x0001 }])
       const central = await parseCentralDirectory(readerOf(zip))
-      expect(central.entries[0].encrypted).toBe(true)
-      await expect(extractEntry(readerOf(zip), central.entries[0])).rejects.toThrow()
+      expect(central.entries[0]!.encrypted).toBe(true)
+      await expect(extractEntry(readerOf(zip), central.entries[0]!)).rejects.toThrow()
     })
   })
 
@@ -352,7 +352,7 @@ describe('zip-reader（M4 在线解压解析器）', () => {
       const central = await parseCentralDirectory(readerOf(zip))
       expect(central.zip64).toBe(true)
       expect(central.entries.length).toBe(1) // 条目数真值来自 zip64 EOCD（EOCD 侧 count=0xFFFF）
-      const e = central.entries[0]
+      const e = central.entries[0]!
       expect(e.name).toBe('big.bin')
       expect(e.size).toBe(16) // extra 0x0001 真值（CD 字段是 0xFFFFFFFF 占位）
       expect(e.compressedSize).toBe(16)
@@ -399,7 +399,7 @@ describe('zip-reader（M4 在线解压解析器）', () => {
       const central = await parseCentralDirectory(readerOf(zip))
       expect(central.comment).toBe('tail-comment') // 取「最后一个」EOCD 的铁证
       expect(central.entries.length).toBe(1)
-      expect(central.entries[0].name).toBe('only.txt')
+      expect(central.entries[0]!.name).toBe('only.txt')
       expect(central.zip64).toBe(false)
     })
   })
@@ -415,14 +415,14 @@ describe('zip-reader（M4 在线解压解析器）', () => {
         },
       ])
       const central = await parseCentralDirectory(readerOf(zip))
-      const out = await extractEntry(readerOf(zip), central.entries[0])
+      const out = await extractEntry(readerOf(zip), central.entries[0]!)
       expect(bytesEqual(out, TE.encode('payload-x'))).toBe(true)
     })
 
     it('未支持的压缩方法（12=bzip2）→ reject', async () => {
       const zip = buildRawZip([{ name: TE.encode('bz.bin'), data: TE.encode('data'), method: 12 }])
       const central = await parseCentralDirectory(readerOf(zip))
-      await expect(extractEntry(readerOf(zip), central.entries[0])).rejects.toThrow()
+      await expect(extractEntry(readerOf(zip), central.entries[0]!)).rejects.toThrow()
     })
 
     it('CRC 错（CD 的 crc32 字段被改错）→ reject 且错误为 CrcMismatch', async () => {
@@ -436,11 +436,11 @@ describe('zip-reader（M4 在线解压解析器）', () => {
         }
       }
       expect(cd).toBeGreaterThan(0)
-      const bad = ((zip[cd + 16] | (zip[cd + 17] << 8) | (zip[cd + 18] << 16) | (zip[cd + 19] << 24)) + 1) >>> 0
+      const bad = ((zip[cd + 16]! | (zip[cd + 17]! << 8) | (zip[cd + 18]! << 16) | (zip[cd + 19]! << 24)) + 1) >>> 0
       zip.set(le32(bad), cd + 16)
 
       const central = await parseCentralDirectory(readerOf(zip))
-      const err: unknown = await extractEntry(readerOf(zip), central.entries[0]).then(
+      const err: unknown = await extractEntry(readerOf(zip), central.entries[0]!).then(
         () => null,
         (e: unknown) => e,
       )
@@ -519,7 +519,7 @@ describe('zip-reader（M4 在线解压解析器）', () => {
       // 契约口径：DOS 时间无时区语义，纯函数按 UTC 定标（若实现取本地时区，此断言首跑即暴露，属契约对齐点）
       const zip = buildRawZip([{ name: TE.encode('d.txt'), data: TE.encode('x'), dosDate: 0x5c22, dosTime: 0x1880 }])
       const central = await parseCentralDirectory(readerOf(zip))
-      expect(central.entries[0].lastModified).toBe(Date.UTC(2026, 0, 2, 3, 4, 0))
+      expect(central.entries[0]!.lastModified).toBe(Date.UTC(2026, 0, 2, 3, 4, 0))
     })
   })
 
@@ -576,8 +576,8 @@ describe('zip-reader（M4 在线解压解析器）', () => {
       // 全 'A' 流的截断前缀 CRC 恰等于声明 CRC → 放行返回，可直接度量输出：64B，不是 64KB
       const zip = buildLyingZip(TE.encode('bomb.bin'), deflateSync(A64K), 64, crc32(A64))
       const central = await parseCentralDirectory(readerOf(zip))
-      expect(central.entries[0].size).toBe(64) // 声明值
-      const out = await extractEntry(readerOf(zip), central.entries[0])
+      expect(central.entries[0]!.size).toBe(64) // 声明值
+      const out = await extractEntry(readerOf(zip), central.entries[0]!)
       expect(out.length).toBe(64) // 恒 === 声明 size：64KB 流不解出 64KB 内存
       expect(bytesEqual(out, A64)).toBe(true) // 内容=流的前 64 字节
     })
@@ -585,7 +585,7 @@ describe('zip-reader（M4 在线解压解析器）', () => {
     it('P0-1 炸弹执行闸：截断输出撞诚实 CRC（全量流 CRC）→ CrcMismatch 兜底拒绝', async () => {
       const zip = buildLyingZip(TE.encode('bomb.bin'), deflateSync(A64K), 64, crc32(A64K))
       const central = await parseCentralDirectory(readerOf(zip))
-      const err: unknown = await extractEntry(readerOf(zip), central.entries[0]).then(
+      const err: unknown = await extractEntry(readerOf(zip), central.entries[0]!).then(
         () => null,
         (e: unknown) => e,
       )
@@ -667,7 +667,7 @@ describe('zip-reader（M4 在线解压解析器）', () => {
         const fresh = await import('../zip-reader')
         const zip = buildRawZip([{ name: GBK_NAME, data: TE.encode('内容'), flags: 0 }])
         const central = await fresh.parseCentralDirectory(readerOf(zip))
-        const name = central.entries[0].name
+        const name = central.entries[0]!.name
         expect(typeof name).toBe('string') // 不炸且有名称（宽松口径）
         expect(name.length).toBeGreaterThan(0)
         expect(name.length).toBe(GBK_NAME.length) // latin1 1 字节/字符 → 8 字；GBK 回退会是 6 字（报表.txt）

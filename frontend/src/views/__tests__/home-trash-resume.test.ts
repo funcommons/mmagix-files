@@ -255,7 +255,7 @@ describe('Home.vue 回收站 + resume 接线冒烟（M2/M3）', () => {
     await flushPromises() // 收敛确认后的清空链
 
     expect(tree.emptyTrash).toHaveBeenCalledTimes(1)
-    expect(tree.emptyTrash.mock.calls[0]?.[0]).toEqual({})
+    expect((tree.emptyTrash.mock.calls as unknown[][])[0]?.[0]).toEqual({})
     w.unmount()
   })
 
@@ -273,7 +273,7 @@ describe('Home.vue 回收站 + resume 接线冒烟（M2/M3）', () => {
     await flushPromises()
 
     expect(queue.discardCheckpoint).toHaveBeenCalledTimes(1)
-    expect(queue.discardCheckpoint.mock.calls[0]?.[0]).toEqual(cand)
+    expect((queue.discardCheckpoint.mock.calls as unknown[][])[0]?.[0]).toEqual(cand)
     expect(w.find('[data-testid="resume-banner"]').exists()).toBe(false)
     w.unmount()
   })
