@@ -1,6 +1,6 @@
 /**
  * zip-reader 单测（M4 W1，红测先行：frontend/src/files/zip-reader.ts 尚未实现，首跑应整红）。
- * 契约：documents/v1.2.0执行进度.md §「M4 契约」；方案：documents/v1.2.0升级方案-断点上传-分享增强-在线解压-回收站.md §4。
+ * 契约：docs/design/capabilities-contract-v1.2.0.md §「M4 契约」；方案：docs/design/capabilities-design-v1.2.0.md §4。
  * fixture：常规包用 fflate zipSync 造；GBK 名 / 加密位 / zip64 / EOCD 干扰 / DOS 时间 用本文件内的
  * 手工二进制构造器（字段逐行注释对齐 APPNOTE.TXT：LFH 30B / CD 46B / EOCD 22B / zip64 EOCD 56B / locator 20B）。
  * 注：Node 无 gbk TextEncoder，GBK 字节以硬编码 hex 给出（报=0xB1A8 表=0xB1ED，已用 TextDecoder('gbk') 验证）。

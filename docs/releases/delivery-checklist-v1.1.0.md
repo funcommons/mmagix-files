@@ -1,6 +1,6 @@
 # 交付清单（v1.1.0）
 
-- 发布日期：2026-10-26 · Tag：`v1.1.0` · 提交：`c984734a`（后续修复 `d8d516aa`、`949b8c3f`、`c1ecbc19` 归 [Unreleased]）
+- 发布日期：2026-10-26 · Tag：`v1.1.0` · 提交：`c984734a`（后续修复 `d8d516aa`、`949b8c3f`、`c1ecbc19` 已随 [1.2.0] 发布）
 - Release Notes：https://github.com/funcommons/mmagix-files/releases/tag/v1.1.0
 
 ## 交付物

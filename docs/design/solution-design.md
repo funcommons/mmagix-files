@@ -1,14 +1,15 @@
 # mmagix-files 方案设计（web 文件中台）
 
-> **【实施状态注记 · 2026-10-26 审计】** 本文为总体方案裁决档案（概要设计现状见 [architecture.md](architecture.md)）。以下与代码已分叉，以代码为准（锚点见各条）：
-> 1. §4.7 命令实为 **17 条**（+v1.1 `setCredentials`/`getApps`）；事件 **15 条**（+`previewFullscreen`，`views/Home.vue:535`；iframe 侧类型暂未收编）
+> **【实施状态注记 · 2026-10-31 复审】** 本文为总体方案裁决档案（概要设计现状见 [architecture.md](architecture.md)；v1.2.0 四能力的升级方案档案见 [v1.2.0-capabilities-design.md](capabilities-design-v1.2.0.md)）。以下与代码已分叉，以代码为准（锚点见各条）：
+> 1. §4.7 命令实为 **19 条**（+v1.1 `setCredentials`/`getApps`、+v1.2 `restore`/`purge`）；事件 **15 条**（+`previewFullscreen`，现发于 `views/Home.vue:872`；iframe 侧类型暂未收编）
 > 2. §4.5 布局为**自研** TreePanel+PreviewTabs+拖拽分隔条（无 dockview/allotment）；「轻量文本降级 CodeMirror 6」未实现
-> 3. §4.4 S3 子集无 ListParts/ListMultipartUploads（`sdk/s3/client.ts:2` 自述）
+> 3. §4.4 断点续传已实现且路线与本文不同：**IDB checkpoint**（非 ListParts 轮询；`files/checkpoint-store.ts`）；ListMultipartUploads 已实现（`sdk/s3/client.ts`），ListParts 仍无
 > 4. §4.2/§八 会话已支持**续期**：setCredentials 重签热替换+extend 重置自毁线（`session.ts:124`）
 > 5. §4.1b 单文件 shape 另有 `appId`/`security`/`plugins`，v1.2 支持 `source.url=''` 无源装载（`config.ts:139-165`）
 > 6. §4.6/§4.8 image-painter 未实现（renderers/index.ts 注释「M2+ 排期」）；pptx 已由插件可预览（非「降级下载」）
 > 7. §4.2「刷新=从 fragment 重建」→ 实际解析后 `scrubFragment()` 抹除 fragment，刷新经 sessionStorage 备份链重建（`config.ts:188-211`）
 > 8. 交付物已扩：dist + `@mmagix/files-client` 宿主包 + 7 个动态插件
+> 9. **v1.2.0/v1.3.0 已交付**（本文写作时为规划态，现均为现实）：断点续传/回收站/在线解压/分享信封、上传确认弹窗+传输中心双 Tab、版本能力门控+历史版本恢复——设计记录见 v1.2.0-capabilities-design.md 与 CHANGELOG
 
 
 ## 〇、头表

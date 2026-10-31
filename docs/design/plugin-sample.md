@@ -11,9 +11,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | V1.0（2026-10-08 评审修订版：样例①②③修复、加载机制改 SRI 标签注入、恢复/beforeDispose 契约落位）——随《plugin-system.md》V1.1 契约 |
+| 版本 | V1.0（2026-10-08 评审修订版：样例①②③修复、恢复/beforeDispose 契约落位）——随《plugin-system.md》V1.1 契约；装载机制现口径见头部注记 4（fetch+sha384 自校验） |
 | 性质 | 三个可跑样例，由浅入深：最小骨架 → 取流渲染 → 可保存编辑 + 同类型多应用 |
-| 约定 | `sdk`=`activate(sdk)` 注入句柄；类型见 `@mmagix-files/sdk`；全部样例为 ES module |
+| 约定 | `sdk`=`activate(sdk)` 注入句柄；类型见 `frontend/src/sdk/types.ts`（无独立 npm 类型包）；全部样例为 ES module |
 
 ---
 

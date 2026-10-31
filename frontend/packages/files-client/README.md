@@ -63,7 +63,7 @@ iframe 侧按「event.origin ∈ config.security.allowedOrigins」白名单校�
 
 - `MmxWorkspaceConfig` / `MmxSingleFileConfig`（mode 二选一；#config / #file fragment 互斥）
 - 事件名全集与载荷：`MmxEventName`（ready / pathChanged / fileOpened / uploadProgress / expired / error …）
-- 失败统一 `MmxError`（code：4004 超时 / 4303 未握手 / 4005 不可用 / 5001 origin 拒绝 / 5000 终态；业务码见 §七）
+- 失败统一 `MmxError`（code：4004 超时 / 4303 未握手 / **4005 宿主侧语义=未装载/contentWindow 不可用**（宿主正本同码 BAD_PARAM=参数非法，同名不同义）/ 5001 origin 拒绝 / 5000 终态；业务码见 §七）
 - 配置只走 URL fragment（`#config=` / `#file=` + `encodeURIComponent`），禁 query——fragment 不到服务端/代理日志
 
 完整协议契约：仓库 `../../../docs/design/jsdk-api.md`。
@@ -73,12 +73,13 @@ iframe 侧按「event.origin ∈ config.security.allowedOrigins」白名单校�
 ```bash
 cd frontend/packages/files-client
 ../../node_modules/.bin/tsc -p tsconfig.build.json   # 产 dist（ESM + d.ts）
-cd ../../.. && pnpm vitest run packages/files-client # 21 用例
+cd frontend && pnpm vitest run packages/files-client  # 21 用例（vitest 挂在 frontend 包）
 ```
 
-发布：`npm publish`（`files: ["dist"]`，ESM-only，Node ≥18，vue 为可选 peer）。
+发布：改完源码**先重建 dist 再** `npm publish`（`files: ["dist"]`，ESM-only，Node ≥18，vue 为可选 peer）。
 
 ## 漂移哨兵
 
-协议常量/形状镜像自宿主 `frontend/src/sdk`——`frontend/src/shared/__tests__/clientProtocol.test.ts`
-双侧比对，任一侧单独改动即红。
+协议常量（NS/PROTOCOL_VERSION/CONFIG_VERSION/DEFAULT_TIMEOUT_MS/DEFAULT_FILES_BASE）与 MmxError 形状
+镜像自宿主 `frontend/src/sdk`——`frontend/src/shared/__tests__/clientProtocol.test.ts` 双侧比对，
+任一侧单独改动即红（不比信封全形状与事件清单，扩面时哨兵同步扩）。

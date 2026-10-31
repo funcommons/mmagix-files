@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * ShareAccess — 分享校验页（v1.2.0 M5-UI-a，契约：documents/v1.2.0执行进度.md §「UI 波次契约」）。
+ * ShareAccess — 分享校验页（v1.2.0 M5-UI-a，契约：docs/design/capabilities-contract-v1.2.0.md §「UI 波次契约」）。
  * 公开路由 /s/:shareId 的访客页，IO 全部回调注入（fetchMeta / openSecret），本组件不直接触网。
  *
  * 状态机：loading →（meta null=已取消态 | isShareExpired=到期态 | 有效→密码框态）；

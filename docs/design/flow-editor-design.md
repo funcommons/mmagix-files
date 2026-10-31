@@ -4,6 +4,7 @@
 > 1. **未实现**：BPMN 导出（§五/MVP-⑤ 全章）、SVG 旁路键（`<key>.svg.derived/`）
 > 2. **口径演进**：布局缓存旁路键 → `%% meta: _layout` 伪节点（随源持久化）；graph LR 可进编辑器（布局强制 TD，保存保留 LR 头行）；subgraph 仅行透传不建组；meta 重复静默覆盖（不告警）
 > 3. **X6 v2 适配（代码已踩平，本文按 v1 撰写）**：DEF-1 zoom 增量陷阱（读-算-写绝对值）、DEF-2 mousewheel 配置失效（ctrl+滚轮手工监听）、DEF-3 无 toSVG（画布 SVG 序列化导出）、DEF-6 removeCell 级联删边（applyNodeCell 补回相邻边）——见 `flow-editor.ts` 文件头
+> 4. **【2026-10-31 更新】四方言终态**：§六脑图「不进本期」已过时——mindmap/sequenceDiagram/architecture-beta 均已随 v1.2.0 进 X6 可视化编辑（实现口径与终态见 [diagram-roadmap.md](diagram-roadmap.md) 头注与 `files/flow-model.ts` parseMindmap/parseSequence/parseArchitecture）；候选库 simple-mind-map/mind-elixir 均未引入（统一用 X6）；MVP-②/验收所提 `apps-demo/diagrams/*.mmd` seed 未落仓（E2E 用内联 fixture，`e2e/fixtures/s3-mock.ts`）
 
 
 ## 〇、头表
@@ -159,7 +160,7 @@ graph TD
 | 字节限额 | mermaid 文本极小，沿用 code-editor 口径 5MB（`MERMAID_MAX_BYTES`，进 BUILTIN_APP_SPECS） |
 | i18n | 全部文案走词典 `app.*`；禁硬编码中文 |
 | 保存链 | 复用 code-editor 契约：Ctrl+S / `app.code-unsaved` 关闭确认 / putObject 拒 4305 只读闩锁 |
-| 脑图（附带口径） | `mindmap` 语法纳入 `mermaid-viewer` 只读支持；X6 脑图编辑不进本期（候裁），脑图编辑候选库 simple-mind-map / mind-elixir 届时另评 |
+| 脑图（附带口径） | `mindmap` 语法纳入 `mermaid-viewer` 只读支持；X6 脑图编辑**已随 v1.2.0 落地**（不引入 simple-mind-map/mind-elixir，统一 X6；终态见头部注记 4 与 diagram-roadmap.md） |
 
 ---
 

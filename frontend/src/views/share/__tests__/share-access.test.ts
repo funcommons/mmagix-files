@@ -1,6 +1,6 @@
 /**
  * ShareAccess 校验页组件测试（M5-UI-a 波次；TDD 红态先行——组件 src/views/share/ShareAccess.vue 尚未落地）。
- * 契约（documents/v1.2.0执行进度.md §「UI 波次契约」M5-UI-a）：
+ * 契约（docs/design/capabilities-contract-v1.2.0.md §「UI 波次契约」M5-UI-a）：
  *   props: {
  *     shareId: string
  *     fetchMeta: (shareId: string) => Promise<ShareMetaV1 | null>   // null=已撤销/不存在

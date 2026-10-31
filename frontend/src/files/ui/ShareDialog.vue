@@ -13,7 +13,7 @@ defineOptions({ name: 'ShareDialog' })
  *  - 目录条目不给分享（前缀分享列 P2）→ 禁用态；
  *  - 换有效期/换条目 → 清空已生成链接（防误分享旧口径链接）。
  *
- * 增强面（M5-UI-b，契约 documents/v1.2.0执行进度.md §UI 波次契约）：createShare /
+ * 增强面（M5-UI-b，契约 docs/design/capabilities-contract-v1.2.0.md §UI 波次契约）：createShare /
  * listShares / revokeShare 三 IO 回调皆可选——注入才启用对应区块；三回调全缺省时
  * 增强面整体不渲染（密码框/重掷/自定义档/管理区均不出现，有效期仍三档），既有行为
  * 零回归（向后兼容红线）。注入后：

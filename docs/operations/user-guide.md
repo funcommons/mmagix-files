@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | **V1.1（2026-10-26 修订：SDK 接入改 npm 包 `@mmagix/files-client`、会话续期口径、ui.treeMode/treeTitle、日常使用面扩全；V1.0=2026-10-08 评审版）** |
+| 版本 | **V1.3（2026-10-31 修订：日常使用面对齐 v1.2/v1.3——上传确认弹窗、传输中心、回收站、历史版本、信封分享、在线解压、断点续传；V1.1=2026-10-26；V1.0=2026-10-08 评审版）** |
 | 读者 | 消费方接入开发者（把 mmagix-files iframe 嵌进自己产品的人） |
 | 配套 | [JSSDK 接口文档](../design/jsdk-api.md)（消息协议契约）/ [插件体系](../design/plugin-system.md)（扩展文件类型）/ [概要设计](../design/solution-design.md)（嵌入形态/单文件模式正本） |
 
@@ -77,6 +77,8 @@ features 全集与命令映射：
 | `rename` | cmd `rename` |
 | `mkdir` | cmd `createFolder` |
 | `download` | cmd `download` |
+| `restore` / `purge` | cmd `restore` / `purge`（回收站；还需桶版本能力，未开启时入口自动隐藏） |
+| `trash` | 回收站入口 UI 开关（false=隐藏树头回收站按钮） |
 | `multiTab` / `openWithMenu` | 纯 UI 开关（无对应命令） |
 | `plugins` | 总闸：`registerApp` 命令与配置注入插件（`plugins[]`）加载，false=全禁 |
 
@@ -128,7 +130,7 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《../d
 }
 ```
 
-- `source`: `{ url, method: 'GET'|'POST', body?, headers? }`；`save`: `{ method: 'PUT'|'POST', url, headers? }`；外层另有 `name`、`appearance?`、`features?`
+- `source`: `{ url, method: 'GET'|'POST', body?, headers? }`；`save`: `{ method: 'PUT'|'POST', url, headers? }`；外层另有 `name`、`appId?`（指定打开应用）、`plugins?`（单文件模式插件）、`security.allowedOrigins?`、`appearance?`、`features?`
 - **只读=无 `save` 段**（预览应用渲染，零写链）；**可写=有 `save` 段**（编辑类应用可用，按 `save.method` 回写）
 - 与 `#config` **互斥、二选一**；不接 S3、常无凭证
 - **源站 CORS 自理**：`source.headers` 可带宿主签发的短时 token
@@ -142,17 +144,21 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《../d
 | --- | --- |
 | 浏览目录 | 左侧文件树点击（sidebar 常驻/`ui.treeMode=drawer` 抽屉两种形态）；懒加载子目录 |
 | 打开文件 | 双击/回车——按类型走默认应用；右键「打开方式」选其他应用（同类型多应用） |
-| 多 tab | 打开的文件各占一个 tab；可钉住，超量 LRU 淘汰（上限 8）；树/预览宽度可拖分隔条 |
-| 上传 | 工具栏/拖拽入面板/直接粘贴（剪贴板图片即传）；大文件直传+并发 3 |
+| 多 tab | 打开的文件各占一个 tab（上限 8，超量 LRU 淘汰）；可钉住（上限 5，钉住不参与淘汰）；树/预览宽度可拖分隔条 |
+| 上传 | 树头「上传」钮 / 空白或行右键「上传」→ **上传确认弹窗**：显示目标目录，点选或拖入多文件 → 确认才入队；容器拖拽文件/直接粘贴（剪贴板图片）仍直入队；>16MB 自动走 multipart 分片（单片 8MB、分片并发 2、任务并发 3） |
+| 传输中心 | 预览头「传输」钮（角标=进行中任务数）/ `Ctrl/⌘+K`「传输任务」/ 上传弹窗「传输」页签——暂停/继续/重试/取消/清除；顶缘拖高（96–480px 持久化）；断点续传：中断的大文件重开会话出「恢复上传」面包条（指纹校验，一键续传） |
 | 下载 | 右键/工具栏；多选可打包 zip |
-| 重命名/删除/新建目录 | 右键菜单；重命名=copy+delete 语义 |
+| 重命名/删除/新建目录 | 右键菜单；重命名=copy+delete 语义；新建目录弹窗实时预览完整路径（右键目录=在其内新建，右键文件=在其所在目录） |
+| 回收站 | 树头回收站图标打开抽屉：恢复 / 彻底删除 / 清空；需桶开启版本控制——未开启时入口自动隐藏（能力门控） |
+| 历史版本 | 右键「历史版本」→ 抽屉列出各版本：恢复（生成新最新版，不改写历史）/ 下载指定版本；同样依赖桶版本能力 |
+| 在线解压 | 双击 zip 打开「解压浏览器」内置应用：勾选解出所选 / 全部解出（解到 `<zip名>/` 前缀下）/ 整包下载；带炸弹与路径穿越防护 |
 | 搜索 | 全局搜索对话框（文件名索引） |
 | 命令面板 | `Ctrl/⌘+K`——工作台全部动作快捷入口 |
-| 分享 | 右键「分享」生成链接（ShareDialog） |
+| 分享 | 右键「分享」（ShareDialog）：链接 + 可选**密码**（信封加密，密码不落桶）+ 有效期（最长 7 天）+ 分享管理台 + 「上传链接」（允许对方传文件的预签名 PUT）；有密码的链接经公开校验页解锁后下载 |
 | 编辑与保存 | 可编辑应用（代码/流程图/Markdown/HTML/Office/图片/PDF）统一左上角 `[保存｜撤销 重做 重置]` 工具栏；Ctrl/⌘+S 保存直传；**未保存=保存钮右上角红点**，关闭前会确认 |
 | 预览全屏 | 预览工具栏「全屏」按钮（浏览器内全屏，发 `previewFullscreen` 事件给宿主） |
-| Office | docx/xlsx 预览 + **univer-office 插件在线编辑**；旧 .doc/.ppt 出定向转存提示（另存新格式再上传） |
-| 连接配置 | 右上角连接向导（ConnectWizard）：支持 STS 与本地长期 AK/SK（sessionToken 留空）两种模式，多 Profile 记忆 |
+| Office | docx/xlsx 预览 + **univer-office 插件在线编辑**；pptx 插件预览；旧 .doc/.ppt 出定向转存提示（另存新格式再上传） |
+| 连接配置 | 会话无效/无配置时启动卡片上的「连接向导」按钮（ConnectWizard）：支持 STS 与本地长期 AK/SK（sessionToken 留空）两种模式，多 Profile 记忆 |
 | 新文件类型 | 接入方写插件 js+配置一行——见 [插件体系](../design/plugin-system.md) |
 
 ## 三、会话行为（必读）

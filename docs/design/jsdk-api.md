@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | **V1.1**（2026-10-26 修订：宿主 SDK 段改 `@mmagix/files-client`、命令表补 `getApps`（17 条）、单文件子集扩（uploadFiles/getApps/registerApp）；V1.0=2026-10-08 评审版。协议版本仍从 1 起） |
+| 版本 | **V1.2**（2026-10-31 修订：命令表补 `restore`/`purge`（19 条）、`getApps` payload 修正为 `{ name }`、registerApp 装载语义对齐实装；V1.1=2026-10-26（宿主 SDK 段改 `@mmagix/files-client`、命令表补 `getApps`、单文件子集扩）；V1.0=2026-10-08 评审版。协议版本仍从 1 起） |
 | 读者 | 消费方宿主页面开发者 |
 | 性质 | **协议文档即对外契约**（100% 开放承诺面）——M0 起按此实现，向后兼容纪律见 §九 |
 | 配套 | [用户手册](../operations/user-guide.md)（接入/配置）/ [插件体系](plugin-system.md) · [插件样例](plugin-sample.md)（扩展应用——插件体系的 registerApp 契约依赖本文档） |
@@ -68,17 +68,19 @@ iframe 加载 ──► evt: ready {sdkVersion, protocolVersion, configSummary} 
 | `download` | `{ paths: string[] }` | `{ id }` | 打包/单文件下载；**完成态走 `downloadDone`/`downloadFailed` 事件**（与 upload 对称） |
 | `rename` | `{ from, to }` | `{}` | copy+delete 语义 |
 | `remove` | `{ paths: string[] }` | `{}` | 批量删除 |
+| `restore` | `{ paths: string[] }` | `{}` | **v1.2**：回收站恢复（批量；删除 latest DeleteMarker 使对象重新可见）。需桶版本能力 + `features.restore`；paths=回收站条目键 |
+| `purge` | `{ paths: string[] }` | `{}` | **v1.2**：回收站彻底删除（逐 key 复验 latestIsMarker，防陈旧条目清光活版本）。需桶版本能力 + `features.purge` |
 | `select` | `{ mode: 'file' \| 'multi' \| 'off', filter?: { exts: ['todo'] } }` | `{}`（ack；`mode='off'`=退出选择模式） | 选择模式（宿主做「选文件」业务）；**用户确认后发 `selectionConfirmed` 事件** |
 | `setTheme` | `{ theme: 'light'\|'dark'\|'auto' }` | `{}` | 运行时换主题 |
 | `setCredentials` | `{ credentials: { accessKeyId, accessKeySecret, sessionToken }, ttlSeconds?, expiresAt? }` | `{}` | **v1.1**：宿主重签通道——热替换会话凭证（下一请求即用新值，在途请求不受影响）并重置自毁线（`expiresAt` 优先于 `ttlSeconds`；双缺省=保持现线）。工作台模式专用（单文件 4305）。信任前提：凭证经消息传输，以宿主已过 origin 白名单为界；STS 过期前宿主可反复重签实现「心跳」 |
 | `setLocale` | `{ locale: 'zh-CN'\|'en-US' }` | `{}` | 运行时切语言 |
 | `registerApp` | `{ url, sri, lazy?, options? }` | `{ appId, applied? }` | 运行时动态追加一条配置注入插件（语义见下注）；`options` 为对象时透传给 `activate(sdk, options)`（v1.1 增补，只增不改义）；`applied`=本次调用是否处于该 url 首次激活路径（false=同 url 幂等短路，**本次 options 不生效**，宿主应改走重载/刷新，v1.1） |
-| `getApps` | `{}` | `{ apps: [{ id, label, actions }] }` | 已注册应用清单（v1.1；单文件模式可用） |
+| `getApps` | `{ name: string }` | `{ apps: [{ id, label, actions }] }` | 按文件名枚举命中应用（内存文件独立区「选打开应用」下拉数据源；name 缺失/空 = 4005）。v1.1；单文件模式可用 |
 | `getInfo` | `{}` | `{ sdkVersion, session: { expiresInSec }, features }` | 会话信息查询 |
 | `destroy` | `{}` | `{}` | 立即自毁 |
 
 - **payload 统一注记（全文同）**：① `key`/`paths` 等路径类字段=**相对配置 `backend.prefix` 的对象键**；② 扩展名一律**不带点**（如 `filter.exts: ['todo']`），匹配前归一化=**忽略大小写与前导点**；③ `getInfo` reply 的 `features` 形状=`{ [featureKey]: boolean }`（与配置 `features.*` 同键位）；④ 参数非法/格式错=reject **4005 BAD_PARAM**
-- **registerApp 通道语义**：payload 与配置注入 `plugins[]` **同构**（url+sri+lazy，同一 registry，见 [插件体系](plugin-system.md)）——iframe 收到后以 `<script type="module" src integrity>` 标签注入加载（**SRI 原生校验**），调用该模块 `activate(sdk, options?)`（options=v1.1 透传的插件参数，缺省不传）；完整 manifest（matcher/renderer/probe 等）内含于插件 js。设计理由：**函数体必须在插件 js 内、不可经消息传输，故运行时注册传 URL 而非 renderer**
+- **registerApp 通道语义**：payload 与配置注入 `plugins[]` **同构**（url+sri+lazy，同一 registry，见 [插件体系](plugin-system.md)）——iframe ��到后 fetch 拉取字节 → sha384 自校验（与配置注入插件同一 loader 通路）→ Blob URL import，调用该模块 `activate(sdk, options?)`（options=v1.1 透传的插件参数，缺省不传）；完整 manifest（matcher/renderer/probe 等）内含于插件 js。设计理由：**函数体必须在插件 js 内、不可经消息传输，故运行时注册传 URL 而非 renderer**
 
 ## 六、Event（文件服务 → 宿主）
 

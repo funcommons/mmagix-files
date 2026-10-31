@@ -1,6 +1,6 @@
 /**
- * M2 断点上传测试（test-writer-D；契约：documents/v1.2.0执行进度.md §「M2 契约」，
- * 方案：documents/v1.2.0升级方案-断点上传-分享增强-在线解压-回收站.md §2）。
+ * M2 断点上传测试（test-writer-D；契约：docs/design/capabilities-contract-v1.2.0.md §「M2 契约」，
+ * 方案：docs/design/capabilities-design-v1.2.0.md §2）。
  * 覆盖：effectivePartSize 自适应分片（纯函数 + maxParts 接线）/ checkpointStore 生命周期
  * （入队 put、每片更 parts、complete/abort/终态失败 remove、直传不写）/ resumeCheckpoints
  * 探活（uploadId 不在存活清单→移除）/ 单片重试（网络错/5xx 重试 ≤partRetry、退避 ×2^n+抖动、

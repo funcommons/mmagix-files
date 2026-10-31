@@ -24,7 +24,7 @@ pnpm dev          # http://localhost:5200
 | 工作台嵌入 `/embed/play` | `#config` 装载 + ready 握手 + 全量命令按钮 + 14 事件日志 |
 | 单文件嵌入 `/embed/file` | `#file` 只读/可编辑装载（demo 自带 `public/sample-data/` 样例） |
 
-验收脚本：`pnpm typecheck` 0 错；冒烟见仓库 `documents/`（`ready` 握手 + md 渲染截图）。
+验收脚本：`pnpm typecheck` 0 错；`scripts/` 附带 s3rver 本地 S3（`dev-s3.mjs`）、桶管理（`s3-admin.mjs`）、种子数据（`s3:seed` / `seed-apps.mjs`）与单文件样例服务（`single-file-server.mjs`）。
 
 ## ⚠️ 头号坑：origin 白名单
 

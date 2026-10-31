@@ -3,8 +3,10 @@
 **纯前端 S3 文件管理器**——以 iframe 嵌入任意业务前端：对象存储桶的浏览/上传/下载/多应用预览与编辑，
 一套 postMessage 协议接入。凭证不出宿主，服务端零侵入（S3/MinIO 直连）。
 
-- 内置 13 类文件应用（代码/Monaco、xlsx 样式表、docx、PDF、Markdown、流程图编辑、CSV、HTML 沙箱预览、HEIC、音视频…）
+- 内置 14 类文件应用（代码/Monaco、xlsx 样式表、docx、PDF、Markdown、流程图/脑图/时序图/架构图编辑、CSV、HTML 沙箱预览、HEIC、音视频、zip 在线解压…）
 - 7 个官方动态插件（Univer 办公编辑 · PDF 标注签批 · Markdown/HTML 编辑器 · 媒体增强 · 图片编辑 · PPTX 预览），SRI 自校验、按需装载
+- 安全网三件套：回收站（DeleteMarker 恢复）· 历史版本（copy-source 恢复，桶能力门控）· 信封分享（密码 PBKDF2+AES-GCM）
+- 断点续传（>16MB 分片，跨会话恢复）+ 传输中心（暂停/继续/重试）
 - 可编辑应用统一 `[保存｜撤销 重做 重置]` 工具栏，dirty=保存钮红点
 - 宿主接入：npm 包 [`@mmagix/files-client`](frontend/packages/files-client/)（核心 + Vue 双入口，零依赖）
 - 明暗/多品牌主题随宿主 · 中英双语 · 明暗下统一编辑体验
@@ -55,10 +57,10 @@ cd mmagix-embed-demo && pnpm dev                    # 宿主 demo（5200，跨�
 - 安全披露：[SECURITY.md](SECURITY.md)（请勿公开 issue 报漏洞）
 - 变更历史：[CHANGELOG.md](CHANGELOG.md) · 许可：[LICENSE](LICENSE)（MIT；pptx-preview 组件例外见内注）
 
-## 发布物清单（v1.1.x）
+## 发布物清单
 
 | 物 | 位置 | 说明 |
 |---|---|---|
 | 整站构建 | `frontend/` → `pnpm build` | 部署到任意静态托管 |
-| 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [docs/releases/v1.1.0-plugin-sri.json](docs/releases/v1.1.0-plugin-sri.json) |
+| 插件 bundle | `frontend/public/plugins/*.js`（7 个） | 懒加载，SRI 清单见 [docs/releases/v1.1.0-plugin-sri.json](docs/releases/v1.1.0-plugin-sri.json)（7/7 与当前产物一致；重建插件后重出） |
 | 宿主侧客户端 | npm 包 [@mmagix/files-client](frontend/packages/files-client/)（Vue 入口 `/vue`） | 零依赖 postMessage 封装；demo 经 vite alias 消费同一份源码 |

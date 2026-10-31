@@ -1,6 +1,6 @@
 /**
  * TrashPanel 组件测试（M3-UI 波次；TDD 红态先行——组件 frontend/src/files/ui/TrashPanel.vue 尚未落地）。
- * 契约（documents/v1.2.0执行进度.md §UI 波次契约）：
+ * 契约（docs/design/capabilities-contract-v1.2.0.md §UI 波次契约）：
  *   props: { entries: TrashEntry[]; busy?: boolean }
  *   emits: 'restore'(选中 TrashEntry[]) | 'purge'(选中 TrashEntry[]) | 'empty'
  *   列表：checkbox 多选 + 原路径 + 删除时间（deletedAt null→'—'走 i18n）+ 版本数；

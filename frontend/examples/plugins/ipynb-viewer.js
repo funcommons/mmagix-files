@@ -1,7 +1,7 @@
 /**
  * ─────────────────────────────────────────────────────────────────────────────
  * MMagic-Files 动态插件样例② —— `.ipynb` Notebook 预览（取流渲染：JSON 解析+错误边界配合）
- * 正本：《documents/动态插件样例.md》样例② V1.0（随《动态插件方案.md》V1.1 契约）
+ * 正本：docs/design/plugin-sample.md样例② V1.0（随docs/design/plugin-system.mdV1.1 契约）
  * 零构建依赖：纯 ES module，`export function activate(sdk)` 为唯一约定入口。
  *
  * manifest 摘要：
@@ -42,7 +42,7 @@ export function activate(sdk) {
     label: 'Notebook 预览',
     actions: ['preview'],
     version: '1.0.0',
-    requiresSdk: 1, // 本批契约=1（协商语义见《动态插件方案.md》§五）
+    requiresSdk: 1, // 本批契约=1（协商语义见docs/design/plugin-system.md§五）
     async renderer(el, file, ctx) {
       const wrap = document.createElement('div')
       wrap.className = 'mmf-plugin-ipynb'

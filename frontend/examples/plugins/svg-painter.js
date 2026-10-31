@@ -1,7 +1,7 @@
 /**
  * ─────────────────────────────────────────────────────────────────────────────
  * MMagic-Files 动态插件样例③ —— `.svg` 画板（可保存编辑 + 同类型多应用）
- * 正本：《documents/动态插件样例.md》样例③ V1.0（随《动态插件方案.md》V1.1 契约）
+ * 正本：docs/design/plugin-sample.md样例③ V1.0（随docs/design/plugin-system.mdV1.1 契约）
  * 零构建依赖：纯 ES module，`export function activate(sdk)` 为唯一约定入口。
  *
  * manifest 摘要：

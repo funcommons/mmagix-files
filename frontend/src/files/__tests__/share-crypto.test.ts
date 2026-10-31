@@ -2,7 +2,7 @@
  * share-crypto 契约红测试（v1.2.0 M5：分享密码信封，契约先行）。
  *
  * 被测模块 src/files/share-crypto.ts 尚未实现——本文件钉住契约
- * （documents/v1.2.0执行进度.md §「M5 契约」；威胁模型见方案 §5.2）：
+ * （docs/design/capabilities-contract-v1.2.0.md §「M5 契约」；威胁模型见方案 §5.2）：
  *  - randomShareId：16B 随机 → base64url 22 字符不可枚举；
  *  - randomPassword：默认 6 位无歧义字符集（去 0O1lI）；
  *  - toB64Url/fromB64Url：URL 安全 base64url 编解码往返（非法输入钉死为抛错，见对应用例注释）；

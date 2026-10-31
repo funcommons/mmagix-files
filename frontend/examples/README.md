@@ -21,9 +21,9 @@
 ### 方式一：dev server 直出（仅本地体验）
 
 ```bash
-cd frontend && npm run dev
+cd frontend && pnpm dev
 # 另开终端确认可直出模块源码（vite dev 以 frontend/ 为服务根，examples/ 按路径直出）：
-curl -s http://localhost:5173/examples/plugins/todo-viewer.js | head -3
+curl -s http://localhost:9330/examples/plugins/todo-viewer.js | head -3
 ```
 
 > 注意：**vite `publicDir` 未动**（仍是 `public/`）——`npm run build` 产物**不含** `examples/`。

@@ -1,6 +1,6 @@
 # 产品需求规格说明书（PRD）
 
-> 项目：mmagix-files · 现状基线：v1.1.0（2026-10-26）· **以代码为唯一事实源**（能力清单逐项锚定代码）
+> 项目：mmagix-files · 现状基线：v1.3.0（2026-10-31）· **以代码为唯一事实源**（能力清单逐项锚定代码）
 > 本文档合并并退役《产品顶层设计.md》与《第一期文件类型支持计划.md》（漂移审计后收口；退役理由见 docs/README.md 变更清单）
 
 ## 1. 产品定位
@@ -10,7 +10,7 @@
 
 五支柱：
 1. 双形态嵌入：workspace（桶工作台）/ 单文件（source 直链，可选 save 段写回；支持无源 `mem://` 装载）
-2. 多应用文件面：13 内置应用 + 7 动态插件，注册表解析（注册序=默认优先级，「打开方式」可切换）
+2. 多应用文件面：14 内置应用 + 7 动态插件，注册表解析（注册序=默认优先级，「打开方式」可切换）
 3. 协议接入：postMessage 双向（origin 双闸）、npm 客户端包 `@mmagix/files-client`
 4. 安全默认：凭证不出宿主、HTML 净化沙箱、SRI 可选校验、TTL 自毁
 5. 嵌入式体验：主题/品牌/语言随宿主、单实例闩锁、命令面板
@@ -38,8 +38,16 @@
 | FR-7 | 连接配置（配置向导 ConnectWizard；支持长期 AK/SK 本地模式——sessionToken 可空） | ✅ | `files/profiles.ts`、`ui/ConnectWizard.vue` |
 | FR-8 | 内存文件通路（mem:// 键域；宿主 uploadFiles target=memory） | ✅ | `files/mem-store.ts`、`files/commands.ts` |
 | FR-9 | 会话治理（TTL 自毁 T-5min 提醒、expired 终态、setCredentials 续期重签） | ✅ | `sdk/session.ts`、`sdk/handlers.ts` |
+| FR-10 | 断点续传（>16MB multipart；跨会话 IDB checkpoint、指纹+partSize 双校验恢复面包条、单片间隔制退避、孤儿 uploadId 7 天清扫） | ✅ v1.2.0 | `files/checkpoint-store.ts`、`files/orphan-sweeper.ts`、`files/upload-queue.ts` |
+| FR-11 | 回收站（DeleteMarker 语义：恢复/彻底删除/清空；TrashPanel 抽屉；restore/purge 命令；purge 逐 key 复验防清光活版本） | ✅ v1.2.0 | `files/ui/TrashPanel.vue`、`files/commands.ts`、`files/__tests__/tree-store-trash.test.ts` |
+| FR-12 | 历史版本（右键入口；版本列表/恢复=copy-source `?versionId` 生成新 latest/指定版本下载） | ✅ v1.3.0 | `files/ui/VersionPanel.vue`、`sdk/s3/client.ts` |
+| FR-13 | 信封分享（密码=PBKDF2+AES-GCM 包裹预签名 URL，密码校验=解密成功；四档有效期；分享管理台；上传链接；ShareAccess 公开校验页防暴破） | ✅ v1.2.0 | `files/share-crypto.ts`、`ui/ShareDialog.vue`、`views/share/ShareAccess.vue` |
+| FR-14 | 在线解压（zip-browser 内置应用：解出所选/全部解出/下载；炸弹三闸+zip slip+GBK 名防护） | ✅ v1.2.0 | `files/zip-reader.ts`、`apps/ui/ZipBrowser.vue` |
+| FR-15 | 上传确认弹窗（三入口统一：树头钮/行右键/空白右键；目标目录+拖放点选多文件+确认才入队；确认即关窗→成功入队重开落传输页签） | ✅ v1.3.0 | `files/ui/UploadDialog.vue`、`views/Home.vue` |
+| FR-16 | 传输中心（暂停/继续/重试/取消/清除；预览头传输钮+角标/⌘K/弹窗传输页签三入口；顶缘拖高 96–480px 持久化） | ✅ v1.3.0 | `files/ui/UploadPanel.vue`、`views/Home.vue` |
+| FR-17 | 版本能力门控（client 方法+桶 Versioning 状态探测；无能力时回收站/历史版本整入口隐藏而非报错） | ✅ v1.3.0 | `views/Home.vue`（detectVersionCapable）、`files/ui/TreePanel.vue` |
 
-### 3.2 内置应用（13，注册序=默认优先级）
+### 3.2 内置应用（14，注册序=默认优先级）
 
 | 应用 | 扩展名 | 形态 | 关键策略 |
 |---|---|---|---|
@@ -56,6 +64,7 @@
 | heic-viewer | heic | 预览 | heic2any 转码；32MiB |
 | docx-viewer | docx | 预览 | docx-preview |
 | xlsx-viewer | xlsx/xls | 预览 | ExcelJS 样式渲染（2000 行截断）；xls 走 SheetJS |
+| zip-browser | zip | 预览/解出 | 在线解压：解出所选/全部解出（写 `<zip名>/` 前缀）/下载；炸弹三闸+zip slip 防护；512MiB |
 
 > 未排期：image-painter（Canvas 画板，曾列入早期计划，当前不在注册表）。
 > 未知类型：fallback-download（不入 registry，解析链显式处理）——doc/ppt 出定向转存提示。
@@ -64,7 +73,7 @@
 
 | 插件 | 能力 | 形态 |
 |---|---|---|
-| univer-office | xlsx/xls/docx 在线编辑 | Univer；浮动保存钮 |
+| univer-office | xlsx/xls/docx 在线编辑 | Univer；统一编辑工具栏钮簇 |
 | pdf-annotator | PDF 标注（矩形/文字/画笔/签名）+ AcroForm 值 + 压平写回 + sidecar 导出/导入 | pdf.js 覆盖层 + pdf-lib |
 | markdown-editor | 源码/双窗/预览三形态 | CM6 + markdown-it + mermaid |
 | html-editor | 源码/可视/预览三态 + 资产单体化（base64 内联）+ 跳转代理 | CM6 + Tiptap + 沙箱 iframe |
@@ -74,7 +83,7 @@
 
 ### 3.4 接入协议（JSSDK）
 
-- 命令 17 条 / 事件 15 条 / 错误码 16 条——正本清单见 [接口设计](../design/jsdk-api.md)
+- 命令 19 条（v1.2 增 restore/purge）/ 事件 15 条 / 错误码 16 条——正本清单见 [接口设计](../design/jsdk-api.md)
 - 宿主客户端：`@mmagix/files-client`（核心入口 + `/vue`）；零运行时依赖
 - 单文件模式命令子集：setTheme / setLocale / getInfo / destroy / uploadFiles（内存通道）/ getApps / registerApp
 
@@ -100,4 +109,6 @@
 
 | 版本 | 说明 |
 |---|---|
+| v1.3.0（2026-10-31） | 按 v1.3.0 收口：内置应用 14（+zip-browser）、命令 19、新增 FR-12/FR-15/FR-16/FR-17（历史版本/上传确认弹窗/传输中心/能力门控）；基线自 v1.1.0 升至 v1.3.0 |
+| v1.2.0（2026-10-29） | 按 v1.2.0 收口：新增 FR-10/FR-11/FR-13/FR-14（断点续传/回收站/信封分享/在线解压）；`@mmagix/files-client` 独立包入交付物；flow-editor 四方言入 §3.2 |
 | v1.1.0（2026-10-26） | 本文合并《产品顶层设计.md》《第一期文件类型支持计划.md》并按 v1.1.0 代码收口：会话支持续期（setCredentials）、office 编辑由 univer-office 插件可达、pptx 插件预览、交付物扩为 dist+客户端包+7 插件、应用清单对齐 BUILTIN_APP_SPECS（13）、fallback 不入 registry、probe/降采样标注未实现 |

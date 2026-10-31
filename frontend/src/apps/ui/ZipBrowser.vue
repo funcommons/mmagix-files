@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * ZipBrowser — zip 在线解压浏览器（M4-UI 波次；风格对齐 files/ui/TrashPanel.vue）。
- * 契约：documents/v1.2.0执行进度.md §UI 波次契约 M4-UI——IO 全部回调注入，组件零业务依赖
+ * 契约：docs/design/capabilities-contract-v1.2.0.md §UI 波次契约 M4-UI——IO 全部回调注入，组件零业务依赖
  * （纯测可桩：load/extract/download 均 vi.fn）。业务实现在 renderers/zip.ts 闭包里。
  * 行为：
  *  - mount 即调 load → 条目表（名称/大小/修改时间；加密行 🔒 标 + 提示文案、不可勾；目录行

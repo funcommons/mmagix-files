@@ -1,6 +1,6 @@
 /**
- * 分享密码信封（v1.2.0 M5，契约：documents/v1.2.0执行进度.md §「M5 契约」；威胁模型：
- * documents/v1.2.0升级方案-断点上传-分享增强-在线解压-回收站.md §5.2）。
+ * 分享密码信封（v1.2.0 M5，契约：docs/design/capabilities-contract-v1.2.0.md §「M5 契约」；威胁模型：
+ * docs/design/capabilities-design-v1.2.0.md §5.2）。
  *
  * meta 对象（shares/<shareId>.json）不含明文预签名 URL，只存 AES-GCM-256 密文 + KDF 参数；
  * 「密码校验=解密成功」——GCM auth tag 保证错密码必然解密失败，无需单独存 hash，

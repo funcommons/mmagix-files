@@ -23,7 +23,7 @@
 ### 1.1 挂载链——同文档是既定事实
 
 ```
-Home.vue  <div ref="previewEl" class="ws__preview-host">      （workspace/file 两模式各一处，L855/L916）
+Home.vue  <div ref="previewEl" class="ws__preview-host">      （workspace/file 两模式各一处，现 Home.vue:1304/1445）
   └─ createPreview({ container: previewEl, ... })             （frontend/src/files/preview.ts）
        └─ takeOver(): container.innerHTML='' → 新建 div.mmf-preview-stage
             └─ def.renderer(el, file, ctx, savedState)        （renderer 直接往 el 里塞 DOM）
@@ -39,14 +39,13 @@ Home.vue  <div ref="previewEl" class="ws__preview-host">      （workspace/file 
 | --- | --- | --- | --- | --- |
 | markdown（markdown-it） | mermaid 动态 import 后把样式写进生成 SVG 内部（SVG 内 `<style>` 带 id 作用域，外溢极小）；正文 HTML 由 `el.innerHTML = md.render(text)` **裸注入，自身零样式** | `markdown-too-large-tip`（无样式定义） | **最重**：排版完全由宿主决定——宿主 reset `*{margin:0;padding:0}` 抹平段落/标题间距，`h1~h6` 未被命中但 `a{color:var(--color-info)}` 全局链接色生效，`code/pre/table` 无任何排版 | 高（观感=宿主 reset 的隐式契约，宿主改一行 markdown 全变） |
 | code（Monaco） | `import('monaco-editor')` ESM 链内 import `.css` → Vite 注入**全文档** `.monaco-*` 类系 + codicon 字体；`automaticLayout:true` 用 ResizeObserver 测量（依赖宿主 `.ws__preview-host` 的 min-height 链，见 Home.vue L1167-1181 注） | `.monaco-*` 命名空间良好 | 宿主 `*` reset 的 `box-sizing:border-box` 波及 monaco 内部（monaco 自设 box-sizing 兜底，历史上是踩坑区）；全局 `a` 色影响 tooltip 内链接 | 中（外溢低、被污染面真实存在） |
-| csv（papaparse） | 单条 `<style>` 随 wrapper 注入：`.mmagic-csv-table tbody tr:hover > td`（:hover 无法内联）；dispose 随 wrapper.remove 一并清理——**本仓目前唯一自清理的样式注入** | `mmagic-csv-*` 优秀 | 单元格内联 style 引用 `var(--app-section-border-color)`、`var(--brand-bg-muted,…)`、`var(--brand-sidebar-hover-bg,…)`——**主题 token 是显式契约**，落到哪一层变量随宿主品牌切换 | 低（双向都有纪律） |
+| csv（papaparse） | 单条 `<style>` 随 wrapper 注入：`.mmagic-csv-table tbody tr:hover > td`（:hover 无法内联）；dispose 随 wrapper.remove 一并清理（现 csv/mermaid/flow/code 渲染器均此模式，非唯一） | `mmagic-csv-*` 优秀 | 单元格内联 style 引用 `var(--app-section-border-color)`、`var(--brand-bg-muted,…)`、`var(--brand-sidebar-hover-bg,…)`——**主题 token 是显式契约**，落到哪一层变量随宿主品牌切换 | 低（双向都有纪律） |
 | pdf | 一级=原生 `<iframe src=blobUrl>`（**本仓已上线的 iframe 隔离先例**，浏览器内置查看器接管）；二级=pdf.js 自绘 | `mmagic-pdfjs-*`（无任何样式定义，按钮是裸原生样式） | 极小（canvas/iframe 自绘） | 低 |
 | docx（docx-preview 0.4） | `renderAsync(buffer, view, undefined, {inWrapper:true})`：`<style>` 节点默认插进 bodyContainer（`.docx-view` div 内），**但 `<style>` 插在 body 任何位置都是全文档生效**。默认规则有 `.docx-wrapper`/`.docx` 类作用域（含 `.docx-wrapper{background:gray}` 纸面灰底）；**文档自带样式（stylesPart）会生成未加前缀的全局类选择器**（如 `.Normal`、按文档样式名转义的类名，node_modules docx-preview.mjs L3384-3389）+ 全局 `@font-face` 注入（L3016） | `.docx-*` 是库的，**用户文档派生类名不可控** | 宿主 reset/全局 `a` 色直接进 docx 版式；EP 无裸元素规则（index.css 0 条 body/html/* 选择器）不影响 | **最高**（样式名由用户上传的 docx 决定，与宿主类名碰撞理论上可能） |
-| xlsx（SheetJS） | 零注入：`sheet_to_html` → 剥属性 → 挂 class | `xlsx-*`（**宿主与渲染器两侧都没有任何样式定义**，表格靠浏览器默认渲染） | 浏览器默认样式 + 宿主 `*` reset | 中（观感未收口，无污染但无设计） |
+| xlsx（SheetJS） | 零注入：`sheet_to_html` → 剥属性 → 挂 class | `xlsx-*`（宿主侧零定义；渲染侧 v1.2.0 起走 ExcelJS 保真样式链 xlsxStyle） | 浏览器默认样式 + 宿主 `*` reset | 中（观感未收口，无污染但无设计） |
 | media | 零注入：`<video>/<audio controls>` + 内联 style | 无 | 极小 | 低 |
 | image（viewerjs 1.15） | **顶层静态 `import 'viewerjs/dist/viewer.css'`**（全局 `.viewer-*` 类系，无前缀冲突风险但常驻全局 CSSOM）；非内联模式全屏查看器挂 `document.body`——**UI 逃逸出预览舞台**（z-index≈2015 直接进宿主层叠上下文） | `mmagic-image-view`/`mmagic-image-fail` + 库的 `.viewer-*` | 宿主层叠上下文/EP 弹层 z-index 与 viewer 竞态 | 中 |
 | heic（heic2any） | 复用 image 链路，无额外注入 | `mmagic-heic-fail` | 同 image | 低 |
-| painter（Canvas） | 零注入（全内联 style） | `mmagic-painter-*` | **刻意反向依赖宿主**：按钮直接套全局外观类 `fc-button fc-button-icon fc-button-xs` 等（L170/187/205/220，R2-12 决策）——宿主改 fc-button 画板工具条跟着变 | 低（显式依赖，属契约而非事故） |
 | 预览骨架（preview.ts） | 无注入 | `mmf-preview-stage/error/fallback/rejected`（仅 stage 在 Home.vue 有样式；error/fallback 节点复用宿主 `fc-button`） | 同上，fc-button 契约 | 低 |
 
 > 清单口径：`frontend/src/styles/` 与各 `.vue` `<style>` 已全量 grep（`xlsx-`/`mmagic-`/`docx`/`markdown` 零命中）；`index.scss` 全文已读、`global.scss` 余下部分未逐行核对，**本表为未尽完整清单**，后续改造前以一次 `grep -rnE '^(h1|…|a)\b' styles/` 复核为准。
@@ -116,6 +115,6 @@ main.ts 全量引入：`element-plus/dist/index.css` + `remixicon` + `./styles/i
 
 ## 五、开放项
 
-- `ctx.theme` 目前宿主传 `{}`（Home.vue L518/L567）——主题实际只走 CSS 变量通道。若未来把 token 塞进 `ctx.theme`，iframe 档的 token 灌注应改为消费 ctx 而非另读 DOM，需在 P2 设计时定稿。
+- `ctx.theme` 目前宿主传 `{}`（现 Home.vue:907/960）——主题实际只走 CSS 变量通道。若未来把 token 塞进 `ctx.theme`，iframe 档的 token 灌注应改为消费 ctx 而非另读 DOM，需在 P2 设计时定稿。
 - T1 插件样式纪律（前缀/layer）写入《plugin-system.md》V1.2 的时机，建议与 P1 同 lane。
 - docx iframe 档的打印语义（宿主打印按钮 vs iframe 内打印）候 P2 细化。

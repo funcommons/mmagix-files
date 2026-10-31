@@ -71,6 +71,7 @@ mindmap
 ### 2.4 集成
 
 `mind-editor`（ext: mmd/mermaid 中 mindmap 语法文件；edit）。路由判定：同一扩展名下按首行语法关键字分发（`mindmap` / `graph` / `sequenceDiagram` / `architecture`），未知语法 → `mermaid-viewer` 兜底。
+**【终态 2026-10-31】独立 `mind-editor` 应用未创建**——mindmap 已并入 flow-editor 四方言（`detectDialect` 分派，见头注），本节保留为选型档案。
 
 ---
 
@@ -144,6 +145,7 @@ architecture-beta
 ### 4.3 集成
 
 `arch-editor`（edit，X6）/ `mermaid-viewer` 兜底；保存链与只读闩锁同 code-editor 口径。
+**【终态 2026-10-31】独立 `arch-editor` 应用未创建**——architecture-beta 已并入 flow-editor 四方言，本节保留为选型档案。
 
 ---
 
@@ -153,7 +155,7 @@ architecture-beta
 
 | 组件 | 内容 |
 | --- | --- |
-| 解析路由器 | 按首行语法关键字分发到 graph/mindmap/sequence/architecture 解析器；未知 → mermaid-viewer |
+| 解析路由器 | **未设独立路由器**——`detectDialect` 在 flow-editor 内分派（`files/flow-model.ts`）；守卫不过时内部降级只读 mermaid 渲染，非路由到 mermaid-viewer |
 | mermaid.js 兜底渲染器 | `mermaid-viewer` 单应用吃四类图（含 SVG 旁路导出） |
 | 保存链/只读闩锁/词典/限额 | 全部复用 code-editor 契约（`MERMAID_MAX_BYTES=5MB` 一并覆盖） |
 | 回写框架 | 行级 patch + 透传 + 转义对称（流程图篇 §四.3，三篇共用） |
@@ -162,7 +164,7 @@ architecture-beta
 
 | 期 | 交付 | 验收 |
 | --- | --- | --- |
-| MVP-A | 解析路由器 + `mermaid-viewer`（四类图只读全通） | seed 新增 `apps-demo/diagrams/{approval.mmd, login-seq.mmd, product-mind.mmd, system-arch.mmd}` 四样例全渲染；SVG 导出可被 image-viewer 打开 |
+| MVP-A | 解析路由器 + `mermaid-viewer`（四类图只读全通） | seed `apps-demo/diagrams/*.mmd` **未落仓**（E2E 用内联 fixture）；SVG 导出可被 image-viewer 打开（DEF-3 画布序列化） |
 | MVP-B | 时序图文本编辑闭环（code-editor 链 + 预览分栏） | 改文本→保存→putObject→重开一致 |
 | MVP-C | 脑图 mind-elixir 编辑（数据桥+回写） | 往返 diff 为空（同流程图硬标准） |
 | MVP-D | 架构图 X6 拓扑编辑（数据桥+回写） | 往返 diff 为空；透传行（icons/junction）原样保留 |

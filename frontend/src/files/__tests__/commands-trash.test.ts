@@ -1,7 +1,7 @@
 /**
  * M3-UI 命令/操作链回收站接线测试（W2+ 波次：commands restore/purge + workspace-ops
  * restoreEntries/purgeEntries + FileTreeWithTrash DI 消费面）。
- * 契约：《documents/v1.2.0执行进度.md》M3 契约节 + UI 波次节（TrashPanel emits →
+ * 契约：《docs/design/capabilities-contract-v1.2.0.md》M3 契约节 + UI 波次节（TrashPanel emits →
  * workspace-ops / JSSDK restore/purge 命令挂既有 features 通道）。
  *
  * TDD 红态说明：restore/purge 命令与 restoreEntries/purgeEntries 操作链**尚未实现**——

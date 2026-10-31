@@ -1,6 +1,6 @@
 # v1.2.0 升级方案：断点上传 · 分享增强 · 在线解压 · 回收站
 
-> 2026-10-29 · 基于 v1.1.0（commit 6b225b41）代码实测 + TOP3 竞品调研（见《同类项目对比与升级建议》）。
+> 2026-10-29 · 基于 v1.1.0（commit 6b225b41）代码实测 + TOP3 竞品调研（见docs/product/competitive-analysis-v1.3.0.md）。
 > **红线**：纯前端零后端，S3 预签名直连，凭证不出前端——所有需求细节以该边界可行为准。
 > 文件名说明：原需求名「断点上传/分享增强/在线解压/回收站」含 `/` 不合法，以 `-` 代之。
 
@@ -14,7 +14,7 @@
 | 分享增强 | Dropbox/Box 密码+过期+禁下载 | 预签名 URL 三档时效（1h/24h/7d），无密码/撤销/管理 | 密码信封 + 撤销 + 分享管理台；次数=provider 扩展点 | 2.5d |
 | 公共底座 | — | presign 不支持自定义 query（versionId/partNumber 进不了预签名） | SigV4 extraQuery + client 5 新方法 + IDB v2 | 1.5d |
 
-> **纠偏**：《同类项目对比与升级建议》C 组「分片/断点续传 ✗ ← 最大缺口」与代码不符——multipart 链路已存在（`PART_CONCURRENCY=2`、默认分片 8MB、阈值 16MB、任务并发 3、`UPLOAD_ABORTED_CODE=4901`）。本次已同步修正该文档；v1.2 的「断点上传」是**补齐**而非从零建设。
+> **纠偏**：docs/product/competitive-analysis-v1.3.0.mdC 组「分片/断点续传 ✗ ← 最大缺口」与代码不符——multipart 链路已存在（`PART_CONCURRENCY=2`、默认分片 8MB、阈值 16MB、任务并发 3、`UPLOAD_ABORTED_CODE=4901`）。本次已同步修正该文档；v1.2 的「断点上传」是**补齐**而非从零建设。
 
 ---
 

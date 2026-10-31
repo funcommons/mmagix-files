@@ -1,6 +1,6 @@
 /**
  * ShareDialog 增强面组件测试（M5-UI-b 波次；TDD 红态先行——增强 props 尚未落地，预期红）。
- * 契约（documents/v1.2.0执行进度.md §UI 波次契约 M5-UI-b）：props 追加（皆可选，注入则启用增强面）：
+ * 契约（docs/design/capabilities-contract-v1.2.0.md §UI 波次契约 M5-UI-b）：props 追加（皆可选，注入则启用增强面）：
  *   createShare?: (input: { key; name; size; password; ttlMs }) => Promise<{ shareId; url }>
  *   listShares?: () => Promise<ShareRow[]>      // ShareRow = { shareId; key; name; createdAt; expiresAt }
  *   revokeShare?: (shareId: string) => Promise<void>

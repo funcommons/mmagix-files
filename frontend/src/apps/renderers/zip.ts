@@ -1,6 +1,6 @@
 /**
  * zip 在线解压浏览器渲染器（内置应用 zip-browser，M4-UI 波次）
- * 契约：documents/v1.2.0执行进度.md §UI 波次契约 M4-UI + 《docs/design/plugin-system.md》V1.1 §二
+ * 契约：docs/design/capabilities-contract-v1.2.0.md §UI 波次契约 M4-UI + 《docs/design/plugin-system.md》V1.1 §二
  * ctx 能力面（凭证不出、字节流进出）。UI 组件 frontend/src/apps/ui/ZipBrowser.vue（IO 回调注入、
  * 纯测可桩），本渲染器是唯一业务接线点：load/extract/download 三回调闭包注入 createApp 挂载。
  *

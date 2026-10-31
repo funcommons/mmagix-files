@@ -1,7 +1,7 @@
 /**
  * VersionPanel 组件测试（M3-F8 波次 W1；TDD 红态先行——组件 frontend/src/files/ui/VersionPanel.vue
  * 尚未落地，本文件当前必红；实现（coder-S）落地后应转绿）。
- * 契约（documents/v1.2.0执行进度.md §M3-F8 波次）：
+ * 契约（docs/design/capabilities-contract-v1.2.0.md §M3-F8 波次）：
  *   props: { list: (key) => Promise<VersionRow[]>; restore: (key, versionId) => Promise<void>;
  *            download?: (key, versionId) => Promise<void>; key: string; busy?: boolean }
  *   列表：版本 Id 短显/大小/时间/isLatest 标；恢复钮（非 latest 版本）；关闭。

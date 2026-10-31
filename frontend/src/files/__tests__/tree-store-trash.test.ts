@@ -1,6 +1,6 @@
 /**
  * 文件树 store · 回收站四方法测试（v1.2.0 M3）。
- * 契约：documents/v1.2.0执行进度.md §「M3 契约」——
+ * 契约：docs/design/capabilities-contract-v1.2.0.md §「M3 契约」——
  *   TrashEntry{key, deleteMarkerVersionId, deletedAt, versions} + listTrash / restoreTrash / purgeTrash / emptyTrash。
  * client 桩内联（listObjectVersions/deleteVersion 用 vi.fn），行序对齐 S3（key 升序、key 内新→旧）；
  * 分页桩按 maxKeys 切片并以 (keyMarker, versionIdMarker) 续拉，marker 对不上直接抛错以暴露实现误用。

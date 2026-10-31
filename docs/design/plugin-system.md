@@ -24,7 +24,7 @@
 ```
 配置: "plugins": [{ "url": "https://cdn.消费方.com/mmagic/ipynb-viewer.js", "sri": "sha384-...", "lazy": true, "options": { "initialMode": "split" } }]
   ↓ 前端启动扫描 plugins 数组（lazy 默认开：首个 matcher 命中才插入标签）
-动态注入 <script type="module" src integrity crossorigin>   ← 浏览器原生 ES module + SRI 校验
+fetch 字节 → sha384 自校验 → Blob URL import（loader.ts）   ← 校验过才执行，非标签注入
   ↓ module 顶层 export activate(sdk, options?)   ← options=PluginEntry.options 透传（v1.1 增补，可缺省）
 activate(sdk, options?) → sdk.registerApp({...})    ← 与内置应用走同一 AppRegistry
   ↓
@@ -57,10 +57,10 @@ export function activate(sdk, options) {
     requiresSdk: 1,                         // 要求的协议主版本（=信封 v；缺省=不校验；不匹配拒载）
   })
 }
-export function deactivate() { /* 可选：清理全局副作用 */ }
+export function deactivate() { /* 可选：清理全局副作用（**未接线**，见头部注记 2） }
 ```
 
-- `ctx` 能力面（白名单）：`getObject()/putObject()`（字节流进出，**不含凭证**）、主题 token、i18n（`ctx.t(key)`）、事件订阅、**事件上报 `ctx.notify(type, payload)` → 宿主 `fileChanged` 事件：`'saved'|'changed'`→action `'put'`；`'deleted'`→`'delete'`；`'renamed'`→`'rename'`（payload `{ key, from? }`）**、轻量存储（sessionStorage 隔离命名空间）
+- `ctx` 能力面（白名单）：`getObject()/putObject()`（字节流进出，**不含凭证**）、主题 token、i18n（`ctx.t(key)`）、**事件上报 `ctx.notify(type, payload)` → 宿主 `fileChanged` 事件：`'saved'|'changed'`→action `'put'`；`'deleted'`→`'delete'`；`'renamed'`→`'rename'`（payload `{ key, from? }`）**；事件订阅与轻量存储（sessionStorage 隔离命名空间）**未实现**（见头部注记 2）
 - 与 JSSDK 关系：`registerApp` 即 JSSDK command 之一——但宿主运行时注册经 postMessage 传 **`{ url, sri, lazy?, options? }`**（函数不可克隆，manifest 随 module 自描述；options 对象可克隆、随通道透传 activate 第二参，v1.1），宿主侧复用本档同一加载机制拉起；与配置注入双通道、同一 registry（见《jsdk-api.md》V1.0 §四）
 
 ## 三、信任两级（裁决台账②之翻案）
@@ -73,13 +73,13 @@ export function deactivate() { /* 可选：清理全局副作用 */ }
 ## 四、安全红线（T1 也必守）
 
 1. **凭证隔离**：插件永不接触 S3 凭证——`ctx.getObject()` 返回字节流，SK 封在内层 SigV4 模块；插件能读数据、不能读钥匙
-2. **供应链**：配置项带 SRI 完整性哈希（`"plugins": [{"url": "...", "sri": "sha384-..."}]`）+插件域白名单——js 源被篡改=加载拒绝
+2. **供应链**：配置项带 SRI 完整性哈希（`"plugins": [{"url": "...", "sri": "sha384-..."}]`，装载时 sha384 自校验）——js 源被篡改=加载拒绝
 3. **供应链执法（已裁⑥：无 CSP 差异化）**：不做 CSP `script-src` 按消费方放开——执法=配置 `plugins[]` 清单本身（清单外 URL 一律不加载）+SRI 完整性校验+插件域运行时校验；文件服务 SPA 自身不设 script-src 白名单（设了即与任意消费方插件域冲突）；消费方如需 CSP，在**宿主页**自行设定
 4. **数据面越权由凭证 scope 兜底**：插件再野也只能在凭证 prefix 内活动（S3 侧执法，前端拦不住的不归前端管）
 
 ## 五、工程细则
 
-- **lazy load 默认开**：首个 matcher 命中才插入 `<script type="module">` 标签；`"lazy": false` 可改启动即载
+- **lazy load 默认开**：首个 matcher 命中才 fetch+import（同 §一装载机制）；`"lazy": false` 可改启动即载
 - **per-tab 错误边界**：renderer 抛错只炸自己 tab（降级「插件应用出错」+重载钮），不崩工作台
 - **dispose/恢复**：切 tab/关 tab/会话过期三路必调 `dispose()`（维持，防泄漏防后台请求）；切回 tab=renderer 重跑，第 4 参注入上次 `getState()` 返回值：`renderer(el, file, ctx, savedState?)`——插件未声明 getState 时为 undefined，恢复策略插件自定
 - **beforeDispose 契约**：可返回 `Promise<boolean>`——resolve `false`=暂缓关闭（未保存态由插件自行提示）；3 秒超时强制放行；expired/destroy 路径只通知不询问（仍调用但忽略返回值）

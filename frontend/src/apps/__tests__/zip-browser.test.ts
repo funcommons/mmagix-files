@@ -1,6 +1,6 @@
 /**
  * ZipBrowser 组件测试（M4-UI 波次；TDD 红态先行——组件 frontend/src/apps/ui/ZipBrowser.vue 尚未落地）。
- * 契约（documents/v1.2.0执行进度.md §UI 波次契约 M4-UI）：
+ * 契约（docs/design/capabilities-contract-v1.2.0.md §UI 波次契约 M4-UI）：
  *   props: { load: () => Promise<ZipCentral>; extract: (entries: ZipEntryMeta[]) => Promise<void>;
  *            download: (entries: ZipEntryMeta[]) => Promise<void>; busy?: boolean }
  *   行为：mount 调 load → 条目表（名称/大小/修改时间/🔒加密标）；勾选→「解出所选」调 extract；

@@ -4,34 +4,82 @@
 
 ## [Unreleased]
 
+（暂无）
+
+## [1.3.0] — 2026-10-31
+
+主题：**上传确认弹窗 + 传输中心双 Tab + 版本能力门控**。协议无破坏性变更。
+
 ### 新增
 
+- **上传确认弹窗（三入口统一）**：上传先弹窗——目标目录 + 拖放/点选多文件 + 已选清单 + 确认才入队；
+  树头钮/空白右键/行右键三入口统一走弹窗，树 hidden input 移除
+- **传输中心并入弹窗（上传｜传输双 Tab）**：「传输」页签嵌任务中心（暂停/继续/重试/取消/清除）；
+  底部悬浮传输面板退役，入口=预览头传输钮（角标=进行中任务数，99+ 封顶）/⌘K「传输任务」/弹窗内切页签
+- **历史版本管理**：右键「历史版本」→ 抽屉（版本列表翻页聚合 + 恢复 = copy-source 带 `?versionId`
+  生成新 latest 不破坏历史 + 预签名下载指定版本）；`client.copy` 增可选 `fromVersionId`
+- **版本能力门控**：client 支持 listObjectVersions/getBucketVersioning 且桶 Versioning 为
+  Enabled/Suspended 才显示回收站入口与「历史版本」菜单——无能力整入口隐藏而非报错
+- **回收站入口迁移**：回收站图标迁至文件树面板工具栏动作簇
+- mkdir 弹窗完整路径实时预览（当前目录 + 输入名随打随显；右键目录=其内建，与上传同口径）
+
+### 变更
+
+- 确认流程编排：确认即关窗 → 重名冲突「覆盖/跳过」提示不再被弹窗遮挡 → 成功开始入队（accepted>0）
+  才重开弹窗落传输页签；全拒/取消保持关门
+- 传输面板：✕=整面板关闭（不再折叠成横条，0→N 新任务自动展开）；顶缘拖高把手（向上拖=变高，
+  96–480px localStorage 持久化）
+- 弹窗宽度自适应视口：92% + max-width 680px（destroy-on-close 关门即卸内容）
+
+### 修复
+
+- tree-store 回收站三方法脱 this（require* 助手 `.bind(client)`）
+- 右键菜单露 `files.menu.upload` 键名（词典缺键）
+- 构建链：tsconfig.app 排除测试目录（类型门禁查产物代码，测试门禁归 vitest）；element-plus 的
+  `@vue/shared` peer 断链以 vite alias 补桥
+
+### 质量基线
+
+- 单元测试 1828 通过（142 文件）；vue-tsc/eslint 零错误；E2E 弹窗流 12 处适配
+
+## [1.2.0] — 2026-10-29
+
+主题：**四能力收官——断点续传 · 回收站 · 在线解压 · 分享信封**。协议无破坏性变更。
+
+### 新增
+
+- **断点续传**：跨会话 checkpoint（IDB，createMultipart 后落行）· 单片间隔制退避 500/1000/2000ms ·
+  自适应分片 effectivePartSize（≤10000 片硬约束）· 真实字节进度 · 孤儿 uploadId 7 天清理 ·
+  Home resume 面包条（指纹+partSize 双校验，漂移整件重传）
+- **回收站**：Versioning 语义复用——恢复=删 latest DeleteMarker · purge 逐 key 复验 latestIsMarker
+  （防陈旧条目清光活版本）· TrashBatchError 保 failedDetails · TrashPanel 抽屉 + restore/purge 命令
+- **在线解压**：zip-reader 纯函数解析（EOCD 尾窗/zip64 缺序消费/GBK 回退/zip slip 防护/炸弹三闸）·
+  ZipBrowser 内置应用 · 解出接 multipart 队列（无写面降级本地下载）
+- **分享信封**：share-crypto 密码信封（AES-GCM(PBKDF2(密码)) 包裹预签名 URL，密码校验=解密成功，
+  零手写密码学）· ShareAccess 公开校验页（防暴破锁+回灌守卫）· ShareDialog 增强（密码/四档有效期/管理台）
 - **宿主侧客户端 npm 包 `@mmagix/files-client`**：`useMmagixFilesClient` 从 demo 抽出为独立包
   （零运行时依赖；核心 `createMmagixFilesHost` 框架无关 + Vue 组合式层 `/vue` 双入口，ESM+d.ts，
   vue 为可选 peer）。demo 经 vite alias 消费同一份源码（零安装验证）；协议漂移哨兵
   `clientProtocol.test.ts` 双侧比对（挂 frontend 套件）。单测 21 例（消息泵 harness：
-  握手/call-reply/超时/终态/节流/重装坑全链）。
-
-### 新增（续）
-
-- **时序图/架构图可编辑（flow-editor 四方言收官）**：sequenceDiagram/architecture-beta 文件直接进 X6
-  可视化编辑。新增 `parseSequence`/`serializeSequence`（participant=节点、消息=边且箭头 `->>`/`-->>`
-  kind 保真；alt/else/end/Note 整行透传）与 `parseArchitecture`/`serializeArchitecture`（service=节点、
-  icon/group 经 dialectData 往返、连接 `:端口` 剥离且箭头 `--/-->/<-->` 保真、group 行透传）；两者均
-  raw 优先（未编辑行零 diff，原始行语义等价时原样输出保端口/装饰）；`detectDialect` 统一方言探测，
-  flow-editor parse/serialize 分派表驱动。边界：两者位置不持久化（布局由引擎定）；X6 呈现为图形态
-  （非泳道/分组渲染，alt 框/group 分组以源行保真）
-- **脑图可编辑（flow-editor 双方言）**：mindmap 文件不再只读降级——直接进 X6 可视化编辑（同
-  flow-editor 全链：统一工具栏/撤销重做/重置/位置持久化 meta 通道/拖拽/连线/属性面板）。新增
-  `parseMindmap`/`serializeMindmap`/`isMindmapSource`（缩进树解析、装饰 ((x))/(x)/[x]/{x} 往返、
-  tab 缩进宽容、非法行按纯文本收编、序列化单根收拢——mermaid「only one root」硬约束）；
-  脑图模式「添加形状」自动挂为选中节点的子节点（树语义）。时序图/架构图保持只读降级。
-
-### 变更
-
+  握手/call-reply/超时/终态/节流/重装坑全链）
+- **flow-editor 四方言全可编辑**（mermaid graph TD 子集之外三方言）：
+  - mindmap（脑图）直接进 X6 可视化编辑（统一工具栏/撤销重做/重置/位置持久化 meta 通道/拖拽/连线/
+    属性面板；装饰 ((x))/(x)/[x]/{x} 往返、序列化单根收拢）；「添加形状」自动挂为选中节点子节点（树语义）
+  - sequenceDiagram/architecture-beta 直接进 X6：`parseSequence`/`serializeSequence`（participant=节点、
+    消息=边且箭头 `->>`/`-->>` kind 保真）与 `parseArchitecture`/`serializeArchitecture`（service=节点、
+    icon/group 经 dialectData 往返）；均 raw 优先（未编辑行零 diff）；`detectDialect` 统一方言探测。
+    边界：时序图/架构图位置不持久化（布局由引擎定）
 - **doc/ppt 下载兜底定向提示**：旧版 Office 二进制（.doc/.ppt）打开时由泛化「暂无应用」升级为
-  文件名 + 原因 + 转存建议定向文案（另存 .docx/.pptx 再上传即可在线查看）；其余未知类型保持泛化
-  文案。词典 `files.preview-fallback-doc/ppt`（中/英）。
+  文件名 + 原因 + 转存建议定向文案（另存 .docx/.pptx 再上传即可在线查看）；其余未知类型保持泛化文案
+
+### 底座
+
+- SigV4 presign extraQuery（versionId/partNumber 等）· client 版本管理/分片列表五方法 ·
+  IDB v2 迁移保 objects 数据
+
+### 质量基线
+
+- 单元测试 1814 通过（+215 例）；全局行覆盖门禁 81.06%；vue-tsc/eslint 零错误
 
 ## [1.1.0] — 2026-10-26
 

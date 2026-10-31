@@ -1,5 +1,7 @@
 # 测试报告（v1.1.0）
 
+> **历史基线**（v1.1.0 时点快照，数字不代表当前）；后续报告：[v1.2.0](test-report-v1.2.0.md) · [v1.3.0（当前）](test-report-v1.3.0.md)
+
 - 测试日期：2026-10-19 ~ 2026-10-26（多批次）
 - 被测版本：main @ v1.1.0（tag），含 c1ecbc19（doc/ppt 兜底提示）
 - 环境：macOS / Node 26 / pnpm 11.24 / Chromium（Playwright）；MinIO localhost:9000 + bucket mmagic-demo
