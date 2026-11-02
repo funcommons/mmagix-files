@@ -24,6 +24,7 @@
 | [样式隔离](design/style-isolation.md) | 应用打开防样式污染机制（含 v1.3 现状盘点注记） |
 | [流程图编辑器设计](design/flow-editor-design.md) | mermaid graph TD 子集 + X6（含 v2 适配 DEF 修复记录；四方言终态见注记 4） |
 | [图示类路线图](design/diagram-roadmap.md) | 脑图/时序图/架构图——**四方言已全部落地 flow-editor**（头注=终态；独立应用规划节保留为选型档案） |
+| [WebDAV 协议支持方案](design/webdav-support-design.md) | 多数据源方案正本：协议边界判定（FTP/SMB 为何出局）、W1–W6 裁决、CORS 闸、上传降级矩阵、门控矩阵（**未排期未实现**） |
 
 ## 插件设计（frontend/plugins/*）
 
