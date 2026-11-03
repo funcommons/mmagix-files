@@ -28,5 +28,10 @@ export default defineConfig({
     // 宿主 5200 ≠ iframe 5199 是刻意的跨源形态——逼出 origin 白名单这条真实约束。
     port: 5200,
     strictPort: true,
+    fs: {
+      // 官网文档中心（/docs）从仓根 ../docs 读原始 md（import.meta.glob ?raw），
+      // dev server 必须放行仓根，否则动态加载仓外文件被 fs.allow 拦下（403）。
+      allow: [fileURLToPath(new URL("..", import.meta.url))],
+    },
   },
 });

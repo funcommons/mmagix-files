@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import type { UploadUserFile } from "element-plus";
 import { FcButton, FcSegmented, FcSelect, FcSection } from "@/components/sdk";
 import LogPanel from "@/components/LogPanel.vue";
 import { OEM_CONFIG } from "@/config/oem";
+import { buildConfigUrl, useMmagixFilesClient } from "@/composables/useMmagixFilesClient";
 import {
-  buildConfigUrl,
-  useMmagixFilesClient,
-  CONFIG_VERSION,
-  type MmxWorkspaceConfig,
-} from "@/composables/useMmagixFilesClient";
+  buildWorkspaceConfig,
+  maskConfigForPreview,
+  validateForm,
+  FEATURE_KEYS,
+  WEBDAV_DEFAULT_ENDPOINT,
+  type DemoFormFields,
+} from "./configBuilder";
 
 const { t } = useI18n();
 
@@ -37,8 +40,9 @@ onBeforeUnmount(() => {
   offPreviewFs?.();
 });
 
-// ── 连接表单（演示默认值全部留空；读 .env.local 的 VITE_S3_* 作为缺省） ──
-const form = reactive({
+// ── 连接表单（形状见 configBuilder.DemoFormFields；S3 缺省读 .env.local 的 VITE_S3_*，WebDAV 全空） ──
+const form = reactive<DemoFormFields>({
+  backendType: "s3",
   endpoint: OEM_CONFIG.s3.endpoint,
   region: OEM_CONFIG.s3.region,
   bucket: OEM_CONFIG.s3.bucket,
@@ -46,44 +50,50 @@ const form = reactive({
   accessKeySecret: OEM_CONFIG.s3.accessKeySecret,
   sessionToken: OEM_CONFIG.s3.sessionToken,
   prefix: OEM_CONFIG.s3.prefix,
+  webdavUsername: "",
+  webdavPassword: "",
+  webdavRootPath: "",
+  webdavChunkedWrite: false,
   ttl: 3600,
-  theme: "light" as "light" | "dark",
-  locale: "zh-CN" as "zh-CN" | "en-US",
+  theme: "light",
+  locale: "zh-CN",
   initialPath: "",
-  /** 文件树形态：sidebar=常驻侧栏（默认）/ drawer=左抽屉（预览区左上角图标唤起） */
-  treeMode: "sidebar" as "sidebar" | "drawer",
-  /** 文件树标题覆写（ui.treeTitle；空=缺省「根目录」/前缀末段） */
+  treeMode: "sidebar",
   treeTitle: "",
-  /** 勾选=关闭该功能（features[key]=false）；不勾=缺省全开 */
-  disabledFeatures: [] as string[],
-  /** Univer 文档插件（xlsx/xls/docx 编辑）：注入 plugins 配置，启动即载 */
+  disabledFeatures: [],
   univerPlugin: true,
-  /** PDF 标注签批插件（覆盖层标注/签批/签名，压平写回） */
   pdfAnnotator: true,
-  /** Markdown 编辑插件（md/markdown 编辑 × mermaid × 三形态）；空串=不传该参数走缺省链 */
   mdPlugin: true,
-  /** Artplayer 媒体播放器插件（视频/音频打开方式增强） */
   artplayerPlugin: true,
-  /** Filerobot 图片编辑器插件（png/jpg/webp 等编辑增强） */
   filerobotPlugin: true,
-  /** HTML 编辑器插件（html/htm 三态：源码/可视/预览，单体化+新 tab 代理） */
   htmlPlugin: true,
-  /** PPTX 预览插件（pptx-preview 纯前端渲染，办公三件套补位） */
   pptxPlugin: true,
-  mdInitialMode: "" as "" | "source" | "split" | "preview",
-  mdDefaultMode: "" as "" | "source" | "split" | "preview",
+  mdInitialMode: "",
+  mdDefaultMode: "",
 });
 
-const FEATURE_KEYS = [
-  "upload",
-  "mkdir",
-  "rename",
-  "delete",
-  "download",
-  "multiTab",
-  "openWithMenu",
-  "plugins",
-] as const;
+/** 数据源类型段（backend 判别）：computed 包裹——label 随语言即时切换 */
+const backendTypeOptions = computed(() => [
+  { label: t("demo.embed.backendType.s3"), value: "s3" },
+  { label: t("demo.embed.backendType.webdav"), value: "webdav" },
+]);
+
+// ── backendType 联动：endpoint 只在「空串 / 对称缺省值」间搬移，用户手输的其它值一律不动 ──
+// 陷阱：切到 WebDAV 后 endpoint 仍挂着 S3 缺省（http://localhost:9000），直接点挂载
+// = 对着一个不存在的 WebDAV 端点网络失败。切到 webdav 时若值还是 S3 缺省（或空）→
+// 换成 WebDAV 演示缺省；切回 s3 时若值还是 WebDAV 缺省（或空）→ 还原 S3 缺省。
+watch(
+  () => form.backendType,
+  (type) => {
+    if (type === "webdav") {
+      if (form.endpoint === "" || form.endpoint === OEM_CONFIG.s3.endpoint) {
+        form.endpoint = WEBDAV_DEFAULT_ENDPOINT;
+      }
+    } else if (form.endpoint === "" || form.endpoint === WEBDAV_DEFAULT_ENDPOINT) {
+      form.endpoint = OEM_CONFIG.s3.endpoint;
+    }
+  },
+);
 
 const statusLabel = computed(
   () =>
@@ -102,89 +112,19 @@ const iframeOrigin = new URL(OEM_CONFIG.filesBase).origin;
 const panelOpen = ref(true);
 const logOpen = ref(false);
 
-/** 当前表单生成的 #config（凭证打码预览用） */
-const configPreview = computed(() => {
-  const cfg = buildWorkspaceConfig();
-  const masked = {
-    ...cfg,
-    backend: {
-      ...cfg.backend,
-      credentials: {
-        accessKeyId: cfg.backend.credentials.accessKeyId ? "***" : "",
-        accessKeySecret: cfg.backend.credentials.accessKeySecret ? "***" : "",
-        sessionToken: cfg.backend.credentials.sessionToken ? "***" : "",
-      },
-    },
-  };
-  return JSON.stringify(masked, null, 2);
-});
+/** 当前表单生成的 #config（凭证打码预览用；S3/WebDAV 打码规则见 configBuilder） */
+const configPreview = computed(() => maskConfigForPreview(buildWorkspaceConfig(form)));
 
-const configUrlPreview = computed(() => buildConfigUrl(OEM_CONFIG.filesBase, buildWorkspaceConfig()));
-
-function buildWorkspaceConfig(): MmxWorkspaceConfig {
-  const cfg: MmxWorkspaceConfig = {
-    mode: "workspace",
-    v: CONFIG_VERSION,
-    backend: {
-      endpoint: form.endpoint.trim(),
-      region: form.region.trim() || "us-east-1",
-      bucket: form.bucket.trim(),
-      prefix: form.prefix,
-      credentials: {
-        accessKeyId: form.accessKeyId.trim(),
-        accessKeySecret: form.accessKeySecret.trim(),
-        sessionToken: form.sessionToken.trim(),
-      },
-      ttlSeconds: form.ttl > 0 ? form.ttl : undefined,
-    },
-    // security.allowedOrigins 留空数组即可：mount() 内 withHostOrigin 会自动把
-    // window.location.origin（本页= http://localhost:5200）追加进去——这是协议
-    // 硬要求（缺=宿主方向消息被 iframe 白名单静默丢弃，命令全 4004）。
-    security: { allowedOrigins: [] },
-    appearance: { theme: form.theme, locale: form.locale },
-  };
-  if (form.disabledFeatures.length > 0) {
-    const features: Record<string, boolean> = {};
-    for (const key of FEATURE_KEYS) features[key] = !form.disabledFeatures.includes(key);
-    cfg.features = features;
-  }
-  if (form.univerPlugin || form.pdfAnnotator || form.mdPlugin || form.htmlPlugin || form.pptxPlugin || form.artplayerPlugin || form.filerobotPlugin) {
-    // lazy 必须 false：md/xlsx/docx/pdf/媒体都有内置默认应用，lazy 插件在打开链「未命中才触发」永远轮不到
-    const base = new URL(OEM_CONFIG.filesBase).origin;
-    // markdown-editor 参数（PluginEntry.options → activate(sdk, options)，v1.1）；空串=不传走缺省链
-    const mdOptions: Record<string, unknown> = {
-      ...(form.mdInitialMode ? { initialMode: form.mdInitialMode } : {}),
-      ...(form.mdDefaultMode ? { defaultMode: form.mdDefaultMode } : {}),
-    };
-    cfg.plugins = [
-      ...(form.univerPlugin ? [{ url: `${base}/plugins/univer-office.js`, lazy: false as const }] : []),
-      ...(form.pdfAnnotator ? [{ url: `${base}/plugins/pdf-annotator.js`, lazy: false as const }] : []),
-      ...(form.mdPlugin
-        ? [{ url: `${base}/plugins/markdown-editor.js`, lazy: false as const, ...(Object.keys(mdOptions).length ? { options: mdOptions } : {}) }]
-        : []),
-      ...(form.artplayerPlugin ? [{ url: `${base}/plugins/artplayer-player.js`, lazy: false as const }] : []),
-      ...(form.htmlPlugin ? [{ url: `${base}/plugins/html-editor.js`, lazy: false as const }] : []),
-      ...(form.pptxPlugin ? [{ url: `${base}/plugins/pptx-viewer.js`, lazy: false as const }] : []),
-      ...(form.filerobotPlugin ? [{ url: `${base}/plugins/filerobot-image-editor.js`, lazy: false as const }] : []),
-    ];
-  }
-  if (form.initialPath.trim() || form.treeMode !== "sidebar" || form.treeTitle.trim()) {
-    cfg.ui = {
-      treeMode: form.treeMode,
-      ...(form.initialPath.trim() ? { initialPath: form.initialPath.trim() } : {}),
-      ...(form.treeTitle.trim() ? { treeTitle: form.treeTitle.trim() } : {}),
-    };
-  }
-  return cfg;
-}
+const configUrlPreview = computed(() => buildConfigUrl(OEM_CONFIG.filesBase, buildWorkspaceConfig(form)));
 
 async function onMount() {
-  if (!form.endpoint.trim() || !form.bucket.trim()) {
-    ElMessage.warning(t("demo.embed.msg.needEndpoint"));
+  const err = validateForm(form);
+  if (err) {
+    ElMessage.warning(t(err));
     return;
   }
   try {
-    await mount(buildWorkspaceConfig(), OEM_CONFIG.filesBase);
+    await mount(buildWorkspaceConfig(form), OEM_CONFIG.filesBase);
     // mount 后 host 实例就绪：接 iframe 的全屏事件（重复挂载先解旧绑）
     offPreviewFs?.();
     offPreviewFs = on("previewFullscreen", (payload) => {
@@ -294,16 +234,16 @@ const treeModeOptions = computed(() => [
   { label: t("demo.embed.treeMode.drawer"), value: "drawer" },
 ]);
 /** markdown-editor 形态参数选项（空串=不传，走插件缺省链） */
-/** 插件多选行（单文件页 FilePlay 同款交互）：key 收窄到 form 的布尔字段，label 短文案 */
-const PLUGIN_SWITCHES: { key: "univerPlugin" | "pdfAnnotator" | "mdPlugin" | "htmlPlugin" | "pptxPlugin" | "artplayerPlugin" | "filerobotPlugin"; label: string }[] = [
-  { key: "univerPlugin", label: "Univer 文档" },
-  { key: "pdfAnnotator", label: "PDF 签批" },
-  { key: "mdPlugin", label: "Markdown 编辑" },
-  { key: "htmlPlugin", label: "HTML 编辑" },
-  { key: "pptxPlugin", label: "PPTX 预览" },
-  { key: "artplayerPlugin", label: "媒体播放" },
-  { key: "filerobotPlugin", label: "图片编辑" },
-];
+/** 插件多选行（单文件页 FilePlay 同款交互）：key 收窄到 form 的布尔字段；computed 包裹——label 随语言即时切换 */
+const PLUGIN_SWITCHES = computed<{ key: "univerPlugin" | "pdfAnnotator" | "mdPlugin" | "htmlPlugin" | "pptxPlugin" | "artplayerPlugin" | "filerobotPlugin"; label: string }[]>(() => [
+  { key: "univerPlugin", label: t("demo.embed.plugin.univer") },
+  { key: "pdfAnnotator", label: t("demo.embed.plugin.pdfAnnotator") },
+  { key: "mdPlugin", label: t("demo.embed.plugin.md") },
+  { key: "htmlPlugin", label: t("demo.embed.plugin.html") },
+  { key: "pptxPlugin", label: t("demo.embed.plugin.pptx") },
+  { key: "artplayerPlugin", label: t("demo.embed.plugin.artplayer") },
+  { key: "filerobotPlugin", label: t("demo.embed.plugin.filerobot") },
+]);
 const mdModeOptions = computed(() => [
   { label: t("demo.embed.mdMode.auto"), value: "" },
   { label: t("demo.embed.mdMode.source"), value: "source" },
@@ -334,32 +274,55 @@ const mdModeOptions = computed(() => [
             <p>{{ t("demo.embed.hint.line1") }}</p>
             <p>{{ t("demo.embed.hint.line2") }}</p>
             <p>{{ t("demo.embed.hint.line3") }}</p>
+            <p>{{ t("demo.embed.hint.line4") }}</p>
           </el-alert>
 
           <el-form label-position="top" size="small" class="conn-form">
+            <el-form-item class="fc-form-item" :label="t('demo.embed.label.backendType')">
+              <FcSegmented v-model="form.backendType" :options="backendTypeOptions" size="sm" block />
+            </el-form-item>
             <el-form-item class="fc-form-item" label="endpoint">
               <el-input v-model="form.endpoint" class="fc-input" placeholder="http://localhost:9000" />
             </el-form-item>
-            <div class="row2">
-              <el-form-item class="fc-form-item" label="region">
-                <el-input v-model="form.region" class="fc-input" placeholder="us-east-1" />
+            <template v-if="form.backendType === 's3'">
+              <div class="row2">
+                <el-form-item class="fc-form-item" label="region">
+                  <el-input v-model="form.region" class="fc-input" placeholder="us-east-1" />
+                </el-form-item>
+                <el-form-item class="fc-form-item" label="bucket">
+                  <el-input v-model="form.bucket" class="fc-input" placeholder="mmagic-demo" />
+                </el-form-item>
+              </div>
+              <el-form-item class="fc-form-item" :label="t('demo.embed.label.prefix')">
+                <el-input v-model="form.prefix" class="fc-input" placeholder="sessions/demo/" />
               </el-form-item>
-              <el-form-item class="fc-form-item" label="bucket">
-                <el-input v-model="form.bucket" class="fc-input" placeholder="mmagic-demo" />
+              <el-form-item class="fc-form-item" label="accessKeyId">
+                <el-input v-model="form.accessKeyId" class="fc-input" :placeholder="t('demo.embed.placeholder.ak')" autocomplete="off" />
               </el-form-item>
-            </div>
-            <el-form-item class="fc-form-item" :label="t('demo.embed.label.prefix')">
-              <el-input v-model="form.prefix" class="fc-input" placeholder="sessions/demo/" />
-            </el-form-item>
-            <el-form-item class="fc-form-item" label="accessKeyId">
-              <el-input v-model="form.accessKeyId" class="fc-input" :placeholder="t('demo.embed.placeholder.ak')" autocomplete="off" />
-            </el-form-item>
-            <el-form-item class="fc-form-item" label="accessKeySecret">
-              <el-input v-model="form.accessKeySecret" class="fc-input" :placeholder="t('demo.embed.placeholder.sk')" show-password autocomplete="new-password" />
-            </el-form-item>
-            <el-form-item class="fc-form-item" label="sessionToken">
-              <el-input v-model="form.sessionToken" class="fc-input" :placeholder="t('demo.embed.placeholder.token')" show-password autocomplete="new-password" />
-            </el-form-item>
+              <el-form-item class="fc-form-item" label="accessKeySecret">
+                <el-input v-model="form.accessKeySecret" class="fc-input" :placeholder="t('demo.embed.placeholder.sk')" show-password autocomplete="new-password" />
+              </el-form-item>
+              <el-form-item class="fc-form-item" label="sessionToken">
+                <el-input v-model="form.sessionToken" class="fc-input" :placeholder="t('demo.embed.placeholder.token')" show-password autocomplete="new-password" />
+              </el-form-item>
+            </template>
+            <template v-else>
+              <el-form-item class="fc-form-item" :label="t('demo.embed.label.username')">
+                <el-input v-model="form.webdavUsername" class="fc-input" :placeholder="t('demo.embed.placeholder.username')" autocomplete="off" />
+              </el-form-item>
+              <el-form-item class="fc-form-item" :label="t('demo.embed.label.password')">
+                <el-input v-model="form.webdavPassword" class="fc-input" :placeholder="t('demo.embed.placeholder.password')" show-password autocomplete="new-password" />
+              </el-form-item>
+              <el-form-item class="fc-form-item" :label="t('demo.embed.label.rootPath')">
+                <el-input v-model="form.webdavRootPath" class="fc-input" :placeholder="t('demo.embed.placeholder.rootPath')" />
+              </el-form-item>
+              <el-form-item class="fc-form-item" :label="t('demo.embed.label.chunkedWrite')">
+                <div class="pair">
+                  <el-switch v-model="form.webdavChunkedWrite" size="small" />
+                  <span class="note">{{ t("demo.embed.hint.chunkedWrite") }}</span>
+                </div>
+              </el-form-item>
+            </template>
             <div class="row2">
               <el-form-item class="fc-form-item" :label="t('demo.embed.label.ttl')">
                 <el-input-number v-model="form.ttl" :min="60" :max="86400" :step="600" style="width: 100%" />
@@ -420,8 +383,13 @@ const mdModeOptions = computed(() => [
               {{ t("demo.embed.mount") }}
             </FcButton>
             <FcButton variant="secondary" :disabled="status !== 'ready'" @click="onDestroy">destroy</FcButton>
-            <FcButton variant="primary" :disabled="status !== 'ready'" @click="onRenew">
-              {{ t("demo.embed.renew") }}
+            <FcButton
+              variant="primary"
+              :disabled="status !== 'ready' || form.backendType === 'webdav'"
+              :title="form.backendType === 'webdav' ? t('demo.embed.renew.disabledHint') : undefined"
+              @click="onRenew"
+            >
+              {{ t("demo.embed.renew.label") }}
             </FcButton>
           </div>
         </FcSection>
@@ -517,7 +485,7 @@ const mdModeOptions = computed(() => [
               :disabled="status !== 'ready'"
               size="small"
             />
-            <span class="note" style="margin: 0">内存处理（target=memory，不落 S3）</span>
+            <span class="note" style="margin: 0">{{ t("demo.embed.label.memoryTarget") }}</span>
           </div>
           <p class="note">
             {{ t("demo.embed.uploadNote0") }}<code>uploadFiles { files?: File[] }</code>{{ t("demo.embed.uploadNote1") }}<code>uploadProgress / uploadDone / uploadFailed</code>{{ t("demo.embed.uploadNote2") }}

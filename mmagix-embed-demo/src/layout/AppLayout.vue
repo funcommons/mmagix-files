@@ -10,9 +10,9 @@ const route = useRoute();
 const router = useRouter();
 
 const navs = computed(() => [
-  { path: "/overview", label: t("demo.nav.overview"), icon: "ri-compass-3-line" },
-  { path: "/embed/play", label: t("demo.nav.workspace"), icon: "ri-folder-opened-line" },
-  { path: "/embed/file", label: t("demo.nav.file"), icon: "ri-file-line" },
+  { path: "/play/overview", label: t("demo.nav.overview"), icon: "ri-compass-3-line" },
+  { path: "/play/workspace", label: t("demo.nav.workspace"), icon: "ri-folder-opened-line" },
+  { path: "/play/file", label: t("demo.nav.file"), icon: "ri-file-line" },
 ]);
 
 const activePath = computed(() => route.path);

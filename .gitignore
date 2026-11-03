@@ -12,3 +12,8 @@ frontend/public/plugins/
 frontend/plugins/*/node_modules/
 frontend/plugins/*/pnpm-lock.yaml
 node_modules/
+mmagix-embed-demo/webdav-data/
+mmagix-embed-demo/s3-data/
+
+# Hallmark skill 工作区（截图/发牌日志，本地产物不入库）
+.hallmark/

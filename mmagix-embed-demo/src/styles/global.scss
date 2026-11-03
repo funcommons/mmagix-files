@@ -6,6 +6,8 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  // Hallmark Floor 34：任何宽度禁横向滚动；clip 不产生滚动容器，sticky 头部不受影响
+  overflow-x: clip;
 }
 
 body {

@@ -9,14 +9,19 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc -b --noEmit",
+    "test": "vitest run",
     "dev:s3": "node scripts/dev-s3.mjs",
+    "dev:webdav": "node scripts/dev-webdav.mjs",
+    "test:webdav": "node --test scripts/dev-webdav.test.mjs",
     "s3:seed": "node scripts/s3-admin.mjs \"$VITE_S3_ENDPOINT\" \"$VITE_S3_ACCESS_KEY_ID\" \"$VITE_S3_ACCESS_KEY_SECRET\" \"$VITE_S3_REGION\" seed \"$VITE_S3_BUCKET\"",
     "s3:seed:apps": "node scripts/seed-apps.mjs \"$VITE_S3_ENDPOINT\" \"$VITE_S3_ACCESS_KEY_ID\" \"$VITE_S3_ACCESS_KEY_SECRET\" \"$VITE_S3_REGION\" \"$VITE_S3_BUCKET\""
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "@popperjs/core": "^2.11.8",
+    "dompurify": "^3.4.17",
     "element-plus": "^2.13.3",
+    "marked": "^18.1.2",
     "pinia": "^3.0.4",
     "remixicon": "^4.9.1",
     "sass": "^1.97.3",
@@ -28,9 +33,11 @@
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.2",
     "@vue/tsconfig": "^0.8.1",
+    "jsdom": "^29.1.1",
     "s3rver": "^3.7.1",
     "typescript": "~5.9.3",
     "vite": "^7.3.0",
+    "vitest": "^4.1.12",
     "vue-tsc": "^3.2.1"
   }
 }

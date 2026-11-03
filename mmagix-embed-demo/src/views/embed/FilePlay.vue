@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import { FcButton, FcSegmented, FcSelect, FcSection } from "@/components/sdk";
@@ -9,6 +9,7 @@ import {
   buildFileUrl,
   useMmagixFilesClient,
   CONFIG_VERSION,
+  type LogEntry,
   type MmxSingleFileConfig,
 } from "@/composables/useMmagixFilesClient";
 
@@ -17,12 +18,18 @@ const { t } = useI18n();
 const {
   iframeRef,
   status,
-  logs,
+  logs: logsRef,
   mount,
   call,
   destroy,
   log,
 } = useMmagixFilesClient();
+// 裸绑定类型解包坑（仅类型层，运行时同一对象零改动）：files-client 源码直连（tsconfig paths）
+// 下其 `vue` 解析到 frontend 副本，与 demo 副本的 `Ref` 品牌符号（unique symbol）不互通，
+// vue-tsc 对裸 prop 绑定的 `__VLS_unwrap` 跨副本判 `T extends Ref` 失败→不解包→整只 Ref
+// 流进 LogPanel 的 `LogEntry[]` prop（EmbedPlay 因模板另有 logs.length 命中 .value 通道而幸免）。
+// 以 demo 侧 `Ref` 重述类型后 vue-tsc 正常解包。
+const logs = logsRef as unknown as Ref<LogEntry[]>;
 
 // ── #file 配置表单 ──
 const form = reactive({
