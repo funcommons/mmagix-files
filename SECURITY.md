@@ -11,6 +11,14 @@ mmagix-files 是**纯前端** S3 文件管理器，以 iframe 嵌入宿主页面
 | HTML 预览 | `sandbox="allow-scripts"` + srcdoc 净化（剥 script/on*/javascript: URI/meta refresh/base/object），跳转代理确认后新 tab | `frontend/src/apps/renderers/htmlSandbox.ts`、`html.ts` |
 | 插件装载 | 可选 sha384 SRI 自校验（清单：`docs/releases/`） | `frontend/src/plugins/loader.ts` |
 | 插件沙箱边界 | 插件与宿主同源同窗（非 iframe 隔离）——**只装载可信来源的插件脚本** | `frontend/src/sdk/plugins/` |
+| WebDAV 凭证通道 | Basic 认证（`user:pass`）明文于每个请求 `Authorization` 头——仅建议 HTTPS；凭证不出前端（不进 URL/历史/摘要） | `frontend/src/sdk/webdav/client.ts`、`frontend/src/sdk/config.ts`（`buildConfigSummary`） |
+
+## WebDAV 凭证通道注记
+
+- **Basic 明文头**：每个 WebDAV 请求都携带 `Authorization: Basic base64(user:pass)`——走 HTTP 时等同口令明文传输，**生产环境仅建议 HTTPS**（方案正本 `docs/design/webdav-support-design.md` §W6）。
+- **TTL 自毁线语义**：`ttlSeconds`/`expiresAt` 到点=**前端主动遗忘**（清态+`expired` 事件，不再携带 Authorization 头），**并非凭证真到期**——服务器侧密码仍然有效、无任何过期保护。文档与 UI 不得暗示 WebDAV 凭证存在过期保护（`sdk/types.ts` `WebDavBackend` 注记口径）。
+- **连接档案明文存储**：WebDAV 档案落独立键 `mmagic.profiles.webdav`（localStorage），与 S3 AK/SK 档案同一明文形态，ConnectWizard 的常驻明文警示条对两库一体覆盖——仅建议个人设备使用。
+- **摘要不透出密码**：`buildConfigSummary`（`frontend/src/sdk/config.ts`）对 webdav backend **整键缺省** `password`（不脱敏垫 `***`，键名也不透出），与既有 S3「credentials 整段不进摘要」同一红线（断言见 `frontend/src/sdk/__tests__/config-webdav.test.ts`）。
 
 ## 支持的版本
 

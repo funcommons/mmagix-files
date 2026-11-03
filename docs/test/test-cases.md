@@ -1,18 +1,19 @@
 # 测试用例清单
 
 > 粒度=测试文件（套件）级；套件内用例名见各 `__tests__/*.test.ts` 文件头注释（与代码同源，此处不复制）。
-> 用例文件数标注为 2026-10-31 实测（v1.3.0，`pnpm vitest run`，总计 142 文件 / 1828 通过 + 1 既有跳过）。
+> 用例文件数标注为 2026-11-03 实测（v1.4.0，`pnpm vitest run`，总计 154 文件 / 1984 通过 + 1 既有跳过）。
 > 本文只列套件→覆盖域映射；数字随版本演进，改测试时顺手更新头注总数与本表。
 
-## 1. SDK 协议层（frontend/src/sdk，11 文件）
+## 1. SDK 协议层（frontend/src/sdk，17 文件）
 
 | 套件 | 覆盖 |
 |---|---|
 | bus.test.ts | 信封 ns/v 校验、origin 白名单静默丢弃、reply-by-id、targetOrigin 禁 *、ready 握手（契约正本 jsdk-api.md §一/二/三/七） |
 | s3/__tests__（4 文件） | S3 datasource（列/取/传/删）、预签名/凭证通路、版本管理（listObjectVersions/getBucketVersioning）、SigV4 签名、presign extraQuery（versionId/partNumber 等） |
-| 其余 6 文件 | 命令面板、错误码、协议工具、config 解析（fragment + encodeURIComponent 口径）等 |
+| webdav/__tests__（5 文件） | client（PROPFIND/MKCOL/COPY/MOVE/DELETE、Basic 认证、401/403/423/507 语义分流、list() 全 key 契约）、client-multipart（content-range 非标追加/MOVE 完成/probe 对账）、client/parse cjk-nested（CJK/嵌套路径全 key 契约复现，与 tree-store-webdav-cjk 三件合计 9 例）、parse（207 multistatus 逐段单次解码） |
+| 其余（`sdk/__tests__`，8 文件） | 命令面板、错误码、协议工具、config 解析（fragment + encodeURIComponent 口径）、config-webdav（双 backend 按 type 校验/summary password 整键缺席/setCredentials instanceof 守卫）等 |
 
-## 2. 文件管理面（frontend/src/files/__tests__，30 文件）
+## 2. 文件管理面（frontend/src/files/__tests__，34 文件）
 
 | 套件（分组） | 覆盖 |
 |---|---|
@@ -30,13 +31,14 @@
 | share-crypto / share-dialog / share-dialog-v2 | 分享信封加密（PBKDF2+AES-GCM）、ShareDialog 两代对话框 |
 | zip.test.ts / zip-reader | 在线解压浏览器应用；zip 纯函数解析（EOCD/zip64/GBK/zip slip/炸弹闸） |
 | trash-panel.test.ts | 回收站抽屉 |
-| shortcuts / status-bar / session-format / setup / ui / profiles / connect-wizard / format | 快捷键、状态栏、会话格式、工作台装配、界面工具、连接配置/向导、字节格式化 |
+| shortcuts / status-bar / session-format / setup / ui / profiles / connect-wizard / format | 快捷键、状态栏、会话格式、工作台装配、界面工具、连接配置/向导（含 WebDAV 类型段/测试连接三分流/endpoint URL 闸）、字节格式化 |
+| setup-webdav / tree-store-webdav(+cjk) / upload-queue-webdav | WebDAV 批次专项：装配 `backend.type` 分流与六可选能力缺席门控；树 collection 语义（mkdir MKCOL 逐级补建/目录单发 DELETE/改名祖先链）、list() 全 key 与 CJK 嵌套；上传三态矩阵（s3-multipart｜content-range 串行泵/probe 判活｜none 整包降级+超限拒收）、跨会话断点判活、分享入口门控 3 例（ui.test.ts） |
 
-## 3. 内置应用（frontend/src/apps，22 文件）
+## 3. 内置应用（frontend/src/apps，23 文件）
 
 | 套件 | 覆盖 |
 |---|---|
-| apps/__tests__（8 文件） | builtins 注册表（应用数/注册序/字节限额单一事实源 R2-03）、zip-browser 等应用装配 |
+| apps/__tests__（9 文件） | builtins 注册表（应用数/注册序/字节限额单一事实源 R2-03）、zip-browser 等应用装配、datasource 注入分流、zip-renderer（objectRangeReader 三档供给：S3/WebDAV Range 读｜mem://与单文件 Blob 兜底） |
 | renderers/code.test.ts（44 例） | 语言映射、保存链（Ctrl+S）、格式化双链（worker 优先+自研回退+双护栏）、统一工具栏（红点/重置/历史联动）、只读闩锁 4305、beforeDispose 3s 竞速、主题联动、viewState |
 | renderers/flow-editor.test.ts | 解析/添加节点连线/Ctrl+S/撤销栈/重置/位置持久化/4305 只读；四方言（graph TD/mindmap/sequence/architecture）parse/serialize |
 | renderers/code-theme.test.ts | 宿主变量→Monaco 主题映射（明暗/data-brand） |
@@ -65,13 +67,13 @@
 | filerobot-image-editor（1 文件） | 保存二段流 | base64 前缀校验（防 fetch('') 写坏对象） |
 | pptx-viewer（1 文件） | 渲染桩 | init/resize 防抖 |
 
-## 7. 平台杂项（src/api 2 / composables 4 / config 1 / router 1 / store 1 / utils 4 / __tests__ 1 / plugins 2 / shared 2 / packages/files-client 2 = 20 文件）
+## 7. 平台杂项（src/api 2 / composables 4 / config 1 / router 1 / store 1 / utils 4 / __tests__ 2 / plugins 2 / shared 1（clientProtocol，editToolbar 已计 §4）/ packages/files-client 2 = 20 文件）
 
 | 域 | 覆盖 |
 |---|---|
 | api/utils | 统一错误处理/notify/errorMessages/幂等提交 |
 | composables | 组合式函数 |
-| config / router / store / 启动 | 特性开关、路由、全局 store、boot |
+| config / router / store / 启动 | 特性开关、路由、全局 store、boot（含 boot-webdav：WebDAV 会话装配分流） |
 | src/plugins/__tests__（2 文件） | examples 插件按样例契约可装载 |
 | files-client core.test.ts（14 例） | URL 构造（fragment+encodeURIComponent，'+' 不损）、withHostOrigin 注入、装载 src/握手/4303 拒绝/call-reply 信封与 targetOrigin/4004 超时+迟到 reply 忽略/origin 双闸/事件订阅/expired 终态拆除/destroy 幂等 |
 | files-client vue.test.ts（7 例） | 状态机流转、未装载 4005、run 包装日志、destroy 复位、日志上限、uploadProgress 500ms 节流、重装 about:blank 归位坑 |
@@ -95,4 +97,4 @@ Spec：`e2e/00-warmup` + `line1-boot-error` ~ `line11-workbench` 共 12 个（�
 | 2026-10-26-01 | 统一工具栏 12/12、十应用截图取证、客户端包实机链路 |
 | 2026-10-27-01 | flow-editor 脑图/时序图/架构图方言编辑取证 |
 
-结果汇总见 [test-report-v1.3.0.md](test-report-v1.3.0.md)。
+结果汇总见 [test-report-v1.4.0.md](test-report-v1.4.0.md)。

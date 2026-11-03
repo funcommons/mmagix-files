@@ -7,14 +7,14 @@
 
 | 文档 | 内容 |
 |---|---|
-| [PRD](product/PRD.md) | 需求规格：产品定位、用户/场景、功能需求清单 FR-1~17（含实现状态与代码锚）、非功能需求、边界（基线 v1.3.0） |
+| [PRD](product/PRD.md) | 需求规格：产品定位、用户/场景、功能需求清单 FR-1~18（含实现状态与代码锚）、非功能需求、边界（基线 v1.4.0） |
 | [竞品对标 v1.3.0](product/competitive-analysis-v1.3.0.md) | TOP5 Star 同类项目功能大表 + 差异化结论 + 下一波升级建议（2026-10-31 调研） |
 
 ## 设计
 
 | 文档 | 内容 |
 |---|---|
-| [架构 · 概要设计](design/architecture.md) | 系统构成、目录职责、关键设计决策 D1–D13、质量属性（v1.3.x） |
+| [架构 · 概要设计](design/architecture.md) | 系统构成、目录职责、关键设计决策 D1–D17、质量属性（v1.4.x） |
 | [总体方案（裁决档案）](design/solution-design.md) | V1.2 时代总体方案全文+实施状态注记（架构现状以 architecture.md 为准） |
 | [v1.2.0 四能力方案（档案）](design/capabilities-design-v1.2.0.md) | 断点续传/回收站/在线解压/信封分享的设计方案正本（代码注释「方案」锚点） |
 | [v1.2.0 四能力契约（档案）](design/capabilities-contract-v1.2.0.md) | 同版 M1–M5 契约节+执行账（代码注释「契约」锚点） |
@@ -24,7 +24,7 @@
 | [样式隔离](design/style-isolation.md) | 应用打开防样式污染机制（含 v1.3 现状盘点注记） |
 | [流程图编辑器设计](design/flow-editor-design.md) | mermaid graph TD 子集 + X6（含 v2 适配 DEF 修复记录；四方言终态见注记 4） |
 | [图示类路线图](design/diagram-roadmap.md) | 脑图/时序图/架构图——**四方言已全部落地 flow-editor**（头注=终态；独立应用规划节保留为选型档案） |
-| [WebDAV 协议支持方案](design/webdav-support-design.md) | 多数据源方案正本：协议边界判定（FTP/SMB 为何出局）、W1–W6 裁决、CORS 闸、上传降级矩阵、门控矩阵（**未排期未实现**） |
+| [WebDAV 协议支持方案](design/webdav-support-design.md) | 多数据源方案正本：协议边界判定（FTP/SMB 为何出局）、W1–W6 裁决、CORS 闸、上传降级矩阵、门控矩阵（**已随 v1.4.0 发布，2026-11-03**） |
 
 ## 插件设计（frontend/plugins/*）
 
@@ -49,9 +49,10 @@
 
 | 文档 | 内容 |
 |---|---|
-| [测试计划](test/test-plan.md) | 分层策略、范围（142 文件映射）、覆盖率门禁 ≥80%、通过标准、质量地雷 |
-| [测试用例清单](test/test-cases.md) | 套件级映射（2026-10-31：142 文件/1828 例）+ E2E 批次索引 |
-| [测试报告 v1.3.0（当前）](test/test-report-v1.3.0.md) | 当前基线：1828/0 + 门禁 + 集成例证据 |
+| [测试计划](test/test-plan.md) | 分层策略、范围（154 文件映射）、覆盖率门禁 ≥80%、通过标准、质量地雷 |
+| [测试用例清单](test/test-cases.md) | 套件级映射（2026-11-03：154 文件/1984 例）+ E2E 批次索引 |
+| [测试报告 v1.4.0（当前）](test/test-report-v1.4.0.md) | 当前基线：1984+1 skip/0 失败 + 门禁 + WebDAV 三批证据索引 |
+| [测试报告 v1.3.0](test/test-report-v1.3.0.md) | v1.3.0 基线：1828/0 + 门禁 + 集成例证据 |
 | [测试报告 v1.2.0](test/test-report-v1.2.0.md) | 四能力 TDD 收口账（1814/0，lines 81.06%） |
 | [测试报告 v1.1.0](test/test-report-v1.1.0.md) | 历史基线（1436/0）；原始证据 `test-report/`（11 批次） |
 
@@ -67,7 +68,8 @@
 | 文档 | 内容 |
 |---|---|
 | [CHANGELOG（根目录）](../CHANGELOG.md) | 全版本变更（Keep a Changelog） |
-| [交付清单 v1.3.0](releases/delivery-checklist-v1.3.0.md) / [验收报告 v1.3.0](releases/acceptance-v1.3.0.md) | 当前版交付物/质量证据/验收结论 |
+| [交付清单 v1.4.0](releases/delivery-checklist-v1.4.0.md) / [验收报告 v1.4.0](releases/acceptance-v1.4.0.md) / [测试报告 v1.4.0](test/test-report-v1.4.0.md) | 当前版交付物/质量证据/验收结论（WebDAV 数据源 + embed demo 官网化） |
+| [交付清单 v1.3.0](releases/delivery-checklist-v1.3.0.md) / [验收报告 v1.3.0](releases/acceptance-v1.3.0.md) | v1.3.0 交付物/质量证据/验收结论 |
 | [交付清单 v1.2.0](releases/delivery-checklist-v1.2.0.md) / [验收报告 v1.2.0](releases/acceptance-v1.2.0.md) | 四能力版（含 ShareAccess 未挂路由偏差记录） |
 | [交付清单 v1.1.0](releases/delivery-checklist-v1.1.0.md) / [验收报告 v1.1.0](releases/acceptance-v1.1.0.md) | 历史版 |
 | [SRI 清单](releases/v1.1.0-plugin-sri.json) | 7 插件 sha384（2026-10-31 实测与产物一致；重建插件后重出） |
@@ -87,5 +89,6 @@
 | 补齐 | CHANGELOG [1.2.0]/[1.3.0] 段（原 Unreleased 内容确权入 v1.2.0）；测试报告 v1.2.0/v1.3.0；交付清单/验收报告 v1.2.0/v1.3.0 | v1.2.0/v1.3.0 发版未回写文档的欠账 |
 | 更正 | architecture/jsdk-api/solution-design/plugin-system/plugin-sample/style-isolation/flow-editor-design/diagram-roadmap、PRD、部署/用户手册、test 计划/用例、SECURITY、根与子项目 README | 逐篇与代码比对修正（14 内置应用/命令 19 条/getApps payload/装载机制口径/行号与数字刷新等） |
 | 全局 | 17 处代码注释 documents/ 死锚改指新路径（含 3 处 v1.1.0 治理漏改的 examples/plugins 锚） | 链接一致性 |
+| 新增落地（2026-11-02） | [WebDAV 协议支持方案](design/webdav-support-design.md) | WebDAV 数据源落地批次：方案正本→实现→评审 12 轮→终闸全量（151 文件/1972 例 0 失败；已落地 M1–M4；release 三件已随 v1.4.0 补齐，见上方发布段） |
 
 <!-- 治理史：2026-10-26 批次（合并退役两篇顶层设计、13 篇改名迁入 docs/、新增 LICENSE/SECURITY/CONTRIBUTING 等）见 git a04905f1 -->

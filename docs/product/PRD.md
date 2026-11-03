@@ -1,6 +1,6 @@
 # 产品需求规格说明书（PRD）
 
-> 项目：mmagix-files · 现状基线：v1.3.0（2026-10-31）· **以代码为唯一事实源**（能力清单逐项锚定代码）
+> 项目：mmagix-files · 现状基线：v1.4.0（2026-11-03）· **以代码为唯一事实源**（能力清单逐项锚定代码）
 > 本文档合并并退役《产品顶层设计.md》与《第一期文件类型支持计划.md》（漂移审计后收口；退役理由见 docs/README.md 变更清单）
 
 ## 1. 产品定位
@@ -46,6 +46,7 @@
 | FR-15 | 上传确认弹窗（三入口统一：树头钮/行右键/空白右键；目标目录+拖放点选多文件+确认才入队；确认即关窗→成功入队重开落传输页签） | ✅ v1.3.0 | `files/ui/UploadDialog.vue`、`views/Home.vue` |
 | FR-16 | 传输中心（暂停/继续/重试/取消/清除；预览头传输钮+角标/⌘K/弹窗传输页签三入口；顶缘拖高 96–480px 持久化） | ✅ v1.3.0 | `files/ui/UploadPanel.vue`、`views/Home.vue` |
 | FR-17 | 版本能力门控（client 方法+桶 Versioning 状态探测；无能力时回收站/历史版本整入口隐藏而非报错） | ✅ v1.3.0 | `views/Home.vue`（detectVersionCapable）、`files/ui/TreePanel.vue` |
+| FR-18 | 多数据源（S3｜WebDAV）：**范围**——连接向导 WebDAV 分支（类型段/服务��地址/根路径/Basic 凭证成对/分块续写开关）、目录树+列表+搜索浏览、基础操作（mkdir/rename/remove，collection 目录语义分流）、上传矩阵（chunkedWrite 分块续写｜缺省整包降级+maxUploadSize 上限）、zip 在线解压（`getObjectRange` 第二 RangeReader）、能力门控降级面（回收站/历史版本/分享/直链自动隐藏）；**非目标（v1 缺席）**——回收站、历史版本、信封分享、上传直链（WebDAV 无桶版本与预签名概念） | ✅ v1.4.0 已发布（2026-11-03） | `sdk/webdav/`（client/parse）、`sdk/types.ts`（`WebDavBackend`/`WorkspaceBackend`）、`files/setup.ts`、`files/tree-store.ts`、`files/ui/ConnectWizard.vue` |
 
 ### 3.2 内置应用（14，注册序=默认优先级）
 
@@ -109,6 +110,7 @@
 
 | 版本 | 说明 |
 |---|---|
+| v1.4.0（2026-11-03） | 按 v1.4.0 收口：新增 FR-18「多数据源（S3｜WebDAV）」（连接/浏览/基础操作/上传矩阵/zip 解压/门控降级面；回收站/版本/分享 v1 缺席）；实现状态 ✅ v1.4.0 已发布（2026-11-03，终闸全量 154 文件/1984 例 0 失败）；基线自 v1.3.0 升至 v1.4.0 |
 | v1.3.0（2026-10-31） | 按 v1.3.0 收口：内置应用 14（+zip-browser）、命令 19、新增 FR-12/FR-15/FR-16/FR-17（历史版本/上传确认弹窗/传输中心/能力门控）；基线自 v1.1.0 升至 v1.3.0 |
 | v1.2.0（2026-10-29） | 按 v1.2.0 收口：新增 FR-10/FR-11/FR-13/FR-14（断点续传/回收站/信封分享/在线解压）；`@mmagix/files-client` 独立包入交付物；flow-editor 四方言入 §3.2 |
 | v1.1.0（2026-10-26） | 本文合并《产品顶层设计.md》《第一期文件类型支持计划.md》并按 v1.1.0 代码收口：会话支持续期（setCredentials）、office 编辑由 univer-office 插件可达、pptx 插件预览、交付物扩为 dist+客户端包+7 插件、应用清单对齐 BUILTIN_APP_SPECS（13）、fallback 不入 registry、probe/降采样标注未实现 |

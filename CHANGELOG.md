@@ -2,9 +2,75 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [1.4.0] — 2026-11-03
 
-（暂无）
+主题：**多数据源（S3｜WebDAV）——WebDAV 协议支持全链落地 + embed demo 官网化**（PRD FR-18，
+方案正本 [webdav-support-design.md](docs/design/webdav-support-design.md)）。协议无破坏性变更
+（`backend.type` 缺省 `'s3'`，存量接入零感知；宿主命令层 19 条不变）。
+
+### 新增
+
+- **多数据源（S3｜WebDAV）接入全链**：`WebDavClient implements S3Client` 第二实现，
+  装配层按 `backend.type` 单向分流——UI/树/搜索/上传下载队列全部复用
+  - **连接向导类型段（S3｜WebDAV）**：服务器地址/根路径/用户名/密码（成对校验）/分块续写开关；
+    连接测试=PROPFIND 试探（401/0/status 分流+空根警示）；endpoint URL 闸（非法 scheme 与
+    解析失败拦截）；WebDAV 连接档案独立键按 type 分流
+  - **浏览与基础操作（collection 目录语义分流）**：mkdir→MKCOL 逐级幂等补建、目录删除单发
+    DELETE（RFC 4918 递归删内部成员）、目录改名目标祖先链 MKCOL 补建+单发收尾删；
+    S3 marker-object 路径逐字节零变更
+  - **上传三态矩阵**：`s3-multipart` 照旧｜`content-range`（分块续写开关开启）——旁路临时对象
+    `Content-Range: bytes=-N` 追加（非标口径）+完成时 MOVE 覆盖目标（不得直写目标路径）+
+    uploadId 编入临时键（跨会话可重构）+完成前 probe 对账（重置上限有界防无界重传）｜
+    `none`（缺省）——整包 PUT 降级（16MB 分片阈值对该源视为 ∞ + maxUploadSize 缺省 1GB
+    超限拒收、不写断点诚实降级）
+  - **跨会话断点续传判活**：恢复时 probe 临时对象余量三分支（相等=续传/失配或 -1=abort 清残
+    重置重传）；checkpoint 判活透出（余量存活/死行就地清算/探测异常保守视活由入口校验兜底）
+  - **zip 在线解压 objectRangeReader 第二档**：S3/WebDAV 走 client 对象 Range 读（206 精确
+    区间），mem://与单文件走既有 Blob 兜底——解压渲染器零改动
+  - **能力门控自动隐藏面**：回收站/历史版本/信封分享/上传直链/孤儿 uploadId 清理
+    （六可选能力方法缺席→整入口隐藏而非报错，v1.3 既有门控范式零新增工作项）；
+    连接档案 summary password 整键脱敏
+  - **Basic 认证**：非 Latin1 凭证经 TextEncoder 再 btoa；401→凭证失效、403→权限拒绝
+    （不误报重连）、423 Locked/507 容量满定向文案
+  - **分享入口能力门控隐藏**：Toolbar 分享钮能力门 `v-if`（无预签名→整钮不渲染）+ 选择门
+    `disabled`（单选文件才启用）双门分离，TreePanel 右键菜单同判据守卫——WebDAV 会话分享
+    入口自动隐藏而非报错；S3 行为逐字节不变
+- **embed demo 官网化（mmagix-embed-demo）**：三路由——`/` 官网落地页 + `/docs` 文档中心
+  （curated 10 篇 markdown，入门/产品/设计/运维/发布分组渲染）+ `/play` 演示区（原 demo 三页）；
+  旧 `/overview`、`/embed/*` 深链全部重定向保留
+- **embed demo 宿主表单接入 WebDAV 数据源**：「存储类型」分段切换联动缺省 endpoint（防 S3 缺省
+  误挂 WebDAV）；config 构建抽取 `configBuilder.ts`（S3/WebDAV 双形状 + 凭证打码预览）；
+  半凭证纪律（密码不打码进 `#config` 预览、日志侧打码）；`setCredentials` 续期按数据源能力禁用
+  （WebDAV 置灰 + 提示文案）
+- **dev-webdav.mjs 零依赖 WebDAV 演示服务**（Node ESM 单文件，RFC 4918 class 1 子集：
+  OPTIONS/GET/HEAD/PUT/DELETE/MKCOL/COPY/MOVE/PROPFIND）——核心存在理由=**非标
+  `PUT Content-Range: bytes=-N` 追加写**（演示分块续写链）；缺省与 dev-s3 的 s3rver 共享同一
+  数据池（`<demo>/s3-data/mmagic-demo`），`WEBDAV_ROOT` 可指向独立目录；207 解析/单次解码/
+  probe HEAD 契约与 frontend 客户端逐点对齐；`node --test` 58 例护航
+- 评审修复亮点（评审 12 轮消化，P0×2）：**串行泵提前 settle**——content-range 分片串行泵在
+  暂停路径提前 settle 误判任务完成（数据丢失级；泵闸取两行对调修复，6 红用例实证转绿）；
+  **对账重入伪重置**——会话重置后 probe=-1 与 confirmed=0 被判失配、烧尽重置上限致任务
+  确定性报废（`probeMismatched` 谓词共用修复+测试桩忠实化，漂移用例 4 探节奏实证）
+
+### 修复
+
+- **WebDAV `list()` 全 key 契约**：曾返回相对 key 致嵌套文件打开 404 与树错位——统一改回全 key
+  （与 S3 同域），9 个复现用例钉死（CJK/嵌套路径专项）
+- vitest 全量收集期 `@vue/shared` 断链（pnpm 严格隔离下 element-plus 自身无该传递依赖）：
+  vite `alias` 补桥直连仓根 `@vue/shared` + `server.deps.inline`，全量套件收集期炸错根因修复
+- vue 双副本（仓根与应用内各一份）`Ref` instanceof 伪错：`setCredentials` 载荷守卫改用宿主侧
+  判据重述，不再依赖跨副本 instanceof
+
+### 质量基线
+
+- frontend 单元测试 1984 passed + 1 skipped 0 failed（154 文件；v1.3.0 基线 142 文件/1828 例
+  + WebDAV 批次 144 例 + list() 契约复现 9 例 + 分享门控 3 例，2026-11-03 发版终闸实测）；
+  vue-tsc 0 error；eslint 0 error（20 存量 warning）；files-client 协议漂移哨兵 21 绿；
+  build 通过（vite 28.88s）
+- embed demo（mmagix-embed-demo）：typecheck 0 error / vitest 31 passed（2 文件）/
+  webdav 演示服务 58 passed（14 套件）/ build 通过（2.82s）；发版三件见
+  [docs/releases/](docs/releases/delivery-checklist-v1.4.0.md) 与
+  [test-report-v1.4.0](docs/test/test-report-v1.4.0.md)
 
 ## [1.3.0] — 2026-10-31
 

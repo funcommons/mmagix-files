@@ -1,6 +1,6 @@
 # 概要设计说明书
 
-> 项目：mmagix-files v1.3.x · 纯前端 S3 文件管理器（iframe 嵌入式）
+> 项目：mmagix-files v1.4.x · 纯前端 S3/WebDAV 文件管理器（iframe 嵌入式）
 > 本文与代码同源演化：结构以 `frontend/src/` 实际目录为准，改动架构必须同步本文。
 
 ## 1. 系统构成
@@ -29,7 +29,7 @@
 | 目录 | 职责 |
 |---|---|
 | `src/boot.ts` | 装配层：config 解析 → bus → session → handlers → registry 接成可运行 iframe 应用（握手时序：destroy=先 ack 后 evt expired） |
-| `src/sdk/` | 协议与基础设施：`bus.ts`（postMessage 双闸）、`config.ts`（#config/#file fragment 解析 + sessionStorage 备份链）、`constants.ts`、`errorCodes.ts`、`credentials.ts`、`session.ts`（TTL 自毁/单实例闩锁）、`features.ts`、`handlers.ts`（命令处理）、`s3/`（client：对象/版本管理/分片五方法 + SigV4 presign extraQuery）、`url-source.ts`、`index.ts`、`types.ts` |
+| `src/sdk/` | 协议与基础设施：`bus.ts`（postMessage 双闸）、`config.ts`（#config/#file fragment 解析 + sessionStorage 备份链 + workspace backend 按 `type` 分流校验）、`constants.ts`、`errorCodes.ts`、`credentials.ts`、`session.ts`（TTL 自毁/单实例闩锁）、`features.ts`、`handlers.ts`（命令处理）、`s3/`（client：对象/版本管理/分片五方法 + SigV4 presign extraQuery）、`webdav/`（client/parse：WebDAV 第二数据源客户端——207 multistatus 解析、Basic 认证、MKCOL/collection 目录语义、§W4 上传矩阵）、`url-source.ts`、`index.ts`、`types.ts`（`S3Client` 接口 + `WorkspaceBackend` 判别联合） |
 | `src/files/` | 文件管理面：`tree-store`（树）、`preview`+`preview-tabs`（预览生命周期）、`upload-queue`（+断点续传 checkpoint）、`checkpoint-store`（IDB 落行）、`orphan-sweeper`（孤儿 uploadId 7 天清理）、`download-queue`、`search-index`、`commands`（命令面板+回收站命令）、`mem-store`（mem:// 内存通路）、`share-crypto`（信封加密）、`zip`/`zip-reader`（在线解压）、`session-format`、`profiles`/`connect-wizard`（连接配置）、`ui/`（TreePanel/PreviewTabs/Toolbar/UploadDialog/UploadPanel/TrashPanel/VersionPanel/StatusBar/SearchDialog/SessionBanner/ShareDialog/ConnectWizard + shortcuts/workspace-ops） |
 | `src/apps/` | 应用层：`registry.ts`（注册表+解析链）、`builtins.ts`（14 内置应用表+字节限额单一事实源）、`renderers/`（14 渲染器）、`ui/`（ZipBrowser 等）、`flow-model.ts` |
 | `src/shared/` | `editToolbar.ts`（统一编辑工具栏唯一样式源，内置+插件共用）、`clientProtocol.test.ts`（协议漂移哨兵） |
@@ -57,6 +57,10 @@
 | D11 | 分享信封：AES-GCM(PBKDF2(密码)) 包裹预签名 URL，密码校验=解密成功 | 零手写密码学（WebCrypto 单通道）；密码/过期不落对象存储 |
 | D12 | 版本能力门控：client 方法探测 + 桶 Versioning 状态（Enabled/Suspended）双条件 | 无 listObjectVersions 能力时回收站/历史版本整入口隐藏，而非报错 |
 | D13 | 历史版本恢复走 copy-source `?versionId`：生成新 latest，不破坏历史链 | 恢复可反悔；版本下载走预签名 extraQuery |
+| D14 | 多数据源接入：`WebDavClient implements S3Client`，`backend.type` 判别联合（`sdk/types.ts` `WorkspaceBackend`，缺省形状=S3）单向分流装配（`files/setup.ts`） | `S3Client` 接口签名不变=宿主命令层（19 条）/UI/tree-store/上传下载队列全部复用，零破坏性变更；方案正本 `webdav-support-design.md` §W1 |
+| D15 | 目录语义分流：`S3Client.directorySemantics`（`'marker-object'｜'collection'`）+ 可选 `createDirectory` | S3 目录=前缀约定+零字节标记；WebDAV 目录=first-class collection——mkdir 走 MKCOL 逐级幂等建、目录删除/改名收尾单发 DELETE（RFC 4918 递归删内部成员）、改名前目标祖先链补建；S3 路径逐字节零改动（`files/tree-store.ts`，§W2） |
+| D16 | 上传三态策略：`S3Client.multipartStrategy`（`'s3-multipart'｜'content-range'｜'none'`，缺省=s3 现状） | WebDAV 无标准 multipart——`chunkedWrite` 开启='content-range'（非标 PUT Content-Range 旁路临时对象 `.<name>.<uploadId>.mmagix-part` 分块续写 + 完成时 MOVE 覆盖目标，`probeUploadProgress` 实证服务端字节面裁决续传）；缺省 'none'=队列整包 PUT 降级（阈值对该源视为 ∞）+ `maxUploadSize`（缺省 1GB，可配）超限拒收、不写断点（§W4 诚实降级面） |
+| D17 | 能力门控面：六可选能力方法缺席 → 对应入口自动隐藏（D12 范式延伸） | WebDavClient 不实现 presign×2/版本三方法/listMultipartUploads——回收站/历史版本/信封分享/上传直链/孤儿清理入口按既有门控自动隐藏而非报错；预览无直链走 Blob 兜底、在线解压走 `getObjectRange` 第二 RangeReader（`apps/renderers/zip.ts` 三档供给） |
 
 ## 4. 应用清单（内置 14 + 插件 7）
 
@@ -77,7 +81,7 @@ image-viewer / video-player / audio-player / pdf-viewer / markdown-renderer / fl
 | 属性 | 手段 |
 |---|---|
 | 安全 | 凭证不出宿主；origin 双闸；HTML 净化沙箱；SRI 可选校验（见 SECURITY.md） |
-| 可测试 | 单测与代码同目录（142 文件/1828 例，2026-10-31 基线）；全局行覆盖门禁 ≥80%；插件无单测者以实机取证兜底（见 docs/test/） |
+| 可测试 | 单测与代码同目录（154 文件/1984 passed+1 skipped 0 failed，2026-11-03 发版终闸实测——v1.3.0 基线 142 文件/1828 例 + WebDAV 数据源批次 144 例 + list() 契约复现 9 例 + 分享门控 3 例）；全局行覆盖门禁 ≥80%；插件无单测者以实机取证兜底（见 docs/test/） |
 | 可扩展 | 插件契约（activate(sdk)→registerApp）；渲染器注册制；漂移哨兵护协议 |
 | i18n | 全量词典 zh-CN/en-US，t() 单通道（插件 label 也走词典键） |
 | 主题 | 明暗 + 多品牌（token 化，禁硬编码色值） |

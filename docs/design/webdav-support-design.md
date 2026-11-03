@@ -1,6 +1,6 @@
 # WebDAV 协议支持方案
 
-> 状态：**方案正本（未排期、未实现）**——本文是「连接 WebDAV 服务��作为数据源」的唯一设计记录。
+> 状态：**方案正本（已实现并随 v1.4.0 定版发布：M1–M4 全部落地，2026-11-03；发版终闸全量 154 文件/1984 passed+1 skipped 0 失败；release 三件=[delivery-checklist-v1.4.0](../releases/delivery-checklist-v1.4.0.md)/[test-report-v1.4.0](../test/test-report-v1.4.0.md)/[acceptance-v1.4.0](../releases/acceptance-v1.4.0.md)）**——本文是「连接 WebDAV 服务器作为数据源」的唯一设计记录。
 > 实现启动时沿 v1.2.0 双档案惯例另立契约/执行账（代码注释「方案/契约」锚点指向本文）；落地版并入 `architecture.md` D 系并补 PRD FR、CHANGELOG。
 > 基线：v1.3.0（tag `ecb8a960`）+ 文档治理批次（`a7cefeb2`）；单测 142 文件/1828 例，行覆盖门禁 ≥80%。
 > 竞品对标（competitive-analysis-v1.3.0 表 F）中本项目「WebDAV ✗（红线）」指**服务端**；本文做的是**客户端**数据源，红线判定见 §二。
@@ -136,7 +136,7 @@ WebDAV 无标准 multipart，v1 矩阵：
 
 **服务器支持矩阵（设计预期，落地以实机取证为准——诚实口径）**：
 
-| 服务�� | CORS 预期 | 兜底 |
+| 服务器 | CORS 预期 | 兜底 |
 |---|---|---|
 | Nextcloud | ⚠️ dav 端点默认不带 CORS 头，需服务器配置 | 反代加头 |
 | Synology WebDAV Server | ⚠️ 须实测 | 反代加头 |
@@ -159,12 +159,12 @@ WebDAV 无标准 multipart，v1 矩阵：
 
 ## 七、里程碑（TDD，每步 ≤1000 行；测试先行沿既有节奏）
 
-| 里程�� | 内容 | 出口判据 |
+| 里程碑 | 内容 | 出口判据 |
 |---|---|---|
-| M1 协议层 | WebDavClient 骨架（list/get/put/head/copy/remove）+ XML 解析 + 错误映射 + fake server 单测 | 单测全绿；门控缺省面（六可选方法缺席）断言齐 |
-| M2 装配与浏览 | setup `backend.type` 分流 + 向导 WebDAV 分支 + 树/列表/搜索/下载打通 | 本地 fake 端到端可用；实机 spike（§五 CORS 实测先行）出结论 |
-| M3 写路径 | mkdir collection 语义分流（W2）/ rename / remove / 小文件上传 PUT / 解压 RangeReader 第二实现 | 写路径单测+E2E；目录语义分流回归 S3 路径零变更 |
-| M4 上传矩阵收口 | Content-Range 分块（①）+ 降级整包（②）+ 超限拒收 + 实机取证批次 + 文档联动 | 全量测试绿；known-good 清单回填；§九文档联动完成 |
+| M1 协议层 ✅ 已落地（2026-11-02） | WebDavClient 骨架（list/get/put/head/copy/remove）+ XML 解析 + 错误映射 + fake server 单测 | 出口证据：parse+client 406 行、专项 45 例全绿；评审 2 轮（P0 单次解码等全修+复评通过）；门控缺省面（六可选方法缺席）断言齐 |
+| M2 装配与浏览 ✅ 已落地（2026-11-02） | setup `backend.type` 分流 + 向导 WebDAV 分支 + 树/列表/搜索/下载打通 | 出口证据：全量首证 147 文件/1897 例 0 失败（五闸全绿）；向导类型段+endpoint URL 闸+i18n 17 键×2；评审 2 轮（setCredentials instanceof 守卫等全修+复评零新引入） |
+| M3 写路径 ✅ 已落地（2026-11-02） | mkdir collection 语义分流（W2）/ rename / remove / 小文件上传 PUT / 解压 RangeReader 第二实现 | 出口证据：MKCOL 逐级补建/目录单发 DELETE/renameDir 祖先链+zip objectRangeReader 第二档（S3 路径逐字节零变更）；新增 24 例全绿；评审 P1 夹短误判修复已验 |
+| M4 上传矩阵收口 ✅ 已落地（2026-11-02） | Content-Range 分块（①）+ 降级整包（②）+ 超限拒收 + 实机取证批次 + 文档联动 | 出口证据：三态矩阵+跨会话判活+完成前 probe 对账落地；终闸全量 151 文件/1972 passed+1 skipped 0 failed（vue-tsc 0/lint 0 error/哨兵 21 绿/build 26.35s）；评审 2 轮含 P0×2（串行泵提前 settle、对账重入伪重置）均修复实证；§八文档联动完成（实机取证批次留待有真机环境时另开） |
 | P1 候选 | Digest(SHA-256) / MOVE 优化 / LOCK 探测展示 / 分享模型独立评估 / alist 网关连接预设 | 另立小方案 |
 
 ## 八、落地时文档联动清单（缺一不可，发版闸）

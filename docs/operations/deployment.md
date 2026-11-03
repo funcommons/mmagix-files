@@ -1,6 +1,6 @@
 # 安装部署手册
 
-> 适用版本：v1.3.x。全部命令均在本仓验证通过（Node ≥ 18 / pnpm，仓内 pin 见下表）。
+> 适用版本：v1.4.x。全部命令均在本仓验证通过（Node ≥ 18 / pnpm，仓内 pin 见下表）。
 
 ## 1. 组件拓扑
 
@@ -81,7 +81,104 @@ Nginx 需配 `try_files $uri $uri/ /index.html`。
 - 分享信封：开启分享密码后会在桶内写 `shares/<shareId>.json` 元数据对象（同桶同前缀）
 - 断点续传：>16MB 分片上传的进度 checkpoint 存浏览器 IndexedDB（纯客户端，无服务端要求）
 
-## 5. 环境要求
+## 5. WebDAV 数据源
+
+> WebDAV 与 S3 同为**客户端**数据源（浏览器 `fetch` 直连，方案正本见 [`docs/design/webdav-support-design.md`](../design/webdav-support-design.md)）——部署侧唯一新增义务是目标 WebDAV 服务器的 **CORS** 配置。本应用后端零变化。
+
+### 5.1 CORS 要求（第一道断言）
+
+连接测试的首个检查项即 CORS 预检——PROPFIND/MKCOL/COPY/MOVE 均非简单请求，浏览器必先发 `OPTIONS + Access-Control-Request-Method`，服务器须 2xx 应答且方法在白名单内；**预检失败=整个数据源不可用**。
+
+| 项 | 值 |
+|---|---|
+| 允许的方法 | `OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE` |
+| 允许的请求头 | `Authorization, Depth, Overwrite, Destination, If, Content-Type` |
+| 须暴露的响应头 | `ETag, Content-Length, Last-Modified, DAV` |
+| 允许的源 | files-app 的页面源（试联调可 `*`，生产钉白名单） |
+
+### 5.2 服务器支持矩阵（设计预期，以实机取证为准）
+
+| 服务器 | CORS 预期 | 兜底 |
+|---|---|---|
+| Nextcloud | ⚠️ dav 端点默认不带 CORS 头，需服务器配置 | 反代加头 |
+| Synology WebDAV Server | ⚠️ 须实测 | 反代加头 |
+| 坚果云 | ⚠️ 须实测 | 不可自控则无解（诚实标注） |
+| alist / OpenList | ⚠️ 须实测 | 反代加头 |
+| 自建 Apache / nginx / Caddy WebDAV | ✓ 可配置 | 直接配 |
+
+### 5.3 反向代理加 CORS 头（用户自有反代，非本应用后端）
+
+代理是用户部署拓扑的一部分，与「自建 MinIO」同信任域——以下两段为标准样例，按站点实际域名/端口调整。
+
+nginx（`location` 内 OPTIONS 短路 + 头透出；注意 nginx 的 `add_header` 继承规则：`if` 块内出现过 `add_header` 后，块外头不继承，故两处都写全）：
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name dav.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:5005;          # 你的 WebDAV 服务
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    set $cors_origin "https://<files-app>.example.com";
+
+    if ($request_method = OPTIONS) {           # 预检短路：204 + 白名单
+      add_header Access-Control-Allow-Origin $cors_origin always;
+      add_header Access-Control-Allow-Methods "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE" always;
+      add_header Access-Control-Allow-Headers "Authorization, Depth, Overwrite, Destination, If, Content-Type" always;
+      add_header Access-Control-Max-Age "86400" always;
+      add_header Content-Length 0;
+      add_header Content-Type "text/plain";
+      return 204;
+    }
+
+    add_header Access-Control-Allow-Origin $cors_origin always;
+    add_header Access-Control-Allow-Methods "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE" always;
+    add_header Access-Control-Allow-Headers "Authorization, Depth, Overwrite, Destination, If, Content-Type" always;
+    add_header Access-Control-Expose-Headers "ETag, Content-Length, Last-Modified, DAV" always;
+
+    proxy_request_buffering off;               # 大文件分块续写不整包缓冲
+  }
+}
+```
+
+Caddy（v2，`handle` 分流预检）：
+
+```caddyfile
+dav.example.com {
+	@preflight method OPTIONS
+	handle @preflight {
+		header {
+			Access-Control-Allow-Origin "https://<files-app>.example.com"
+			Access-Control-Allow-Methods "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE"
+			Access-Control-Allow-Headers "Authorization, Depth, Overwrite, Destination, If, Content-Type"
+			Access-Control-Max-Age "86400"
+		}
+		respond 204
+	}
+	handle {
+		header {
+			Access-Control-Allow-Origin "https://<files-app>.example.com"
+			Access-Control-Allow-Methods "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE"
+			Access-Control-Allow-Headers "Authorization, Depth, Overwrite, Destination, If, Content-Type"
+			Access-Control-Expose-Headers "ETag, Content-Length, Last-Modified, DAV"
+		}
+		reverse_proxy 127.0.0.1:5005
+	}
+}
+```
+
+### 5.4 分块续写 known-good 清单（占位，随实机取证批次回填）
+
+向导「分块续写」开关（`backend.chunkedWrite`，缺省关=安全降级整包）依赖服务器支持**非标** `PUT Content-Range` 续写（HTTP Range 语义只为 GET 定义，写侧无标准、亦无标准探测手段）——已知可用服务器按下表随实机批次滚动维护；不在清单内的服务器请保持开关关闭（整包模式行为见用户手册 WebDAV 节）。
+
+| 服务器/版本 | PUT Content-Range 续写 | 实测批次 | 备注 |
+|---|---|---|---|
+| （待实机取证回填） | — | — | — |
+
+## 6. 环境要求
 
 | 项 | 要求 |
 |---|---|
@@ -89,7 +186,7 @@ Nginx 需配 `try_files $uri $uri/ /index.html`。
 | pnpm | 仓内 pin `pnpm@9.12.0`（packageManager 字段）；更新版本可用，但勿在 `frontend/plugins/*` 内跑 `pnpm add`（锁文件地雷，见 CONTRIBUTING） |
 | 浏览器 | Chrome/Edge 现代版（Monaco/Univer/X6 均需）；Safari/Firefox 可用（本地文件夹模式未实现，无 File System Access API 依赖） |
 
-## 6. 健康检查
+## 7. 健康检查
 
 | 检查 | 方法 |
 |---|---|

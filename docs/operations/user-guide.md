@@ -57,8 +57,11 @@
 | 段 | 必填 | 说明 |
 | --- | --- | --- |
 | `v` | ✅ | 配置协议版本，当前 `1` |
-| `backend.*` | ✅ | S3 端点+scoped 凭证；`prefix`=会话目录域（文件树从此起） |
-| `backend.ttlSeconds` | - | =前端自毁定时器时长；必须 ≤（建议略短于）STS 凭证真实 TTL——若配置值大于真实 TTL，会出现「前端还显示剩余时间、S3 已全部拒绝」；可选 `expiresAt` 可直接对齐 STS 到期时刻 |
+| `backend.*` | ✅ | S3 端点+scoped 凭证；`prefix`=会话目录域（文件树从此起）。`backend.type` 缺省/`'s3'`=S3（上述字段组）；`'webdav'`=WebDAV 数据源——字段组换为 `endpoint`（http(s) 地址）/`username`+`password`（成对）/`rootPath`，无 region/bucket/prefix/credentials |
+| `backend.rootPath`（webdav） | - | 会话根路径（挂载点下的子目录域，如 `/dav`），**按未编码原文填写**（客户端内部逐段编码，预编码反而错位）；缺省 ''=端点根 |
+| `backend.chunkedWrite`（webdav） | - | 服务器家族开关，缺省 false=安全降级：仅当服务器支持**非标** `PUT Content-Range` 续写时开启（无标准探测手段，known-good 清单见部署手册 §5.4）；开启后大文件走分块续写（断点续传成立） |
+| `backend.maxUploadSize`（webdav） | - | 整包上传模式单文件上限（字节，缺省 1GB），超限前端拒收；仅分块续写关闭时生效 |
+| `backend.ttlSeconds` | - | =前端自毁定时器时长；必须 ≤（建议略短于）STS 凭证真实 TTL——若配置值大于真实 TTL，会出现「前端还显示剩余时间、S3 已全部拒绝」；可选 `expiresAt` 可直接对齐 STS 到期时刻。WebDAV 会话语义=前端主动遗忘，**非凭证真到期**（服务器侧密码仍在） |
 | `security.allowedOrigins` | ✅ | 宿主页域白名单——文件服务→宿主方向按此白名单收发；宿主→文件服务方向由客户端包自动钉死 iframe origin（`createMmagixFilesHost` 的 `baseUrl`） |
 | `params.uploadMaxBytes` | - | 单文件上传上限（字节），超限前端拒收 |
 | `params.uploadConcurrency` | - | 并发上传数，默认 3 |
@@ -81,6 +84,7 @@ features 全集与命令映射：
 | `trash` | 回收站入口 UI 开关（false=隐藏树头回收站按钮） |
 | `multiTab` / `openWithMenu` | 纯 UI 开关（无对应命令） |
 | `plugins` | 总闸：`registerApp` 命令与配置注入插件（`plugins[]`）加载，false=全禁 |
+| —（WebDAV 会话无专用开关） | 回收站/历史版本/信封分享/上传直链按**数据源能力**自动隐藏（WebDAV 缺桶版本与预签名概念，门控而非报错）；其余开关语义不变 |
 
 ### 第 3 步：iframe 嵌入
 
@@ -158,8 +162,19 @@ URL 也可以只开一个文件——fragment 改放 `#file=`，结构与《../d
 | 编辑与保存 | 可编辑应用（代码/流程图/Markdown/HTML/Office/图片/PDF）统一左上角 `[保存｜撤销 重做 重置]` 工具栏；Ctrl/⌘+S 保存直传；**未保存=保存钮右上角红点**，关闭前会确认 |
 | 预览全屏 | 预览工具栏「全屏」按钮（浏览器内全屏，发 `previewFullscreen` 事件给宿主） |
 | Office | docx/xlsx 预览 + **univer-office 插件在线编辑**；pptx 插件预览；旧 .doc/.ppt 出定向转存提示（另存新格式再上传） |
-| 连接配置 | 会话无效/无配置时启动卡片上的「连接向导」按钮（ConnectWizard）：支持 STS 与本地长期 AK/SK（sessionToken 留空）两种模式，多 Profile 记忆 |
+| 连接配置 | 会话无效/无配置时启动卡片上的「连接向导」按钮（ConnectWizard）：支持 STS 与本地长期 AK/SK（sessionToken 留空）两种模式，多 Profile 记忆；「存储类型」可切 **WebDAV**（见下节） |
 | 新文件类型 | 接入方写插件 js+配置一行——见 [插件体系](../design/plugin-system.md) |
+
+### WebDAV 数据源（v1.4.0 起）
+
+连接向导顶部「存储类型」分段切到 WebDAV 即进入该分支（缺省 S3；方案细节见 [WebDAV 支持方案](../design/webdav-support-design.md)，CORS 部署侧配置见部署手册 §5）：
+
+- **字段组**：连接名称 / 服务器地址（`http(s)://` 开头完整 URL，非法 URL 表单即拦截）/ 根路径（可空；**按未编码原文填写**，如 `/dav`——客户端内部逐段编码，预编码会错位）/ 用户名+密码（**成对填写**，只填其一被拦截；都留空=匿名，是否可用由「测试连接」判定）/ 分块续写开关（缺省**关**=安全降级，仅当服务器明确支持非标 `PUT Content-Range` 续写时开启，见下）/ 会话时长。Profile 记忆与 S3 共用侧栏，按类型合并展示、分别存库。
+- **测试连接三态**：成功即通过（但列到 0 条目时附「根路径为空」警示——多半是根路径填错或填了预编码形态）；401→「认证失败：检查用户名/密码」；网络不通（含 CORS 预检失败）→「无法连接服务器」（解法见部署手册 §5.3）；其它→「连接失败（HTTP xxx）」。
+- **会话功能可见面（能力门控）**：树/列表/多选/搜索/下载/打包下载/预览/在线解压全部可用；**回收站/历史版本/信封分享/上传直链入口自动隐藏**（WebDAV 无桶版本与预签名概念，门控而非报错）；媒体预览无直链时走整包加载兜底（拖动进度体验有降），zip 解压走 Range 读通道不受影响。
+- **大文件上传矩阵**：≤16MB 直传不分流；>16MB 按分块续写开关分流——
+  - 开关**关**（缺省）：整包 PUT 单请求上传，单文件上限**缺省 1GB**（`backend.maxUploadSize` 可配，超限入队即拒收）；整包模式无断点续传（诚实降级，不写断点）。
+  - 开关**开**（实验）：非标 Content-Range 分块续写（旁路临时对象 + 完成时 MOVE 落位），断点续传成立；服务器须实测支持（known-good 清单见部署手册 §5.4），未列入清单的服务器保持关闭。
 
 ## 三、会话行为（必读）
 
