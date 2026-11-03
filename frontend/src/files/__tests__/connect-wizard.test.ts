@@ -343,3 +343,180 @@ describe('Profile 侧栏与保存', () => {
     w.unmount()
   })
 })
+
+// ───────────────────────── WebDAV 分支冒烟（M2-T，《docs/design/webdav-support-design.md》§W6） ─────────────────────────
+//
+// 冒烟口径：类型段（缺省 S3）切换显示 WebDAV 字段。testid 沿既有 f-* 约定钉：
+// 类型段=f-type；WebDAV 分支字段=服务器地址复用 f-endpoint、根路径=f-root-path、用户名=f-username、
+// 密码=f-password、连接名称复用 f-name。切换落点（select/radio/el-select/按钮组）实现未定，交互自适应。
+
+/** 字段是否不可见（v-if 不渲染 或 v-show/hidden 隐藏，两种实现形态都算「不显示」） */
+function notVisible(testid: string): boolean {
+  const el = document.body.querySelector(`[data-testid="${testid}"]`)
+  if (!el) return true
+  if ((el as HTMLElement).hidden === true) return true
+  const style = window.getComputedStyle(el)
+  return style.display === 'none' || style.visibility === 'hidden'
+}
+
+/** 类型段切到 WebDAV：自适应命中 native select / radio 组 / el-select 下拉 / 文本按钮 */
+async function switchTypeToWebdav(): Promise<void> {
+  const host = document.body.querySelector('[data-testid="f-type"]')
+  if (!host) throw new Error('类型段未渲染：缺 [data-testid="f-type"]（M2 向导「类型」段）')
+
+  // ① 原生 select
+  const select = host instanceof HTMLSelectElement ? host : host.querySelector('select')
+  if (select instanceof HTMLSelectElement) {
+    const opt = [...select.options].find((o) => /webdav/i.test(o.value) || /webdav/i.test(o.textContent ?? ''))
+    if (!opt) throw new Error('类型段 select 无 WebDAV 选项')
+    select.value = opt.value
+    select.dispatchEvent(new Event('change'))
+    await nextTick()
+    return
+  }
+
+  // ② radio 组（value 或关联 label 文本命中）
+  const radios = [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+  const radioHit = radios.find(
+    (r) => /webdav/i.test(r.value) || /webdav/i.test(r.labels?.[0]?.textContent ?? ''),
+  )
+  if (radioHit) {
+    radioHit.click()
+    await nextTick()
+    return
+  }
+
+  // ③ el-select：先点宿主开出下拉（teleport 到 body），再点含 WebDAV 文本的选项
+  host.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await nextTick()
+  const option = [...document.body.querySelectorAll('.el-select-dropdown__item')].find((n) =>
+    /webdav/i.test(n.textContent ?? ''),
+  )
+  if (option) {
+    ;(option as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    return
+  }
+
+  // ④ 按钮组/分段控件：类型段宿主内文本含 WebDAV 的可点击元素
+  const btn = [...host.querySelectorAll<HTMLElement>('button, [role="button"], .el-radio-button')].find((n) =>
+    /webdav/i.test(n.textContent ?? ''),
+  )
+  if (btn) {
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await nextTick()
+    return
+  }
+  throw new Error('类型段切 WebDAV 未能命中任何已知交互形态（select/radio/el-select/按钮）')
+}
+
+describe('ConnectWizard WebDAV 分支冒烟（M2：§W6）', () => {
+  it('缺省类型=S3：S3 专属字段可见，WebDAV 独有字段（根路径/用户名/密码）不出现', async () => {
+    const w = await mountWizard()
+    // 缺省 S3：现行字段面原样保留（黄金向后兼容的组件面）
+    for (const id of ['f-region', 'f-bucket', 'f-access-key', 'f-secret-key', 'f-prefix']) {
+      expect(notVisible(id)).toBe(false)
+    }
+    // WebDAV 独有字段缺省不出现
+    for (const id of ['f-root-path', 'f-username', 'f-password']) {
+      expect(notVisible(id)).toBe(true)
+    }
+    w.unmount()
+  })
+
+  it('切到 WebDAV：显示 根路径/用户名/密码（服务器地址 f-endpoint、连接名称 f-name 复用）；S3 专属字段隐藏', async () => {
+    const w = await mountWizard()
+    await switchTypeToWebdav()
+
+    // WebDAV 分支字段齐
+    expect(notVisible('f-root-path')).toBe(false)
+    expect(notVisible('f-username')).toBe(false)
+    expect(notVisible('f-password')).toBe(false)
+    expect(notVisible('f-endpoint')).toBe(false) // 服务器地址
+    expect(notVisible('f-name')).toBe(false) // 连接名称
+
+    // S3 专属字段隐藏
+    for (const id of ['f-region', 'f-bucket', 'f-access-key', 'f-secret-key']) {
+      expect(notVisible(id)).toBe(true)
+    }
+    w.unmount()
+  })
+})
+
+// ───────────────────────── WebDAV endpoint URL 闸（M2-V1 P2：validateWebDavForm） ─────────────────────────
+//
+// C2 补的 endpoint 格式闸（对齐 profiles.ts validateProfile 的 S3 endpoint 口径）：
+// new URL 解析失败 → endpoint-invalid 文案并**提前返回**（成对校验不并列）；
+// protocol 非 http(s)（如 ftp:）→ 同文案但**不短路**（成对校验照常并列）。
+// 注：本测试环境 i18n 注册空词典，t() 实际渲染值=词典键本身（与既有 wizard.test-fail 断言同法）。
+// 三链（测试/连接/保存）共用 validateActiveForm 门——每例同时压三链的「被拦」观测点。
+
+describe('ConnectWizard WebDAV endpoint URL 闸（M2-V1 P2）', () => {
+  /** 切到 WebDAV 分支并填名称+endpoint（用户名/密码按需补）；默认匿名（成对校验放行） */
+  async function fillDavForm(endpoint: string, over: { username?: string; password?: string } = {}): Promise<void> {
+    await switchTypeToWebdav()
+    await setField('f-name', 'WebDAV 档')
+    await setField('f-endpoint', endpoint)
+    if (over.username !== undefined) await setField('f-username', over.username)
+    if (over.password !== undefined) await setField('f-password', over.password)
+  }
+
+  it("endpoint='abc'（URL 解析失败）→ 三链被拦：form-errors=wizard.endpoint-invalid（提前返回，无 pair-hint）；不建 client、不 persist、不 reload、不落档案", async () => {
+    const webdavClientFactory = vi.fn(() => ({ list: vi.fn() }))
+    const w = await mountWizard({ webdavClientFactory })
+    // 只填用户名不成对：验证 URL 解析失败的提前返回把成对校验短路在后
+    await fillDavForm('abc', { username: 'alice' })
+
+    // 测试链：被拦且无 pair-hint 并列
+    await clickAt('btn-test')
+    await flush()
+    expect(exists('[data-testid="form-errors"]')).toBe(true)
+    expect(textOf('[data-testid="form-errors"]')).toContain('wizard.endpoint-invalid')
+    expect(textOf('[data-testid="form-errors"]')).not.toContain('wizard.pair-hint')
+    expect(webdavClientFactory).not.toHaveBeenCalled()
+
+    // 连接链：不 persist、不 reload（凭证不落任何通道）
+    await clickAt('btn-connect')
+    expect(store.getItem(RAW_CONFIG_STORAGE_KEY)).toBeNull()
+    expect(reload).not.toHaveBeenCalled()
+
+    // 保存链：webdav 档案库不落盘
+    await clickAt('btn-save')
+    await flush()
+    expect(store.getItem('mmagic.profiles.webdav')).toBeNull()
+    w.unmount()
+  })
+
+  it("endpoint='ftp://x'（protocol 非 http(s)）→ 同文案拦截且不短路：只填用户名时 endpoint-invalid 与 pair-hint 并列；不建 client、不 persist、不 reload", async () => {
+    const webdavClientFactory = vi.fn(() => ({ list: vi.fn() }))
+    const w = await mountWizard({ webdavClientFactory })
+    await fillDavForm('ftp://x', { username: 'alice' })
+
+    await clickAt('btn-test')
+    await flush()
+    const text = textOf('[data-testid="form-errors"]')
+    expect(text).toContain('wizard.endpoint-invalid')
+    expect(text).toContain('wizard.pair-hint') // protocol 分支不提前返回：成对校验并列（C2 契约）
+    expect(webdavClientFactory).not.toHaveBeenCalled()
+
+    await clickAt('btn-connect')
+    expect(store.getItem(RAW_CONFIG_STORAGE_KEY)).toBeNull()
+    expect(reload).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it("endpoint='https://host/dav' 合法 → 闸不误伤：测试放行（webdavClientFactory 被调、test-ok 可见、无 form-errors）", async () => {
+    const list = vi.fn(async () => ({ dirs: [{ key: 'a/', name: 'a', size: 0, isDir: true }], files: [] }))
+    const webdavClientFactory = vi.fn(() => ({ list }))
+    const w = await mountWizard({ webdavClientFactory })
+    await fillDavForm('https://host/dav')
+
+    await clickAt('btn-test')
+    await flush()
+    expect(webdavClientFactory).toHaveBeenCalledTimes(1)
+    expect(exists('[data-testid="test-ok"]')).toBe(true)
+    expect(exists('[data-testid="form-errors"]')).toBe(false)
+    expect(reload).not.toHaveBeenCalled() // 测试链不触发重载
+    w.unmount()
+  })
+})

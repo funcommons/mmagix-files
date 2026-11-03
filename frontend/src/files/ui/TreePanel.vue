@@ -33,7 +33,7 @@ import type { FileTreeController } from '../tree-store'
 import type { S3ObjectSummary } from '@/sdk/types'
 import { isTypingTarget, matchesHotkey } from './shortcuts'
 
-/** withDefaults 仅兜 versioning：纯 Boolean prop 缺省会被 Vue 转型为 false，而本 prop 契约是「不传=有能力」 */
+/** withDefaults 仅兜 versioning/shareEnabled：纯 Boolean prop 缺省会被 Vue 转型为 false，而本 prop 契约是「不传=有能力」 */
 const props = withDefaults(
   defineProps<{
     controller: FileTreeController
@@ -49,8 +49,10 @@ const props = withDefaults(
   registry?: AppRegistry | null
   /** 版本能力（桶 Versioning 已开启且 client 支持）；false=隐藏回收站入口与「历史版本」菜单（订单 2026-10） */
     versioning?: boolean
+  /** 分享入口能力门控（客户端预签名能力；WebDAV 会话=false 右键菜单不出「分享」项）；不传=true（S3 行为不变） */
+    shareEnabled?: boolean
   }>(),
-  { versioning: true },
+  { versioning: true, shareEnabled: true },
 )
 
 const emit = defineEmits<{
@@ -330,8 +332,9 @@ const menuItems = computed<MenuItem[]>(() => {
   if (!m.entry.isDir && f.download !== false) {
     items.push({ value: 'download', label: t('files.menu.download'), icon: 'ri-download-2-line' })
   }
-  // Lane H-2：分享（仅文件；目录→前缀分享列 P2，简化口径不出口）
-  if (!m.entry.isDir) items.push({ value: 'share', label: t('files.menu.share'), icon: 'ri-share-line' })
+  // Lane H-2：分享（仅文件；目录→前缀分享列 P2，简化口径不出口）；shareEnabled=客户端预签名
+  // 能力门控（WebDAV 会话 false→整项不出口，v-if 口径非 disabled）
+  if (props.shareEnabled && !m.entry.isDir) items.push({ value: 'share', label: t('files.menu.share'), icon: 'ri-share-line' })
   // M3-F8：历史版本（仅文件；版本列表/恢复链路在 Home 层接 VersionPanel 收口）；无版本能力不出口
   if (!m.entry.isDir && props.versioning !== false) {
     items.push({ value: 'history', label: t('files.history.menu'), icon: 'ri-history-line' })

@@ -849,6 +849,28 @@ export default {
     'plaintext-warn': 'Credentials are stored in plain text in localStorage — personal devices only',
     delete: 'Delete',
     ttl: 'Session duration (minutes)',
+    // ── M2-C2 WebDAV branch (§W6): storage type segmented + WebDAV fields/validation/test copy ──
+    'title-webdav': 'Connect to WebDAV',
+    type: 'Storage type',
+    'type-s3': 'S3',
+    'type-webdav': 'WebDAV',
+    'name-required': 'Profile name is required',
+    'endpoint-required': 'Server address (endpoint) is required',
+    'endpoint-invalid': 'Server address must be a valid URL starting with http(s)://',
+    'root-path': 'Root path (optional)',
+    'root-path-hint': 'Enter the raw unencoded path, e.g. /dav or /dav/sub',
+    username: 'Username',
+    password: 'Password',
+    'pair-hint': 'Username and password must be provided together',
+    'cred-401': 'Authentication failed: check username/password',
+    unreachable: 'Cannot reach the server',
+    'test-fail-status': 'Connection failed (HTTP {status})',
+    'test-empty-root': 'Root path is empty: if unexpected, check that rootPath is entered as the raw unencoded path',
+    'profiles-full': 'Profile limit reached ({n}) — delete one before saving',
+    // ── M4-W family switch (§W4): chunked resume experimental toggle, default off = safe degradation ──
+    'chunked-write': 'Chunked resume (experimental)',
+    'chunked-write-hint':
+      'Non-standard server extension: enable only if your server supports PUT Content-Range resume; when off, large files are uploaded in a single request (1GB limit).',
   },
   transfer: {
     title: 'Transfers',

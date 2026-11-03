@@ -45,6 +45,12 @@ export interface S3Credentials {
 }
 
 export interface BackendConfig {
+  /**
+   * 协议判别（WebDAV §W1 装配分流）：缺省/'s3'=S3 对象存储，向后兼容既有配置。
+   * 收窄纪律：判别只用 `backend.type === 'webdav'` 单向判断——缺省形状不被收窄吃掉，
+   * 既有 S3 消费点零改动。
+   */
+  type?: 's3'
   endpoint: string
   region: string
   bucket: string
@@ -56,6 +62,47 @@ export interface BackendConfig {
   /** 可选：对齐 STS 真实到期时刻（epoch ms） */
   expiresAt?: number
 }
+
+/**
+ * WebDAV 数据源 backend（WebDAV 方案 §W1/W6）。与 BackendConfig 构成 workspace backend
+ * 判别联合（`WorkspaceBackend`），按 `type === 'webdav'` 单向判别，缺省（无 type）=S3。
+ * SECURITY 注记（§W6）：Basic 凭证明文于每个请求头，生产环境应强制 HTTPS；
+ * ttlSeconds/expiresAt 对 WebDAV 的语义 = **前端主动遗忘**——自毁线到点前端清空凭证/会话，
+ * 并非凭证真到期（服务器侧密码仍在、无过期保护），文档与 UI 不得暗示有过期保护。
+ */
+export interface WebDavBackend {
+  type: 'webdav'
+  endpoint: string
+  /**
+   * Basic 认证用户名。Authorization 头仅在与 password 均非空时携带（WebDavClient 半凭证
+   * 口径：只有 username 无 password 不发认证、不支持——匿名请求的 401 会与「凭证无效」混淆）；
+   * 合法空密码账号由连接向导显式校验兜住（M1-V1 裁决）。
+   */
+  username?: string
+  /** Basic 认证密码。凭证不出前端：不进 URL/历史/摘要（buildConfigSummary 红线），仅走 Authorization 头 */
+  password?: string
+  /** 会话根路径（挂载点下的子目录域，如 '/dav'）；缺省 ''=端点根（WebDavClient 归一：去尾斜杠、'/' 开头、逐段编码） */
+  rootPath?: string
+  /**
+   * 服务器家族开关（§W4①）：非标 `PUT Content-Range` 续写支持（Nextcloud chunked v2 同型）。
+   * 缺省 false=安全降级整包（§W4②）——HTTP Range 语义只为 GET 定义（RFC 9110 §14.2），写侧
+   * 续写无标准探测手段（HEAD Accept-Ranges 只证读可续、不证写可续），故不做自动探测，
+   * known-good 清单随实机取证批次维护。
+   */
+  chunkedWrite?: boolean
+  /**
+   * 整包模式单文件上限（字节，§W4②）；缺省 1GB。仅 multipartStrategy='none'（chunkedWrite
+   * 未开启）整包降级模式生效——超限文件入队即拒收（rejected reason='size'）。
+   */
+  maxUploadSize?: number
+  /** 前端自毁定时器时长（秒）——WebDAV 语义=前端主动遗忘，非服务器侧凭证到期（§W6 SECURITY 注记） */
+  ttlSeconds?: number
+  /** 可选：前端遗忘死线（epoch ms）；语义同 ttlSeconds（前端主动遗忘，非凭证真到期） */
+  expiresAt?: number
+}
+
+/** workspace backend 判别联合（WebDAV §W1）：S3 形状保持（type 缺省='s3'）｜WebDAV */
+export type WorkspaceBackend = BackendConfig | WebDavBackend
 
 export interface BrandConfig {
   name?: string
@@ -81,7 +128,8 @@ export interface PluginEntry {
 export interface WorkspaceConfig {
   mode: 'workspace'
   v: number
-  backend: BackendConfig
+  /** 数据源 backend 判别联合（WebDAV §W1）：S3（type 缺省/'s3'）｜WebDAV（type==='webdav'） */
+  backend: WorkspaceBackend
   security: { allowedOrigins: string[] }
   params?: { uploadMaxBytes?: number; uploadConcurrency?: number }
   appearance?: AppearanceConfig
@@ -209,6 +257,36 @@ export interface S3Client {
   deleteVersion?(key: string, versionId: string): Promise<void>
   /** 列举进行中的分片上传（孤儿 uploadId 清理；initiated=ISO 字符串透传）。可选能力 */
   listMultipartUploads?(): Promise<{ key: string; uploadId: string; initiated?: string }[]>
+  /**
+   * 目录语义声明（WebDAV 方案 §W2 关键裁决）。可选门控惯例：缺省=既有 S3 行为（marker-object）。
+   * 'marker-object'：S3 世界目录=前缀约定+零字节标记对象（mkdir=put 0 字节、目录删除=平铺展开逐对象删）；
+   * 'collection'：WebDAV 世界目录=first-class collection（MKCOL 建、COPY/DELETE 递归作用于内部成员）——
+   * tree-store 的 mkdir/目录 remove/renameDir 据此分流（判别=createDirectory 存在性 + 本声明）。
+   */
+  directorySemantics?: 'marker-object' | 'collection'
+  /**
+   * 逐级建目录并确保完整祖先链（§W2 collection 语义分流配套；可选能力）。key 以 '/' 结尾
+   * （目录 key 归一约定）；实现方逐级建（父先于子），已存在容忍（幂等）。
+   * 消费点：tree-store mkdir（替代 0 字节标记 put）/renameDir（COPY 前目标祖先链补建，防 409）。
+   */
+  createDirectory?(key: string): Promise<void>
+  /**
+   * 分片上传策略声明（WebDAV 方案 §W4 上传矩阵）。可选能力惯例：缺省='s3-multipart'
+   * （既有 S3 行为逐字节不变）。上传队列据此分流：
+   * 's3-multipart'：标准 S3 multipart（分片并发、partNumber 寻址、断点续传照旧）；
+   * 'content-range'：非标 PUT Content-Range 旁路临时对象续写（§W4①，WebDavClient 在
+   * chunkedWrite 开启时声明）——append 模型不可乱序，队列分片串行 + 续传前以
+   * probeUploadProgress 实证服务端字节面；
+   * 'none'：无分片能力（§W4②）——队列整包 PUT 降级（阈值视为 ∞）+ maxUploadSize 超限拒收，
+   * 不写断点（诚实：无续传）。
+   */
+  multipartStrategy?: 's3-multipart' | 'content-range' | 'none'
+  /**
+   * 分片续传进度探测（§W4① content-range 策略配套可选能力）：旁路临时对象当前字节数；
+   * 404（temp 不存在/已清理）→ -1。队列续传时按「返回值 === 已确认完整字节」裁决
+   * 续传余片 vs 清残全量重传（append 无服务端截断能力，诚实降级口径）。
+   */
+  probeUploadProgress?(key: string, uploadId: string): Promise<number>
 }
 
 // ───────────────────────── 命令/事件 payload ─────────────────────────
@@ -312,6 +390,13 @@ export interface AppCtx {
   theme: Record<string, string>
   /** 可选能力：媒体直链（S3=预签名 URL / url source=原始 GET URL）——渲染器用 <video src> 拿浏览器原生 Range */
   getMediaUrl?(key: string): string
+  /**
+   * 可选能力：对象 Range 读（§W5 在线解压第二 RangeReader 实现——无直链源走 GET+Range 通道）。
+   * [start, end) 半开区间（HTTP Range `bytes=start-(end-1)` 换算在装配层）；源支持 Range（206）=
+   * 返回精确区间字节，源不支持（200）=返回整包字节（上层整包缓存后本地切片）。
+   * mem:// 键域不提供该成员（undefined，上层走 Blob 兜底——内存 Blob 零成本整包，Range 无增益）。
+   */
+  getObjectRange?(key: string, start: number, end: number): Promise<Uint8Array>
   /** 可选能力：应用级故障上报 → 宿主 bus 'error' 事件（保存链失败/凭据拒等——渲染器静默吞错的可见化出口, 宿主据此 toast/换签重载） */
   notifyAppError?(err: { code: number; message: string }): void
 }

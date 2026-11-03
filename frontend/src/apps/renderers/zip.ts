@@ -10,8 +10,9 @@
  *    fetchRangeReader（size=http(s) 直链免 HEAD 直取列表元数据 sizeHint——GET 签名 URL 配
  *    HEAD 必 403，blob:/未知源保留 HEAD 尝试后回落；read=fetch Range [start,end) 半开区间，
  *    200 整读回落本地切片并整包缓存于 reader 实例——兼容 blob: 直链与不支持 Range 的源）→
- *    parseCentralDirectory。无直链能力（单文件带鉴权头/无 presign）→ ctx.getObject 整包 Blob
- *    内存 RangeReader 兜底（预览闸全局线兜住内存面）。
+ *    parseCentralDirectory。无直链能力（单文件带鉴权头/无 presign）→ §W5 第二档 ctx.getObjectRange
+ *    通道 objectRangeReader（GET+Range，非 mem 键限定——mem:// 键域装配层不提供该成员，渲染器
+ *    isMemKey 同判防线）→ ctx.getObject 整包 Blob 内存 RangeReader 兜底（预览闸全局线兜住内存面）。
  *  - extract：sanitizeEntryName（zip slip，null 拒）→ checkBomb 三闸（条目数/总量/压缩比，失败
  *    整批拒=reject，组件 notice 直出 reason）→ extractEntry 逐条解出（加密兜底/不支��方法/CRC
  *    失败按条计失败不拖垮整批）→ 逐条落盘（落盘单一规则，见下）→ 汇总 notify 口径不变。
@@ -94,6 +95,47 @@ function fetchRangeReader(url: string, sizeHint: number): RangeReader {
   }
 }
 
+/**
+ * objectRangeReader（§W5：无直链源的 Range 读第二实现——ctx.getObjectRange 通道，装配层
+ * client.get + Range 头）：size 走 sizeHint（列表元数据直取，同 fetchRangeReader http(s) 直链
+ * 口径——GET 通道配 HEAD 的死请求不发）；read=Range [start,end) 半开区间（换算在装配层），
+ * 响应 206=精确区间；200=源不支持 Range → 整读后本地切片并整包缓存于 reader 实例（cached：
+ * 首个 read 存下、后续切片复用免重 fetch；newReader 间不共享，最新鲜性归 load 重入），保 read
+ * 语义恒为「恰好 [start,end) 片段」。通道返回值已折叠状态码（装配层契约），此处按「长度≠请求
+ * 区间=整读形态」判缓存（206 契约恒恰等；200 整包在 start=0 全区间读时恰等长，两种读法同值无歧义）。
+ */
+function objectRangeReader(
+  getRange: (key: string, start: number, end: number) => Promise<Uint8Array>,
+  key: string,
+  sizeHint: number,
+): RangeReader {
+  // 200 整读缓存（reader 实例私有，newReader 间不共享——最新鲜性归 load 重入）
+  let cached: Uint8Array | null = null
+  return {
+    async size(): Promise<number> {
+      if (sizeHint > 0) return sizeHint
+      throw new Error('zip: 无法确定包大小（Range 通道无长度信息且列表元数据缺失）')
+    },
+    async read(start: number, end: number): Promise<Uint8Array> {
+      // 先夹取到真实包长（M3-V1 评审）：end 不越界——夹后 206 恒恰等长（「夹短 206」不可达，
+      // 不再误判整包入缓存）；夹后 end<=start（start 越界）=短读空返回，契约回归上游结构校验兜错
+      // （size() 已保证 sizeHint>0）
+      end = Math.min(end, sizeHint)
+      if (end <= start) return new Uint8Array(0)
+      // 缓存命中（非 Range 源首个 read 已存整包）→ 后续切片本地取
+      if (cached) return cached.subarray(start, Math.max(start, Math.min(end, cached.length)))
+      const buf = await getRange(key, start, end)
+      // 整读形态（长度≠请求区间，恒为 200 整包）：整包存缓存，后续 read 不再逐次重取；口径
+      // 与 fetchRangeReader 一致
+      if (buf.length !== end - start) {
+        cached = buf
+        return buf.subarray(start, Math.max(start, Math.min(end, buf.length)))
+      }
+      return buf
+    },
+  }
+}
+
 /** Blob 内存 RangeReader（无直链兜底）：slice 即 Range，语义天然精确 */
 function blobRangeReader(blob: Blob): RangeReader {
   return {
@@ -114,6 +156,11 @@ function makeReaderProvider(ctx: AppCtx, key: string, sizeHint: number): () => P
     // 每次回调现取（勿提升到闭包外——见上注 TTL 过期死链）
     const directUrl = ctx.getMediaUrl?.(key)
     if (directUrl) return fetchRangeReader(directUrl, sizeHint)
+    // §W5 第二档：Range 读通道（WebDAV/无直链源）——装配层契约 mem:// 键域不提供该成员，
+    // 渲染器侧 isMemKey 同判一等防线（mem:// 误入底层 client.get 必为错域请求）
+    if (!isMemKey(key) && ctx.getObjectRange) {
+      return objectRangeReader(ctx.getObjectRange.bind(ctx), key, sizeHint)
+    }
     blobPromise ??= ctx.getObject(key)
     try {
       return blobRangeReader(await blobPromise)

@@ -6,6 +6,7 @@
  */
 import type { S3Client } from '../sdk/types'
 import type { UrlSourceProvider } from '../sdk/url-source'
+import { ERROR_CODES, SdkError } from '../sdk/errorCodes'
 import { isMemKey, memGet, memUpdate } from '../files/mem-store'
 
 export interface AppDataSource {
@@ -16,6 +17,13 @@ export interface AppDataSource {
    * 媒体渲染器以它作 src 实现「Range 拖动」（见 renderers/media.ts 实现口径注释）。
    */
   getMediaUrl?(key: string): string
+  /**
+   * 可选：对象 Range 读通道（§W5 在线解压第二 RangeReader——无直链源走 GET+Range）。仅非 mem 键
+   * 且底层支持时提供；[start, end) 半开区间（HTTP Range `bytes=start-(end-1)` 换算在实现层）；
+   * 206=精确区间字节，200（源不支持 Range）=整包字节（上层整包缓存后本地切片）。
+   * mem:// 键域不提供该成员（上层走 Blob 兜底——内存 Blob 零成本整包，Range 无增益）。
+   */
+  getObjectRange?(key: string, start: number, end: number): Promise<Uint8Array>
 }
 
 /**
@@ -45,6 +53,16 @@ function withMemSource(ds: AppDataSource): AppDataSource {
     const inner = ds.getMediaUrl.bind(ds)
     wrapped.getMediaUrl = (key) => (isMemKey(key) ? URL.createObjectURL(memGet(key)!.blob) : inner(key))
   }
+  if (ds.getObjectRange) {
+    const inner = ds.getObjectRange.bind(ds)
+    wrapped.getObjectRange = (key, start, end) => {
+      // 防御面：mem:// 键不提供该成员是渲染器可观察契约（探测不到 → Blob 兜底），zip 渲染器
+      // isMemKey 先判正常不达此；万一直调（插件无视探测）也绝不把 mem:// 键送进底层 client.get
+      //（必然错域请求）
+      if (isMemKey(key)) throw new Error(`mem key 不支持 Range 读通道：${key}`)
+      return inner(key, start, end)
+    }
+  }
   return wrapped
 }
 
@@ -60,6 +78,18 @@ export function s3DataSource(client: S3Client): AppDataSource {
   if (client.getPresignedUrl) {
     const presign = client.getPresignedUrl.bind(client)
     ds.getMediaUrl = (key) => presign(key)
+  }
+  // §W5 Range 读通道：client.get 带 rangeHeader（SigV4/WebDAV GET+Range 均原生支持）——206 精确
+  // 区间字节原样透出；200（源不支持 Range）整包字节透出，上层整包缓存后本地切片。mem:// 键域
+  // 的排除在 withMemSource 包裹层（不提供该成员 → 上层 Blob 兜底）。
+  ds.getObjectRange = async (key, start, end) => {
+    const res = await client.get(key, { rangeHeader: `bytes=${start}-${end - 1}` })
+    // 非 2xx（404=列表后对象被删等）直接抛错（M3-V1 评审）——client.get 的 404 容忍返回原始
+    // Response（存在性判断语义），此处不得把错误响应体折叠成字节（zip 侧会把短体误判整包缓存）
+    if (!res.ok) {
+      throw new SdkError(ERROR_CODES.S3_ERROR, `Range 读失败：HTTP ${res.status}`, { status: res.status })
+    }
+    return new Uint8Array(await res.arrayBuffer())
   }
   return withMemSource(ds)
 }

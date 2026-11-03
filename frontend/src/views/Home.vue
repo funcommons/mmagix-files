@@ -79,10 +79,12 @@ function resolveWorkspace() {
   if (!boot || !boot.ok || boot.handle.config.mode !== 'workspace') return null
   const stores = setupWorkspace(boot.handle)
   if (!stores) return null
+  const backend = boot.handle.config.backend
   return {
     stores,
     session: boot.handle.session,
-    rootPrefix: boot.handle.config.backend.prefix,
+    // WebDAV §W1 分流：webdav 键域=rootPath 相对（WebDavClient ��部拼根路径）→ 树根空串；S3=prefix 同现行
+    rootPrefix: backend.type === 'webdav' ? '' : backend.prefix,
     mode: boot.handle.config.mode,
   }
 }
@@ -1068,6 +1070,15 @@ const wizardOpen = ref(false)
 const shareOpen = ref(false)
 const shareEntry = ref<S3ObjectSummary | null>(null)
 
+/** 分享入口能力门控：客户端须有双预签名能力（getPresignedUrl/presignPutUrl，ShareDialog 同款判据）。
+ *  WebDAV 会话（WebDavClient 无预签名能力）=false → Toolbar 分享钮/右键菜单 share 项整个隐藏
+ *  （v-if 卸载非 disabled；ShareDialog 内部双能力探测保留作纵深）。 */
+const hasPresign = computed(
+  () =>
+    typeof ws?.stores.client?.getPresignedUrl === 'function' &&
+    typeof ws?.stores.client?.presignPutUrl === 'function',
+)
+
 /** 打开分享对话框（入口：Toolbar 分享钮 / TreePanel 右键菜单 share 项，均仅文件可达） */
 function openShare(entry: S3ObjectSummary): void {
   shareEntry.value = entry
@@ -1093,9 +1104,12 @@ const isReadonly = computed(() => {
   if (fileConfig) return !fileConfig.save
   return false
 })
-const bucketName = computed(() =>
-  boot && boot.ok && boot.handle.config.mode === 'workspace' ? boot.handle.config.backend.bucket : '',
-)
+const bucketName = computed(() => {
+  if (!boot || !boot.ok || boot.handle.config.mode !== 'workspace') return ''
+  const backend = boot.handle.config.backend
+  // 状态栏存储标识（§W1 分流）：S3=bucket 名（现行不变）；webdav 无 bucket 概念 → 端点地址
+  return backend.type === 'webdav' ? backend.endpoint : backend.bucket
+})
 
 // ── Lane H5 收口：命令面板双模式数据源（仅 workspace 注册；seam=useCommandPaletteState）──
 if (ws) {
@@ -1183,6 +1197,7 @@ if (ws) {
           :features="features"
           :versioning="versionCapable"
           :registry="registry"
+          :share-enabled="hasPresign"
           @select="onSelect"
           @open="onOpen"
           @open-with="onOpenWith"
@@ -1240,6 +1255,7 @@ if (ws) {
               :selected="selected"
               :features="features"
               :preview-app="previewAppInfo"
+              :share-enabled="hasPresign"
               @changed="onChanged"
               @download="downloadEntries"
               @share="openShare"
@@ -1321,6 +1337,7 @@ if (ws) {
               :features="features"
               :versioning="versionCapable"
               :registry="registry"
+              :share-enabled="hasPresign"
               @select="onSelect"
               @open="onDrawerOpen"
               @open-with="onDrawerOpenWith"

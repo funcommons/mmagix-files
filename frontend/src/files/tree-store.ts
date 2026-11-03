@@ -4,6 +4,9 @@
  *       useFileTreeStore() pinia setup store 薄壳，init(options) 注入依赖后透出控制器。
  * 要点：nodes 懒加载缓存；list 聚合翻页到尽；目录标记对象过滤；目录 rename/remove 平铺
  *       逐对象处理、失败抛 SdkError 携带已完成进度（可续跑）；成功后触发 onFileChanged；
+ *       W2 目录语义分流（§W2）：collection 客户端（directorySemantics='collection'+createDirectory，
+ *       WebDAV）mkdir 走 MKCOL、目录 remove/renameDir 收尾单发 DELETE（RFC 4918 递归删）、
+ *       renameDir 复制前目标祖先链 createDirectory 幂等补建——S3 marker-object 路径逐字节零改动；
  *       Lane F3 增 applyChange——外部 fileChanged（renderer 保存等）同步缓存的最小维护口；
  *       M3 增回收站四方法（listTrash/restoreTrash/purgeTrash/emptyTrash）——
  *       恢复 = 删 latest DeleteMarker（首错停取新任务、在途落定后聚合抛错，重试不与在途竞态）；
@@ -156,6 +159,26 @@ export class TrashBatchError extends SdkError {
 }
 
 /**
+ * 目录 rename（§W2 collection 语义）目标祖先链收集：from 剥离后的相对路径逐级取中间目录
+ * （目录条目末段自身也入集——MKCOL 幂等已存在容忍，先建后 COPY Overwrite:T 覆盖语义不变）
+ * + to 前缀自身。WebDAV 目标祖先 collection 是实体，父缺失 COPY 409，复制前须逐级补建；
+ * 返回有序清单（父先于子；createDirectory 实现方保证完整祖先链，序仅求确定性）。
+ */
+function targetDirChain(from: string, to: string, objects: S3ObjectSummary[]): string[] {
+  const out = new Set<string>([to])
+  for (const obj of objects) {
+    const segs = obj.key.slice(from.length).replace(/\/+$/, '').split('/').filter((s) => s !== '')
+    let acc = to
+    const levels = obj.key.endsWith('/') ? segs.length : segs.length - 1 // 文件末段是对象名，目录末段自身也补建
+    for (let i = 0; i < levels; i += 1) {
+      acc = `${acc}${segs[i] as string}/` // levels 守卫界内必有值（noUncheckedIndexedAccess 断言）
+      out.add(acc)
+    }
+  }
+  return [...out]
+}
+
+/**
  * 受控并发执行：起 min(limit, items.length) 个 worker 共享游标消费 items，
  * 同时在途 ≤limit、完成即补位；跑完返回失败清单（全部成功则 []，即调用方拿到 void 语义）。
  * 失败语义（P1-1 修复，不与在途竞态）：某次 fn 抛错后全部 worker 停止取新任务（队列剩余项放弃），
@@ -193,6 +216,15 @@ async function runLimited<T>(
 /** 创建文件树控制器（独立可测；不依赖 pinia）。含 M3 回收站四方法（FileTreeWithTrash 面） */
 export function createFileTree(options: FileTreeOptions): FileTreeWithTrash {
   const { client } = options
+  // W2 目录语义分流判别（§W2）：collection 客户端（WebDAV）声明 directorySemantics='collection'
+  // 且提供 createDirectory（MKCOL 逐级建）；S3 marker-object 客户端两者皆缺省 → 现行路径逐字节零改动
+  const isCollection = client.directorySemantics === 'collection'
+  const ensureDir = typeof client.createDirectory === 'function' ? client.createDirectory.bind(client) : null
+  // 判别统一（M3-V1 评审）：collection 语义声明与 createDirectory 能力必须成对——只有声明没有
+  // 实现的假想客户端会让 mkdir/remove/renameDir 三处分流各走各形（潜伏分叉），入口早抛 fail-fast
+  if (isCollection && ensureDir === null) {
+    throw new SdkError(ERROR_CODES.BAD_PARAM, 'collection 语义客户端必须实现 createDirectory')
+  }
   const nodes = ref(new Map<string, DirBucket>())
   const currentPath = ref(normalizePrefix(options.initialPath ?? options.rootPrefix ?? ''))
   const error = ref<SdkError | null>(null)
@@ -261,7 +293,13 @@ export function createFileTree(options: FileTreeOptions): FileTreeWithTrash {
     const parent = normalizePrefix(prefix)
     const key = `${parent}${name}/`
     await guarded(async () => {
-      await client.put(key, new Blob([])) // 目录标记：0 字节对象
+      if (ensureDir !== null) {
+        // §W2 分流：collection 客户端逐级 MKCOL 建目录（已存在容忍；祖先链由实现方保证）——
+        // 不落 0 字节标记对象（S3 marker 语义对 collection 路径多数服务器 409/502 或产生 'dir/' 脏文件）
+        await ensureDir(key)
+      } else {
+        await client.put(key, new Blob([])) // 目录标记：0 字节对象
+      }
       await fetchDir(parent, true)
     })
     emitChanged({ key, action: 'put' })
@@ -288,18 +326,32 @@ export function createFileTree(options: FileTreeOptions): FileTreeWithTrash {
   /** 目录 rename：平铺列举 → 逐对象 copy（记进度，失败可续跑）→ 批量 remove → 缓存失效 */
   async function renameDir(from: string, to: string): Promise<void> {
     const all = await flatList(from)
+    // §W2 分流（评审修正）：collection 目标侧祖先 collection 是实体，父缺失 COPY 409——复制前
+    // 逐级 createDirectory 幂等补建；S3 marker-object 前缀虚拟无需实体，null=无补建（现行路径零改动）
+    const chainDirs = ensureDir !== null && isCollection ? targetDirChain(from, to, all) : null
     const done: string[] = []
     try {
+      if (chainDirs !== null) {
+        for (const dir of chainDirs) await ensureDir!(dir) // ① 目标祖先链逐级补建（幂等）
+      }
       for (const obj of all) {
-        await client.copy(obj.key, to + obj.key.slice(from.length))
+        await client.copy(obj.key, to + obj.key.slice(from.length)) // ② 逐对象 COPY 照旧
         done.push(obj.key)
       }
-      for (let i = 0; i < done.length; i += DELETE_BATCH) {
-        await client.remove(done.slice(i, i + DELETE_BATCH))
+      if (chainDirs !== null) {
+        // ③ 单发 DELETE（RFC 4918 递归删内部成员）替代平铺批删——collection 本体平铺删完子对象
+        // 后永远删不掉（空目录残留），且比平铺高效；删除面无续跑诉求可接受（§W2 裁决）
+        await client.remove([from])
+      } else {
+        for (let i = 0; i < done.length; i += DELETE_BATCH) {
+          await client.remove(done.slice(i, i + DELETE_BATCH))
+        }
       }
     } catch (e) {
       const err = e instanceof SdkError ? e : asSdkError(e)
-      // 续跑信息：已完成对象清单 + 总数；S3 copy 覆盖幂等，重试可从断点继续
+      // 续跑信息：已完成对象清单 + 总数；S3 copy 覆盖幂等，重试可从断点继续。
+      // 口径注记（M3-V1）：collection 路径「已完成 X/Y」计的是 flatList 的 Depth:1 塌缩条目
+      // （一次 COPY 递归搬整棵子树），与 S3 逐对象计数不同粒度——message 数字按此读，行为不变
       throw new SdkError(err.code, `目录重命名中断：已完成 ${done.length}/${all.length}`, {
         from, to, done, total: all.length, cause: err.detail,
       })
@@ -315,11 +367,16 @@ export function createFileTree(options: FileTreeOptions): FileTreeWithTrash {
     await guarded(async () => {
       const victims = new Set<string>()
       const dirPrefixes: string[] = []
+      const collectionDirs: string[] = [] // §W2：collection 语义目录键单发 DELETE，不平铺展开
       for (const key of keys) {
         if (key === '') throw new SdkError(ERROR_CODES.BAD_PARAM, 'remove 的 key 不能为空')
         if (key.endsWith('/')) {
           dirPrefixes.push(key)
-          for (const obj of await flatList(key)) victims.add(obj.key) // 平铺展开（含标记）
+          if (isCollection) {
+            collectionDirs.push(key)
+          } else {
+            for (const obj of await flatList(key)) victims.add(obj.key) // 平铺展开（含标记）
+          }
         } else {
           victims.add(key)
         }
@@ -328,6 +385,10 @@ export function createFileTree(options: FileTreeOptions): FileTreeWithTrash {
       for (let i = 0; i < all.length; i += DELETE_BATCH) {
         await client.remove(all.slice(i, i + DELETE_BATCH))
       }
+      // §W2 分流：collection 是一等目录非 key 集合——平铺删完子对象后本体永远删不掉（空目录
+      // 残留），单发 DELETE 靠 RFC 4918 递归删内部成员语义，比平铺高效且删除面无续跑诉求；
+      // 文件键与 S3 marker-object 路径照旧（平铺展开逐对象批删）
+      for (const dir of collectionDirs) await client.remove([dir])
       for (const k of [...nodes.value.keys()]) {
         if (dirPrefixes.some(d => k.startsWith(d))) nodes.value.delete(k)
       }

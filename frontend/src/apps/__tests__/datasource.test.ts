@@ -164,3 +164,88 @@ describe('getMediaUrl（可选媒体直链能力）', () => {
     })
   })
 })
+
+// ───────────────────────── getObjectRange（M3/W5：Range 读通道 → zip objectRangeReader） ─────────────────────────
+
+/**
+ * M3 契约（《docs/design/webdav-support-design.md》§W5）：AppCtx 包装新增可选
+ * getObjectRange(key, start, end)——经 client.get(key, {rangeHeader})，[start,end) 半开区间
+ * 换算 bytes=start-(end-1) 在实现层；206=精确区间字节、200=整包字节（上层整包缓存后本地切片）。
+ * mem:// 键域不提供该成员（withMemSource 包裹层拦截——上层 zip 渲染器 isMemKey 先判走 Blob 兜底）。
+ */
+describe('getObjectRange（M3 契约：client.get+RangeHeader，可选能力）', () => {
+  /** 构造带 Range 应答的 client.get 桩：206 + 精确切片（真实 S3/WebDAV GET+Range 语义）。
+   *  注：body 直接给 Uint8Array——vitest jsdom 环境的全局 Blob 是 jsdom 构造器，进 undici
+   *  Response 的 body 提取会被字符串化（探针实测回 '[object Blob]'），不保真 */
+  function makeRangeClient(bytes: Uint8Array) {
+    const get = vi.fn(async (_key: string, opts?: { rangeHeader?: string }): Promise<Response> => {
+      const m = /^bytes=(\d+)-(\d+)$/.exec(opts?.rangeHeader ?? '')
+      if (!m) return new Response(bytes as BodyInit, { status: 200 })
+      const start = Number(m[1])
+      const end = Number(m[2]) + 1 // 闭区间 → 半开
+      return new Response(bytes.slice(start, end) as BodyInit, { status: 206 })
+    })
+    const client = { get, put: vi.fn(async (): Promise<{ etag: string }> => ({ etag: 'e' })) } satisfies Pick<
+      S3Client,
+      'get' | 'put'
+    >
+    return { client: client as unknown as S3Client, get }
+  }
+
+  it('s3DataSource 提供 getObjectRange：rangeHeader=bytes=start-(end-1) 且返回 [start,end) 精确字节', async () => {
+    const bytes = Uint8Array.from([0, 1, 2, 3, 4, 5, 6, 7])
+    const { client, get } = makeRangeClient(bytes)
+    const ds = s3DataSource(client)
+
+    expect(ds.getObjectRange).toBeTypeOf('function')
+    const out = await ds.getObjectRange!('docs/a.bin', 2, 5)
+
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledWith('docs/a.bin', { rangeHeader: 'bytes=2-4' }) // 半开→闭区间换算
+    expect(out).toBeInstanceOf(Uint8Array)
+    // 字节断言走 Buffer.equals（vitest jsdom realm 分裂坑——不走 toEqual）
+    expect(Buffer.from(out).equals(Buffer.from(bytes.slice(2, 5)))).toBe(true)
+  })
+
+  it('206 精确区间跨窗口稳定：多次读各自恰好 [start,end)（206 语义，上层不缓存错位）', async () => {
+    const bytes = Uint8Array.from(Array.from({ length: 16 }, (_, i) => i))
+    const { client, get } = makeRangeClient(bytes)
+    const ds = s3DataSource(client)
+
+    const first = await ds.getObjectRange!('a.bin', 0, 4)
+    const second = await ds.getObjectRange!('a.bin', 10, 16)
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(Buffer.from(first).equals(Buffer.from(bytes.slice(0, 4)))).toBe(true)
+    expect(Buffer.from(second).equals(Buffer.from(bytes.slice(10, 16)))).toBe(true)
+  })
+
+  it('200 整包字节透出（源不支持 Range）：上层按「长度≠请求区间」判整读形态', async () => {
+    const bytes = Uint8Array.from([9, 8, 7, 6, 5])
+    const get = vi.fn(async (): Promise<Response> => new Response(bytes as BodyInit, { status: 200 }))
+    const client = { get, put: vi.fn() } as unknown as S3Client
+    const ds = s3DataSource(client)
+
+    const out = await ds.getObjectRange!('a.bin', 1, 3)
+    expect(get).toHaveBeenCalledWith('a.bin', { rangeHeader: 'bytes=1-2' })
+    expect(out.length).not.toBe(2) // 整包字节（长度≠请求区间）——整读信号交上层缓存切片
+    expect(Buffer.from(out).equals(Buffer.from(bytes))).toBe(true)
+  })
+
+  it('mem:// 键经 withMemSource 包裹层拦截：不透传底层 client.get（错域请求防线）', async () => {
+    const { client, get } = makeRangeClient(Uint8Array.from([1, 2, 3]))
+    const ds = s3DataSource(client)
+
+    // 实现以同步 throw 拒绝（契约类型是 Promise，故 async 包裹成 rejection 统一断言）；
+    // 「mem 键不提供该成员→上层 Blob 兜底」的可观察面在 zip 渲染器 isMemKey 先判（见 zip-renderer.test.ts）
+    const attempt = (async () => ds.getObjectRange!('mem://1/a.bin', 0, 2))()
+    await expect(attempt).rejects.toThrow('mem key')
+    expect(get).not.toHaveBeenCalled() // mem 键绝不入 client.get
+  })
+
+  it('urlDataSource（单文件模式）不提供 getObjectRange（无 client.get 通道 → Blob 兜底）', () => {
+    const blob = new Blob(['source'])
+    const { provider } = makeUrlProvider(blob)
+    const ds = urlDataSource(provider)
+    expect(ds.getObjectRange).toBeUndefined()
+  })
+})

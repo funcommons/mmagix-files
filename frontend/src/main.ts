@@ -30,6 +30,7 @@ import { registerBuiltins } from './apps/builtins'
 import { RENDERERS } from './apps/renderers'
 import { PluginLoader } from './plugins/loader'
 import { ERROR_CODES, SdkError } from './sdk/errorCodes'
+import { S3SigV4Client } from './sdk/s3/client'
 import type { MessageBus } from './sdk/bus'
 import type { CommandHandler } from './sdk/handlers'
 import type { CommandName } from './sdk/types'
@@ -196,8 +197,9 @@ const boot = bootApp({
     const m1 = createM1Overrides({
       tree: stores.tree,
       queue: stores.queue,
-      client: stores.client as unknown as import('./sdk/types').S3Client,
-      rootPrefix: cfg.backend.prefix,
+      client: stores.client,
+      // WebDAV §W1 分流：webdav 键域=rootPath 相对（客户端内部拼根路径）→ 树根空串；S3=prefix 同现行
+      rootPrefix: cfg.backend.type === 'webdav' ? '' : cfg.backend.prefix,
       features,
       emit: (evt, payload) => busRef?.emit(evt, payload),
     })
@@ -216,6 +218,13 @@ const boot = bootApp({
       const sessionToken = typeof c.sessionToken === 'string' ? c.sessionToken : ''
       const ttlSeconds = typeof p.ttlSeconds === 'number' && Number.isFinite(p.ttlSeconds) && p.ttlSeconds > 0 ? p.ttlSeconds : undefined
       const expiresAt = typeof p.expiresAt === 'number' && Number.isFinite(p.expiresAt) ? p.expiresAt : undefined
+      // M2-V1：setCredentials 仅 S3 客户端具备（§W1：WorkspaceStores.client 已放宽为 S3Client 接口
+      // 面，接口不含该方法）。webdav 会话显式拒收 UNSUPPORTED_MODE——若放行，方法 undefined→TypeError
+      // 会被 wrapCommand 误映射 5000 终态码（宿主误判会话终结触发重连循环）。手法同单文件 bucket 拒
+      // 与 tree-store trash 缺面守（requireListObjectVersions/requireDeleteVersion）
+      if (!(stores.client instanceof S3SigV4Client)) {
+        throw new SdkError(ERROR_CODES.UNSUPPORTED_MODE, 'webdav 会话不支持 setCredentials（宿主换密码通道属后续里程碑）')
+      }
       stores.client.setCredentials({ accessKeyId, accessKeySecret, sessionToken })
       if (ttlSeconds !== undefined || expiresAt !== undefined) {
         session?.extend?.({ ttlSeconds, expiresAt }) // 双缺省=保持现死线；session 句柄缺 extend=不重置

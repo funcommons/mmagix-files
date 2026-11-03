@@ -8,7 +8,8 @@
  * 未传 features 或缺省键=默认放开（对齐 resolveFeatures 的「default 全开、false 优先」）。
  * 多选：selected 为数组——删除按全集（>1 用多选确认文案）、重命名按首项、
  * 下载单文件直下/多文件（均非目录）批量打包语义（emit download 数组，zip 在 Home 收口）。
- * 分享钮——单选文件启用 emit('share', entry)（对话框在 Home 收口）。
+ * 分享钮——双门分离：能力门控 v-if（WebDAV 无预签名→整钮不渲染）+ 选择门控 disabled
+ * （单选文件才启用）——S3 行为逐字节不变；启用时 emit('share', entry)（对话框在 Home 收口）。
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -16,15 +17,22 @@ import type { S3ObjectSummary } from '@/sdk/types'
 import type { FileTreeController } from '../tree-store'
 import { createWorkspaceOps } from './workspace-ops'
 
-const props = defineProps<{
-  controller: FileTreeController
-  /** 当前选中集（多选数组；空=删除/重命名/下载禁用） */
-  selected?: S3ObjectSummary[]
-  /** features 门控（resolveFeatures 结果；显式 false 隐藏对应操作入口） */
-  features?: Record<string, boolean>
-  /** 当前预览应用（用户口径：工具栏显示应用名，多应用可点击切换；null=无 tab/无命中不显示） */
-  previewApp?: { currentId: string; options: { id: string; label: string }[] } | null
-}>()
+/** withDefaults 仅兜 shareEnabled：纯 Boolean prop 缺省会被 Vue 转型为 false，而本 prop 契约是
+ * 「不传=有能力」（与 TreePanel versioning 同款兜底；既有 S3 用法/测试不传该 prop 行为不变） */
+const props = withDefaults(
+  defineProps<{
+    controller: FileTreeController
+    /** 当前选中集（多选数组；空=删除/重命名/下载禁用） */
+    selected?: S3ObjectSummary[]
+    /** features 门控（resolveFeatures 结果；显式 false 隐藏对应操作入口） */
+    features?: Record<string, boolean>
+    /** 当前预览应用（用户口径：工具栏显示应用名，多应用可点击切换；null=无 tab/无命中不显示） */
+    previewApp?: { currentId: string; options: { id: string; label: string }[] } | null
+    /** 分享入口能力门控（客户端预签名能力；WebDAV 会话=false 整钮卸载）；不传=true（S3 行为不变） */
+    shareEnabled?: boolean
+  }>(),
+  { shareEnabled: true },
+)
 
 /** 操作入口可见性：仅显式 false 关闭（缺省=未配置=放开） */
 const enabled = computed(() => ({
@@ -126,8 +134,11 @@ function shareSelected(): void {
     </el-dropdown>
     <!-- 紧凑图标钮（2026-10）：样式复用文件树头动作钮口径（ghost 态，hover bg-muted）；
          可访问名=aria-label/title（与原文字文案同键，e2e/单测按 testid 定位） -->
-    <!-- 分享入口：单选文件启用；文案复用 files.menu.share（词典无 files.toolbar.share，禁改词典口径） -->
+    <!-- 分享入口：双门分离——能力门控 v-if（WebDAV 无预签名→整钮不渲染）+ 选择门控 disabled
+         （单选文件才启用，S3 行为逐字节不变）；文案复用 files.menu.share
+         （词典无 files.toolbar.share，禁改词典口径） -->
     <button
+      v-if="shareEnabled"
       type="button"
       class="ws-toolbar__act"
       :disabled="!canShare"

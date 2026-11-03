@@ -30,15 +30,37 @@
  *  - 单片重试：uploadPart 失败每片独立重试 ≤partRetry 次，指数退避间隔制（第 n 次重试前
  *    等待 base×2^(n-1) + 0~250ms 抖动，间隔逐次拉开）；
  *    仅网络错（detail.status=0）/5xx/超时（TIMEOUT）重试——4xx 语义错与取消码 4901 立即抛。
+ *    §W4① carve out（M4-V1 P1）：content-range append 模型不幂等（「服务端已落盘追加但
+ *    响应丢失」模糊窗内盲重试=双追加），片级重试等效置 0——片失败即任务 failed，恢复交给
+ *    带 probe 守卫的任务级 retry（见 M4 矩阵段）。
  *  - 自适应分片：effectivePartSize(size, base, maxParts)=max(base, pow2ceil(size/maxParts))，
  *    保证片数 ≤ maxParts（默认 10000）。
  *  - 进度 onProgress：分片完成推进 bytes（累计真实字节口径——loaded 已按末片截断精确累计）；
  *    ≤阈值单 PUT 直传不受管（零回调）。
  *  - resumeCheckpoints()：断点行 × listMultipartUploads 探活，uploadId 存活→续传候选；
  *    不在清单→死行就地 remove（保守：探活接口失败时不动任何断点）。
+ *    §W4① carve out（M4-V1 P1）：content-range 改走逐行 probeUploadProgress 判活（!=-1→
+ *    存活候选透出；-1→死行就地 remove）——WebDAV 无 listMultipartUploads，硬绑则跨会话
+ *    续传结构性不可达（恢复面包条永不出现+IDB 残行永不清算）。S3 语义零改动。
  *  - UI 接线口（M2/Home resume 面包条）：partSizeFor(size) 供调用侧 partSize 硬性校验
  *    （UI 波次契约/评审 P2-3）；enqueueResume(file, candidate) 按候选 uploadId/分片续传入队；
  *    discardCheckpoint(candidate) 放弃候选（abortMultipart + 断点行移除双清）。
+ *
+ * M4 上传矩阵分流（WebDAV 方案 §W4；判别=client.multipartStrategy 可选成员，S3 客户端未声明
+ * → 缺省 's3-multipart'，既有行为逐字节不变）：
+ *  - 'none'（WebDAV chunkedWrite 未开启，§W4②）：阈值对该数据源视为 ∞（effectiveThreshold=
+ *    MAX_SAFE_INTEGER）→ 全部整包 PUT、全程不写断点（诚实：无续传）；入队超 maxUploadSize
+ *    （缺省 1GB，仅 'none' 整包模式生效）拒收 reason='size'（复用既有 rejected 通道）。
+ *  - 'content-range'（WebDAV 旁路 temp append 模型，§W4①）：该任务分片串行（并发覆写为 1——
+ *    append 模型不可乱序，顺序由调用方串行保证）；续传（任务已持 uploadId）先
+ *    probeUploadProgress 实证服务端字节面：返回值 === 已确认完整字节 → 续传余片；
+ *    数值失配（>半片残留 / <服务端丢失）或 -1 且已确认>0（temp 404）→ abortMultipart 清残 +
+ *    checkpoint 重置（新行整体覆盖写）+ 新 createMultipart 全量重传（append 无服务端截断
+ *    能力，诚实降级）；-1≡0（fresh 会话未落首片）为一致态放行（M4-V2 P0 伪重置级联修复）。
+ *    片级盲重试置 0（append 不幂等，M4-V1 P1）+ complete 前 probe 对账防线纵深
+ *    （!==已确认 → 清残重传，MOVE 发布不可逆前的最后一道闸）；跨会话恢复经
+ *    resumeCheckpoints 的逐行 probe 判活（恢复面包条对 WebDAV 成立）。
+ *  - 's3-multipart'：全照旧零改动。
  */
 import { ERROR_CODES, SdkError } from '@/sdk/errorCodes'
 import { sha256HexSync } from '@/sdk/s3/sigv4'
@@ -58,6 +80,10 @@ const DEFAULT_PART_RETRY = 3
 const DEFAULT_PART_RETRY_BASE_MS = 500
 /** 断点 fingerprint 分隔输入（key:size:lastModified 拼串后整体做 sha256） */
 const FINGERPRINT_TE = new TextEncoder()
+/** 整包降级（§W4② multipartStrategy='none'）缺省单文件上限：1GB */
+const DEFAULT_MAX_UPLOAD_SIZE = 1024 ** 3
+/** content-range 会话清残重开的单次 run 计次上限（M4-V1 P1：防病理服务器无界重传循环） */
+const SESSION_RESET_MAX = 2
 
 export interface UploadParams {
   uploadMaxBytes?: number // 单文件大小上限（字节），超出拒收
@@ -68,6 +94,8 @@ export interface UploadParams {
   maxParts?: number // 自适应分片片数上限，默认 10000（effectivePartSize 保证不超）
   partRetry?: number // 单片失败重试次数上限（每片独立），默认 3
   partRetryBaseMs?: number // 单片重试退避基数（ms），默认 500
+  /** 整包模式单文件上限（字节，§W4②）；缺省 1GB。仅 multipartStrategy='none' 整包降级模式生效 */
+  maxUploadSize?: number
   checkpointStore?: CheckpointStore // 传入启用跨会话断点续传；不传=现状行为零变化
   /** 字节级进度（分片完成推进；≤阈值直传零回调）。rate 可省略，节流归调用侧 */
   onProgress?: (p: UploadProgress) => void
@@ -180,6 +208,10 @@ export class UploadQueue {
   private readonly maxParts: number
   private readonly partRetry: number
   private readonly partRetryBaseMs: number
+  /** 分片策略（§W4 上传矩阵判别；缺省 's3-multipart'=既有 S3 行为零变化） */
+  private readonly multipartStrategy: 's3-multipart' | 'content-range' | 'none'
+  /** 整包模式（'none'）单文件上限（缺省 1GB）；仅 'none' 策略在 classify 闸用 */
+  private readonly maxUploadSize: number
   private readonly checkpointStore: CheckpointStore | undefined
   private readonly onProgress: ((p: UploadProgress) => void) | undefined
   private readonly tasks = new Map<string, Task>()
@@ -193,11 +225,19 @@ export class UploadQueue {
     this.concurrency = Math.max(1, p.uploadConcurrency ?? 3)
     this.maxBytes = p.uploadMaxBytes
     this.partSize = Math.max(1, p.partSize ?? 8 * MB)
-    this.threshold = Math.max(0, p.multipartThreshold ?? 16 * MB)
+    // §W4 上传矩阵判别（类型面走 S3Client 可选成员；S3SigV4Client 未声明 → 缺省 's3-multipart'）
+    this.multipartStrategy = this.client.multipartStrategy ?? 's3-multipart'
+    // §W4②：'none' 策略=该数据源无分片能力，阈值视为 ∞（全部整包 PUT，全程不写断点——诚实降级
+    // 无续传）；超限拒收改走 maxUploadSize 闸（classify）。分片策略（'s3-multipart'/'content-range'）
+    // 阈值语义照旧。
+    this.threshold = this.multipartStrategy === 'none'
+      ? Number.MAX_SAFE_INTEGER
+      : Math.max(0, p.multipartThreshold ?? 16 * MB)
     this.denyExts = new Set((p.denyExts ?? []).map(normalizeExt).filter(ext => ext !== ''))
     this.maxParts = Math.max(1, p.maxParts ?? DEFAULT_MAX_PARTS)
     this.partRetry = Math.max(0, p.partRetry ?? DEFAULT_PART_RETRY)
     this.partRetryBaseMs = Math.max(0, p.partRetryBaseMs ?? DEFAULT_PART_RETRY_BASE_MS)
+    this.maxUploadSize = Math.max(1, p.maxUploadSize ?? DEFAULT_MAX_UPLOAD_SIZE)
     this.checkpointStore = p.checkpointStore
     this.onProgress = p.onProgress
   }
@@ -231,6 +271,12 @@ export class UploadQueue {
         continue
       }
       if (this.maxBytes !== undefined && f.size > this.maxBytes) {
+        rejected.push({ name: f.name, reason: 'size' })
+        continue
+      }
+      // §W4②：整包降级模式（'none'）单文件上限（maxUploadSize，缺省 1GB）——复用既有 size
+      // 拒收通道；分片策略（'s3-multipart'/'content-range'）无整包上限概念，不设闸
+      if (this.multipartStrategy === 'none' && f.size > this.maxUploadSize) {
         rejected.push({ name: f.name, reason: 'size' })
         continue
       }
@@ -433,12 +479,14 @@ export class UploadQueue {
 
   /** 每片成功回写 parts（partNumber 升序入库；并发落定乱序到达，写前就地排序） */
   private checkpointTouch(task: Task, partNumber: number, etag: string): void {
+    // M4-T P2：未配 checkpointStore 时跳过（enqueueResume 公共 API 边界可预置 cpRow）——
+    // 不产生注定失败的链写；终态移除由 checkpointDiscard 同款守卫兜住
+    const store = this.checkpointStore
     const row = task.cpRow
-    if (!row) return
+    if (!store || !row) return
     row.parts.push({ number: partNumber, etag })
     row.parts.sort((a, b) => a.number - b.number)
     row.updatedAt = Date.now()
-    const store = this.checkpointStore!
     // 执行时复核行仍存活：断点已移除（终态落定）后，迟到的逐片回写不得把行重新插回——
     // 否则「终态失败/complete 后 load=null」的清理承诺会被并发分片的迟到回写打破
     this.cpEnqueue(task, async () => {
@@ -454,7 +502,10 @@ export class UploadQueue {
     const row = task.cpRow
     if (!row) return // 直传任务/未启用/已移除：幂等无操作
     task.cpRow = undefined // 置空即封口：在途/迟到的逐片回写（cpRow===row 复核）全部失效
-    const store = this.checkpointStore!
+    // M4-T P2：未配 store（enqueueResume 预置 cpRow 的公共 API 边界）时内存封口即终态——
+    // 原非空断言 `!` 会在终态路径同步抛 TypeError，把已成功任务误判 failed
+    const store = this.checkpointStore
+    if (!store) return
     // 同步发起移除、不走 cpChain：终态落定处断点必须立即消失（不得晚于任何后续观察），
     // 且此后本任务不再有该行的写入（回写有 cpRow 复核），无「先 remove 后被回写插回」的乱序。
     void store.remove(row.fingerprint).catch(() => { /* 尽力而为 */ })
@@ -486,14 +537,23 @@ export class UploadQueue {
   }
 
   /**
-   * 断点候选探活：store.listAll × client.listMultipartUploads 交叉——uploadId 仍在服务端清单
-   * → 续传候选；不在 → 死行就地 remove（complete/abort/过期残留）。listMultipartUploads 为
-   * 可选能力：客户端未实现 → 返回 []（不误删）。列举失败同样保守返回 []（无法验证存活时不销毁断点）。
+   * 断点候选探活。's3-multipart'（缺省）：store.listAll × client.listMultipartUploads 交叉
+   * ——uploadId 仍在服务端清单 → 续传候选；不在 → 死行就地 remove（complete/abort/过期残留）。
+   * listMultipartUploads 为可选能力：客户端未实现 → 返回 []（不误删）。列举失败同样保守返回 []
+   * （无法验证存活时不销毁断点）。
+   * 'content-range'（§W4①，M4-V1 P1）：改走逐行 probeUploadProgress 判活——WebDAV 不实现
+   * listMultipartUploads，硬绑则跨会话续传结构性不可达（恢复面包条永不出现+IDB 残行永不清算）。
+   * !=-1（temp 存活）→ 存活候选透出（方案 §W4①「断点续传成立」）；-1（temp 已清理/丢失）→
+   * 死行就地 remove（对齐 S3 死行清算）；探测自身抛错（网络异常）→ 保守视作存活透出——
+   * enqueueResume 后 runMultipart 入口续传校验会再 probe 兜底（-1 → 清残重传），不因单点
+   * 探测抖动误删断点。
    */
   async resumeCheckpoints(): Promise<ResumeCandidate[]> {
     const store = this.checkpointStore
+    if (!store) return []
+    if (this.multipartStrategy === 'content-range') return this.resumeCheckpointsByProbe(store)
     const listMultipartUploads = this.client.listMultipartUploads
-    if (!store || !listMultipartUploads) return []
+    if (!listMultipartUploads) return []
     let uploads: { key: string; uploadId: string; initiated?: string }[]
     try {
       uploads = await listMultipartUploads.call(this.client)
@@ -513,15 +573,28 @@ export class UploadQueue {
         await store.remove(row.fingerprint) // uploadId 已失效（完成/取消/过期）：死行清理
         continue
       }
-      candidates.push({
-        fingerprint: row.fingerprint,
-        path: row.path,
-        size: row.size,
-        lastModified: row.lastModified,
-        partSize: row.partSize,
-        uploadId: row.uploadId,
-        parts: [...row.parts], // 浅拷贝：防内存实现下消费者原地改动污染库内行
-      })
+      candidates.push(toResumeCandidate(row))
+    }
+    return candidates
+  }
+
+  /** 'content-range' 断点探活（逐行 probeUploadProgress；口径见 resumeCheckpoints 头注） */
+  private async resumeCheckpointsByProbe(store: CheckpointStore): Promise<ResumeCandidate[]> {
+    const probe = this.client.probeUploadProgress
+    if (!probe) return [] // 无探测通道：无法判活（防御分支——content-range 实现必带 probe）
+    const candidates: ResumeCandidate[] = []
+    for (const row of await store.listAll()) {
+      let alive: boolean
+      try {
+        alive = (await probe.call(this.client, row.path, row.uploadId)) !== -1
+      } catch {
+        alive = true // 保守：探测异常不判死（续传入口校验会再兜底）
+      }
+      if (!alive) {
+        await store.remove(row.fingerprint) // temp 已清理/丢失：死行清算（对齐 S3 分支）
+        continue
+      }
+      candidates.push(toResumeCandidate(row))
     }
     return candidates
   }
@@ -571,6 +644,9 @@ export class UploadQueue {
    * 放弃断点候选（Home 面包条「放弃」与 partSize 漂移整件重传两条路径共用）：
    * abortMultipart 销毁服务端分片会话 + remove 移除本地断点行（双清；abort 尽力而为，
    * 会话销毁失败仅剩服务端残留，交由 orphan-sweeper/桶生命周期兜底——与 abort 主链同口径）。
+   * WebDAV carve out（M4-V1 P2 诚实化）：orphan-sweeper 走 listMultipartUploads 对 WebDAV
+   * 空转、亦无桶生命周期——残留 temp（MOVE 失败/弃 retry）无清扫面；候补=以 PROPFIND 扫
+   * `*.mmagix-part` 实现 listMultipartUploads（列 M4 后候补，见 WebDavClient 同款注记）。
    */
   async discardCheckpoint(candidate: ResumeCandidate): Promise<void> {
     void this.client.abortMultipart(candidate.path, candidate.uploadId).catch(() => { /* 尽力清理 */ })
@@ -633,7 +709,12 @@ export class UploadQueue {
   }
 
   /**
-   * multipart：create（续传时复用 task.uploadId）→ 分片并发≤2 → complete（partNumber 升序提交）。
+   * multipart：create（续传时复用 task.uploadId）→ 分片泵（'s3-multipart' 并发≤2 ｜
+   * 'content-range' 串行=1，§W4① append 不可乱序）→ complete（partNumber 升序提交）。
+   * 'content-range' 三道 probe 守卫（M4-V1 P1）：① 入口续传校验（不一致清残重开）；② 片级
+   * 盲重试置 0（uploadOne，append 不幂等）；③ complete 前 probe 对账防线纵深——MOVE 发布
+   * 不可逆，对账不符绝不发布。清残重开整循环重入（新会话从第 1 片重传），计次上限
+   * SESSION_RESET_MAX（超限 SdkError 落 failed 交任务级 retry，防病理服务器无界重传循环）。
    * 分片大小走自适应（effectivePartSize）：大文件抬高片长保证片数 ≤ maxParts；断点行记录同一值。
    */
   private async runMultipart(task: Task, contentType: string): Promise<void> {
@@ -641,73 +722,126 @@ export class UploadQueue {
     const total = file.size
     const partSize = effectivePartSize(total, this.partSize, this.maxParts)
     const partCount = Math.max(1, Math.ceil(total / partSize))
-    if (!task.uploadId) {
-      const { uploadId } = await this.client.createMultipart(key, contentType)
-      task.uploadId = uploadId
-      task.parts = new Map()
-      // create 返回后再落断点行（此刻字段已齐全）：先于分片泵启动，cpChain 保序落行→逐片更新
-      this.checkpointBegin(task, uploadId)
-    }
-    const uploadId = task.uploadId
-    const etagByPart = (task.parts ??= new Map())
-    if (task.aborted) throw this.abortedError(id)
+    // §W4①：content-range=旁路 temp append 模型，分片必须串行（并发覆写为 1）——追加语义不可
+    // 乱序，顺序由调用方（本队列）串行保证；'s3-multipart' 维持既有并发 2
+    const partConcurrency = this.multipartStrategy === 'content-range' ? 1 : PART_CONCURRENCY
+    let resets = 0
+    for (;;) {
+      if (!task.uploadId) {
+        const { uploadId } = await this.client.createMultipart(key, contentType)
+        task.uploadId = uploadId
+        task.parts = new Map()
+        // create 返回后再落断点行（此刻字段已齐全）：先于分片泵启动，cpChain 保序落行→逐片更新
+        this.checkpointBegin(task, uploadId)
+      } else if (this.multipartStrategy === 'content-range') {
+        // §W4① 续传校验（诚实降级）：append 模型无服务端截断能力，续传前必须 probeUploadProgress
+        // 实证 temp 旁路对象字节面——数值失配（>半片残留 / <服务端丢失）或 -1 且已确认>0（temp
+        // 丢失）才清残重开；-1≡0（fresh 会话尚未落首片）为一致态放行（M4-V2 P0：伪重置级联——
+        // reset 后重入此处，新会话 temp 首次 PUT 前必 404→-1，旧谓词 `-1 !== 0` 即再 reset 烧尽
+        // SESSION_RESET_MAX=任务确定性报废）。探测请求自身抛错（网络异常）不在此消化——原样
+        // 上抛由 run 落 failed、retry 重入再校验（不得因探测抖动销毁尚可能完好的会话/断点）。
+        const confirmed = confirmedBytesOf(task.parts ?? new Map(), partSize, total)
+        const probe = this.client.probeUploadProgress
+        // 防御：无探测通道=无法实证服务端字节面，按最保守 -1 口径（confirmed>0 时）清残全量重传
+        const probed = probe ? await probe.call(this.client, key, task.uploadId) : -1
+        if (probeMismatched(probed, confirmed)) await this.resetContentRangeSession(task, contentType, ++resets)
+      }
+      const uploadId = task.uploadId
+      const etagByPart = (task.parts ??= new Map())
+      if (task.aborted) throw this.abortedError(id)
 
-    // 进度按已落定分片重算（续传/重试入口：进度从断点继续而非归零）
-    let loaded = 0
-    for (const n of etagByPart.keys()) loaded += partBytes(n, partSize, total)
-    let nextPart = 1
-    await new Promise<void>((resolve, reject) => {
-      let settled = false
-      let inFlight = 0
-      const settle = (fn: () => void): void => {
-        if (settled) return
-        settled = true
-        fn()
-      }
-      const fail = (e: unknown): void => settle(() => reject(e))
-      const finish = (): void =>
-        settle(() => {
-          if (task.aborted) reject(this.abortedError(id))
-          else resolve()
-        })
-      const settleIfIdle = (): void => {
-        if (settled || inFlight > 0) return
-        finish()
-      }
-      const pump = (): void => {
-        // paused/aborted 停止派发新分片（诚实口径：当前分片落定后停止调度后续分片）
-        while (!settled && !task.paused && !task.aborted && inFlight < PART_CONCURRENCY && nextPart <= partCount) {
-          const n = nextPart++
-          if (etagByPart.has(n)) continue // 续传：已落定分片按 partNumber 跳过（uploadPart 幂等，无需重传）
-          inFlight++
-          this.uploadOne(task, uploadId, n, partSize).then(
-            part => {
-              inFlight--
-              if (settled) return // 已失败/取消/暂停落定：迟到分片只丢弃
-              etagByPart.set(part.partNumber, part.etag)
-              loaded += part.bytes
-              this.hooks.onProgress?.(id, loaded, total) // 每片必调，节流归调用侧
-              this.onProgress?.({ bytes: loaded, total }) // 字节级进度：累计真实字节（末片截断精确）
-              this.checkpointTouch(task, part.partNumber, part.etag) // 每片成功回写断点 parts
-              settleIfIdle() // 暂停时不再续派：等在途清零即落定
-              pump()
-            },
-            e => { inFlight--; fail(e) },
-          )
+      // 进度按已落定分片重算（续传/重试入口：进度从断点继续而非归零；§W4① 清残重传路径归零）
+      let loaded = confirmedBytesOf(etagByPart, partSize, total)
+      let nextPart = 1
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        let inFlight = 0
+        const settle = (fn: () => void): void => {
+          if (settled) return
+          settled = true
+          fn()
         }
-        settleIfIdle() // 终止路径：全部落定（完成/暂停清零）
-      }
-      pump()
-    })
+        const fail = (e: unknown): void => settle(() => reject(e))
+        const finish = (): void =>
+          settle(() => {
+            if (task.aborted) reject(this.abortedError(id))
+            else resolve()
+          })
+        const settleIfIdle = (): void => {
+          if (settled || inFlight > 0) return
+          finish()
+        }
+        const pump = (): void => {
+          // paused/aborted 停止派发新分片（诚实口径：当前分片落定后停止调度后续分片）
+          while (!settled && !task.paused && !task.aborted && inFlight < partConcurrency && nextPart <= partCount) {
+            const n = nextPart++
+            if (etagByPart.has(n)) continue // 续传：已落定分片按 partNumber 跳过（uploadPart 幂等，无需重传）
+            inFlight++
+            this.uploadOne(task, uploadId, n, partSize).then(
+              part => {
+                inFlight--
+                if (settled) return // 已失败/取消/暂停落定：迟到分片只丢弃
+                etagByPart.set(part.partNumber, part.etag)
+                loaded += part.bytes
+                this.hooks.onProgress?.(id, loaded, total) // 每片必调，节流归调用侧
+                this.onProgress?.({ bytes: loaded, total }) // 字节级进度：累计真实字节（末片截断精确）
+                this.checkpointTouch(task, part.partNumber, part.etag) // 每片成功回写断点 parts
+                // M4-T P0：串行泵提前 settle=截断 MOVE，数据丢失级——pump 必须先行（原顺序
+                // settleIfIdle→pump 在 content-range 并发=1 下，唯一在途片落定 inFlight 归零即
+                // 提前 settle → completeMultipart 只带部分分片 → 截断 temp 被 MOVE 成正式文件；
+                // s3-multipart 并发 2 被第二在途片掩盖，串行化后首次暴露）。pump 尾部已自调
+                // settleIfIdle，此处尾调冗余但幂等（settled/inFlight 双闸）。
+                pump()
+                settleIfIdle() // 暂停时不再续派：等在途清零即落定
+              },
+              e => { inFlight--; fail(e) },
+            )
+          }
+          settleIfIdle() // 终止路径：全部落定（完成/暂停清零）
+        }
+        pump()
+      })
 
-    if (task.paused && !task.aborted) return // run 落 paused，不 complete
-    if (task.aborted) throw this.abortedError(id)
-    const parts = [...etagByPart.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([partNumber, etag]) => ({ partNumber, etag }))
-    await this.client.completeMultipart(key, uploadId, parts)
-    task.uploadId = undefined
-    task.parts = undefined
+      if (task.paused && !task.aborted) return // run 落 paused，不 complete
+      if (task.aborted) throw this.abortedError(id)
+      // M4-V1 P1 防线纵深：complete=MOVE 发布不可逆（旁路 temp 对用户不可见、发布即所见），
+      // 发布前 probe 对账——失配（片级「已落盘追加但响应丢失」双追加的兜底闸/任何服务端字节面
+      // 漂移/外部删 temp，M4-V2 P0 顺带修复的外部删除恢复路径）即清残重开、整循环从第 1 片
+      // 重传，绝不把对账不符的 temp 发布。探测抛错同入口校验口径：原样上抛落 failed，不销毁现场。
+      if (this.multipartStrategy === 'content-range') {
+        const probe = this.client.probeUploadProgress
+        const probed = probe ? await probe.call(this.client, key, task.uploadId) : -1
+        if (probeMismatched(probed, confirmedBytesOf(etagByPart, partSize, total))) {
+          await this.resetContentRangeSession(task, contentType, ++resets)
+          continue
+        }
+      }
+      const parts = [...etagByPart.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([partNumber, etag]) => ({ partNumber, etag }))
+      await this.client.completeMultipart(key, uploadId, parts)
+      task.uploadId = undefined
+      task.parts = undefined
+      return
+    }
+  }
+
+  /**
+   * §W4① 清残重开（content-range 专用，续传校验与 complete 前对账两处共用）：abortMultipart
+   * 清残（client 容忍 404）→ 新 createMultipart → parts 归零 + checkpoint 重置（checkpointBegin
+   * 新行整体覆盖写，旧行回写经 cpRow===row 复核自然失效）。attempt=本次 run 内已重开计次：
+   * 超 SESSION_RESET_MAX 视为病理服务端（逐次重开仍对不上账），SdkError 落 failed 交任务级
+   * retry——宁可明确失败，不做无界重传循环。
+   */
+  private async resetContentRangeSession(task: Task, contentType: string, attempt: number): Promise<void> {
+    if (attempt > SESSION_RESET_MAX) {
+      throw new SdkError(ERROR_CODES.S3_ERROR, 'content-range 会话对账反复失败（已清残重开至上限）', { key: task.key })
+    }
+    await this.client.abortMultipart(task.key, task.uploadId!) // 调用点保证 uploadId 在场（清残）
+    const fresh = await this.client.createMultipart(task.key, contentType)
+    task.uploadId = fresh.uploadId
+    task.parts = new Map()
+    this.checkpointBegin(task, fresh.uploadId)
   }
 
   /**
@@ -715,17 +849,22 @@ export class UploadQueue {
    * 前等待 base×2^(n-1) + 0~250ms 抖动（间隔 500/1000/2000…逐次拉开，attempt 逐次递增）。
    * 仅网络错/5xx/超时重试；4xx 语义错与取消码立即抛。暂停/取消立即让位
    * （含退避等待中），错误原样上抛由 run 按对应语义落定（paused 非失败 / aborted 取消码）。
+   * M4-V1 P1（§W4①）：content-range 片级重试等效置 0——append 不幂等，「服务端已落盘追加
+   * 但响应丢失」模糊窗内盲重试=双追加；片失败即落 failed，恢复交给带 probe 守卫的任务级
+   * retry（retry→run→入口续传校验清残重传）。's3-multipart' partNumber 寻址幂等，口径照旧。
    */
   private async uploadOne(task: Task, uploadId: string, partNumber: number, partSize: number) {
     const start = (partNumber - 1) * partSize
     const end = Math.min(start + partSize, task.file.size)
+    // content-range：append 不幂等 → 重试上限 0（首错即抛）；其余策略沿用 partRetry
+    const maxAttempt = this.multipartStrategy === 'content-range' ? 0 : this.partRetry
     for (let attempt = 0; ; attempt++) {
       try {
         const { etag } = await this.client.uploadPart(task.key, uploadId, partNumber, task.file.slice(start, end))
         return { partNumber, etag, bytes: end - start }
       } catch (e) {
         if (task.paused || task.aborted) throw e // 让位：不烧无谓退避（run 按 paused/aborted 落定）
-        if (attempt >= this.partRetry || !isRetryablePartError(e)) throw e
+        if (attempt >= maxAttempt || !isRetryablePartError(e)) throw e
         const backoff = this.partRetryBaseMs * 2 ** attempt + Math.random() * 250
         await sleep(backoff)
         if (task.paused || task.aborted) throw e // 退避期间被暂停/取消：立即让位
@@ -744,6 +883,40 @@ const isTerminal = (s: UploadStatus): boolean => s === 'done' || s === 'failed' 
 function partBytes(partNumber: number, partSize: number, total: number): number {
   const start = (partNumber - 1) * partSize
   return Math.min(start + partSize, total) - start
+}
+
+/**
+ * 已落定分片合计字节——「已确认完整字节」唯一口径：进度累计与 §W4① 续传校验共用
+ * （content-range 续传时 probeUploadProgress 返回值与之严格相等才准续传余片）。
+ */
+function confirmedBytesOf(parts: Map<number, string>, partSize: number, total: number): number {
+  let bytes = 0
+  for (const n of parts.keys()) bytes += partBytes(n, partSize, total)
+  return bytes
+}
+
+/**
+ * probe 对账失配判定（M4-V2 P0：-1≡0 一致态，伪重置级联）——入口续传校验与 complete 前
+ * 对账两处共用。数值失配（>半片残留 / <服务端丢失）或 -1 且已确认>0（temp 丢失）=失配须
+ * 清残重开；-1 且已确认 0 为一致态（fresh 会话尚未落首片，首片 PUT 自建 temp）放行——
+ * 否则 reset 后重入即对从未落盘的 fresh temp 探得 -1，旧谓词判失配再 reset，烧尽
+ * SESSION_RESET_MAX=任务确定性报废（retry 同样级联）。
+ */
+function probeMismatched(probed: number, confirmed: number): boolean {
+  return probed !== confirmed && !(probed === -1 && confirmed === 0)
+}
+
+/** 断点行 → 续传候选（S3 清单交叉与 content-range probe 判活两路共用；浅拷贝防污染库内行） */
+function toResumeCandidate(row: UploadCheckpoint): ResumeCandidate {
+  return {
+    fingerprint: row.fingerprint,
+    path: row.path,
+    size: row.size,
+    lastModified: row.lastModified,
+    partSize: row.partSize,
+    uploadId: row.uploadId,
+    parts: [...row.parts],
+  }
 }
 
 /** ≥ x 的最小 2 的幂（x ≤ 1 → 1；移位累乘避免 log2 浮点边界误差） */

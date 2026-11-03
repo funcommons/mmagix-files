@@ -505,6 +505,41 @@ describe('TreePanel 键盘流（Lane H-2）', () => {
     expect(w.find('.fc-menu').text()).not.toContain('files.menu.share')
     w.unmount()
   })
+
+  // 双门分离：shareEnabled=客户端预签名能力门控（WebDAV 无预签名→菜单不出口分享项），与 isDir 门控正交
+  it('shareEnabled=false：右键文件行菜单无「分享」项（其余动作不受影响）；缺省（true）仍含', async () => {
+    const off = mount(TreePanel, {
+      props: { controller: fakeTree({ bucket: alphaBucket() }), shareEnabled: false },
+      global: { stubs: { teleport: true } },
+    })
+    await off.findAll('[data-testid="row"]')[1]!.trigger('contextmenu') // b1.txt（文件）
+    const menu = off.find('.fc-menu')
+    expect(menu.exists()).toBe(true) // 菜单仍开（打开/重命名/删除等不受能力门控牵连）
+    expect(menu.text()).toContain('files.menu.rename')
+    expect(menu.text()).not.toContain('files.menu.share')
+    off.unmount()
+
+    const on = mount(TreePanel, {
+      props: { controller: fakeTree({ bucket: alphaBucket() }) },
+      global: { stubs: { teleport: true } },
+    })
+    await on.findAll('[data-testid="row"]')[1]!.trigger('contextmenu')
+    expect(on.find('.fc-menu').text()).toContain('files.menu.share')
+    on.unmount()
+  })
+
+  it('shareEnabled=false：右键目录行菜单同样无「分享」项（isDir 分支与能力分支叠加，不报错）', async () => {
+    const off = mount(TreePanel, {
+      props: { controller: fakeTree({ bucket: alphaBucket() }), shareEnabled: false },
+      global: { stubs: { teleport: true } },
+    })
+    await off.findAll('[data-testid="row"]')[0]!.trigger('contextmenu') // a/（目录）
+    const menu = off.find('.fc-menu')
+    expect(menu.exists()).toBe(true)
+    expect(menu.text()).not.toContain('files.menu.share')
+    expect(off.emitted('menu-action')).toBeUndefined() // 未误派发任何动作
+    off.unmount()
+  })
 })
 
 /** Toolbar 图标钮定位（2026-10 紧凑图标改版：无文本，按 data-testid；findAll[0]=缺位时 undefined，同 buttonByText 契约） */
@@ -609,6 +644,20 @@ describe('Toolbar（选中簇语义；2026-10 布局改版后挂预览区头右�
     await share.trigger('click')
     expect(w1.emitted('share')?.[0]?.[0]).toEqual(expect.objectContaining({ key: 'root/a/b.txt' }))
     w1.unmount()
+  })
+
+  // 双门分离（WebDAV 能力门控）：shareEnabled=false → 分享钮 v-if 整体卸载（选择门控 disabled 不再参与）；
+  // true/缺省 → 既有单选文件可用语义不变
+  it('shareEnabled=false：单选文件也不渲染分享钮（能力门控卸载整钮）；true 同选态下可点', () => {
+    const selected = [file('root/a/b.txt', 'b.txt')]
+    const off = mount(Toolbar, { props: { controller: fakeTree(), selected, shareEnabled: false } })
+    expect(off.find('[data-testid="toolbar-share"]').exists()).toBe(false)
+    off.unmount()
+
+    const on = mount(Toolbar, { props: { controller: fakeTree(), selected, shareEnabled: true } })
+    const share = toolbarButtonByTestid(on, 'share')!
+    expect(share.attributes('disabled')).toBeUndefined()
+    on.unmount()
   })
 })
 

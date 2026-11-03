@@ -19,6 +19,8 @@ export interface AppCtxDeps {
   notifyFileChanged: NotifySink
   /** 可选能力：媒体直链透传（s3=presigned / url source=原始 URL；缺省=ctx 不带该键） */
   getMediaUrl?: (key: string) => string
+  /** 可选能力：对象 Range 读透传（§W5 zip 第二 RangeReader——非 mem 键且数据面提供时携带；缺省=ctx 不带该键） */
+  getObjectRange?: (key: string, start: number, end: number) => Promise<Uint8Array>
   /** 可选能力：应用级故障上报 → 宿主 bus 'error' 事件（缺省=ctx 不带该键, 渲染器探测回落静默） */
   notifyAppError?: (err: { code: number; message: string }) => void
 }
@@ -54,6 +56,9 @@ export function createAppCtx(deps: AppCtxDeps): AppCtx {
     },
     // 条件展开：能力缺省时 ctx 上不带该键（渲染器按 getMediaUrl? 探测，回落 Blob 路径）
     ...(deps.getMediaUrl ? { getMediaUrl: (key: string) => deps.getMediaUrl!(key) } : {}),
+    ...(deps.getObjectRange
+      ? { getObjectRange: (key: string, start: number, end: number) => deps.getObjectRange!(key, start, end) }
+      : {}),
     ...(deps.notifyAppError ? { notifyAppError: (err: { code: number; message: string }) => deps.notifyAppError!(err) } : {}),
   }
 }

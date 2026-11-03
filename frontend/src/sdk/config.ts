@@ -88,7 +88,10 @@ export function parseAppConfig(hash: string = window.location.hash): AppConfig {
   return { ...cfg, mode: inferredMode } as AppConfig
 }
 
-/** workspace 模式校验：backend 四要素 + credentials 三要素 + allowedOrigins + ttlSeconds(可选正数) */
+/**
+ * workspace 模式校验：backend 按 type 分流（WebDAV §W1/W6——'webdav' 走 WebDAV 分支；
+ * 缺省/'s3' 走现行 S3 校验，逐字节不变；其它值报 backend.type 非法）+ allowedOrigins。
+ */
 function validateWorkspace(cfg: Record<string, unknown>, problems: string[]): void {
   const backend = cfg.backend
   if (typeof backend !== 'object' || backend === null) {
@@ -96,33 +99,43 @@ function validateWorkspace(cfg: Record<string, unknown>, problems: string[]): vo
     return // backend 缺失时其子段无从校验
   }
   const b = backend as Record<string, unknown>
-  for (const key of ['endpoint', 'region', 'bucket'] as const) {
-    if (!isNonEmptyString(b[key])) problems.push(`缺 backend.${key}`)
-  }
-  // prefix（三审修复：放开空值）——''=bucket 根为会话域（本地连接模式合法形态）。
-  // 原非空强校验迫使 ConnectWizard 垫字面 '/'，运行时 list('/')/joinKey('/') 断裂
-  // （空前缀 Profile「测试成功、连接后树空」）。手册「prefix=会话目录域」口径不回，
-  // 空域语义与垫片收敛注释见 files/profiles.ts；手册字段表回写候 B 批。
-  if (typeof b.prefix !== 'string') problems.push('缺 backend.prefix')
-
-  const credentials = b.credentials
-  if (typeof credentials !== 'object' || credentials === null) {
-    problems.push('缺 backend.credentials')
-  } else {
-    const c = credentials as Record<string, unknown>
-    // sessionToken（三审修复：放开空串）——本地长期 AK/SK 模式无 STS；sigv4 对空值
-    // 不发 x-amz-security-token 头（语义就绪）。原非空强校验迫使向导垫假 token，
-    // reload 后每请求携带伪造头，严格校验端点（AWS/OSS）403——「测试成功、连接后全挂」。
-    // 手册「STS 三要素缺一不可」口径针对宿主嵌入模式，本地模式例外回写候 B 批。
-    for (const key of ['accessKeyId', 'accessKeySecret'] as const) {
-      if (!isNonEmptyString(c[key])) problems.push(`缺 backend.credentials.${key}`)
+  // 判别单向收窄（types.ts WorkspaceBackend 注记）：'webdav' → WebDAV 分支；缺省/'s3' → 现行分支
+  if (b.type === 'webdav') {
+    validateWebDavBackend(b, problems)
+  } else if (b.type === undefined || b.type === 's3') {
+    // ── 现行 S3 校验（行为逐字节不变）──
+    for (const key of ['endpoint', 'region', 'bucket'] as const) {
+      if (!isNonEmptyString(b[key])) problems.push(`缺 backend.${key}`)
     }
-    if (typeof c.sessionToken !== 'string') problems.push('缺 backend.credentials.sessionToken')
-  }
+    // prefix（三审修复：放开空值）——''=bucket 根为会话域（本地连接模式合法形态）。
+    // 原非空强校验迫使 ConnectWizard 垫字面 '/'，运行时 list('/')/joinKey('/') 断裂
+    // （空前缀 Profile「测试成功、连接后树空」）。手册「prefix=会话目录域」口径不回，
+    // 空域语义与垫片收敛注释见 files/profiles.ts；手册字段表回写候 B 批。
+    if (typeof b.prefix !== 'string') problems.push('缺 backend.prefix')
 
-  // ttlSeconds 可选；提供时须为正数（0/负数/非数字均拒）
-  if (b.ttlSeconds !== undefined && (typeof b.ttlSeconds !== 'number' || !(b.ttlSeconds > 0))) {
-    problems.push('backend.ttlSeconds 须为正数')
+    const credentials = b.credentials
+    if (typeof credentials !== 'object' || credentials === null) {
+      problems.push('缺 backend.credentials')
+    } else {
+      const c = credentials as Record<string, unknown>
+      // sessionToken（三审修复：放开空串）——本地长期 AK/SK 模式无 STS；sigv4 对空值
+      // 不发 x-amz-security-token 头（语义就绪）。原非空强校验迫使向导垫假 token，
+      // reload 后每请求携带伪造头，严格校验端点（AWS/OSS）403——「测试成功、连接后全挂」。
+      // 手册「STS 三要素缺一不可」口径针对宿主嵌入模式，本地模式例外回写候 B 批。
+      for (const key of ['accessKeyId', 'accessKeySecret'] as const) {
+        if (!isNonEmptyString(c[key])) problems.push(`缺 backend.credentials.${key}`)
+      }
+      if (typeof c.sessionToken !== 'string') problems.push('缺 backend.credentials.sessionToken')
+    }
+
+    // ttlSeconds 可选；提供时须为正数（0/负数/非数字均拒）
+    if (b.ttlSeconds !== undefined && (typeof b.ttlSeconds !== 'number' || !(b.ttlSeconds > 0))) {
+      problems.push('backend.ttlSeconds 须为正数')
+    }
+  } else {
+    // 未知协议：判别联合只有两个成员（S3 形状兜底缺省），其它值一律拒——
+    // 宽松放行会让坏配置静默落到 S3 分支（缺 region/bucket 的报错误导排障方向）
+    problems.push("backend.type 须为 's3' | 'webdav'")
   }
 
   const security = cfg.security as { allowedOrigins?: unknown } | undefined | null
@@ -133,6 +146,32 @@ function validateWorkspace(cfg: Record<string, unknown>, problems: string[]): vo
     !origins.every((s) => isNonEmptyString(s))
   ) {
     problems.push('缺 security.allowedOrigins（须为非空字符串数组）')
+  }
+}
+
+/**
+ * WebDAV backend 校验（WebDAV §W6）：endpoint 非空必填；username/password/rootPath
+ * 可空缺、出现时须为字符串（可空缺=匿名/缺省形态合法，WebDavClient 半凭证口径对
+ * 「只有 username」不发认证——合法空密码账号由连接向导显式校验兜）；ttlSeconds
+ * 正数同现行 S3 口径（自毁线语义=前端主动遗忘，见 types.ts WebDavBackend 注记）。
+ *
+ * §W4 家族开关面：chunkedWrite 可选——缺省=安全降级（整包 PUT，阈值对该源视为 ∞），
+ * 出现时须为布尔；maxUploadSize 可选——整包上传单文件上限（默认 1GB，可配），提供时
+ * 须为正数（0/负数/非数字均拒，同 ttlSeconds 口径）。
+ */
+function validateWebDavBackend(b: Record<string, unknown>, problems: string[]): void {
+  if (!isNonEmptyString(b.endpoint)) problems.push('缺 backend.endpoint')
+  for (const key of ['username', 'password', 'rootPath'] as const) {
+    if (b[key] !== undefined && typeof b[key] !== 'string') problems.push(`backend.${key} 须为字符串`)
+  }
+  if (b.ttlSeconds !== undefined && (typeof b.ttlSeconds !== 'number' || !(b.ttlSeconds > 0))) {
+    problems.push('backend.ttlSeconds 须为正数')
+  }
+  if (b.chunkedWrite !== undefined && typeof b.chunkedWrite !== 'boolean') {
+    problems.push('backend.chunkedWrite 须为布尔')
+  }
+  if (b.maxUploadSize !== undefined && (typeof b.maxUploadSize !== 'number' || !(b.maxUploadSize > 0))) {
+    problems.push('backend.maxUploadSize 须为正数')
   }
 }
 
@@ -179,7 +218,20 @@ export function buildConfigSummary(cfg: AppConfig): Record<string, unknown> {
     features: cfg.features ? Object.keys(cfg.features) : [],
   }
   if (cfg.mode === 'workspace') {
-    summary.prefix = cfg.backend.prefix
+    // backend 按 type 分流（WebDAV §W6）：S3 → prefix；webdav → endpoint/rootPath/username 展示面。
+    // P0 红线：webdav password 不得进摘要——与现行 S3「credentials 整段不进」同一手法：
+    // 整键缺席（不脱敏垫 `***`，键名也不透出），凭据不出前端的 summary 面。
+    if (cfg.backend.type === 'webdav') {
+      const dav = cfg.backend
+      summary.endpoint = dav.endpoint
+      // 可选段整键缺席（M2-V1：条件展开形态，对齐 wizard 手法）——缺省不产「键存在值 undefined」
+      Object.assign(summary, {
+        ...(dav.rootPath !== undefined ? { rootPath: dav.rootPath } : {}),
+        ...(dav.username !== undefined ? { username: dav.username } : {}),
+      })
+    } else {
+      summary.prefix = cfg.backend.prefix
+    }
     summary.plugins = cfg.plugins?.length ?? 0
   }
   return summary

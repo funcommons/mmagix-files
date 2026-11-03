@@ -24,6 +24,7 @@
 import { AppRegistry } from '@/apps/registry'
 import { createAppCtx } from '@/apps/ctx'
 import { formatBytes } from '@/files/format'
+import { isMemKey } from '@/files/mem-store'
 import type { AppDataSource } from '@/apps/datasource'
 import type { AppDefinition, AppInstance, S3ObjectSummary } from '@/sdk/types'
 
@@ -422,6 +423,11 @@ export function createPreview(opts: PreviewOptions): PreviewHandle {
       notifyFileChanged,
       // 媒体直链能力透传（s3=presigned URL / url source=原始 URL；缺省不带，渲染器探测回落 Blob）
       ...(datasource.getMediaUrl ? { getMediaUrl: (key: string) => datasource.getMediaUrl!(key) } : {}),
+      // §W5 Range 读通道透传（非 mem 键且数据面提供）——mem:// 键不透传（装配契约：ctx 上成员
+      // 缺席=undefined，渲染器探测不到走 Blob 兜底；withMemSource 抛错面保持纯防御）；缺省不带
+      ...(datasource.getObjectRange && !isMemKey(entry.key)
+        ? { getObjectRange: (key: string, start: number, end: number) => datasource.getObjectRange!(key, start, end) }
+        : {}),
       // 应用级故障出口透传（宿主接 bus 'error'——toast/换签重载; 缺省不带）
       ...(notifyAppError ? { notifyAppError: (err: { code: number; message: string }) => notifyAppError!(err) } : {}),
     })
