@@ -1,8 +1,9 @@
 # mmagix-files 图示类应用设计（脑图 · 时序图 · 架构图）
 
-> **【实现状态 · 2026-10-27 更新（一百四十八番终态）】**
-> - **四方言全可编辑 ✅**：flow-editor 升格为 graph TD 流程图 + mindmap 脑图 + sequenceDiagram 时序图 + architecture-beta 架构图的可视化编辑器（不新增独立应用）：
->   - 脑图：缩进树解析/单根序列化/装饰往返/添加分支自动挂选中节点（一百四十七番）
+> **【实现状态 · 2026-10-27 更新（一百四十八番终态）｜2026-11-10 脑图方言移交】**
+> - **【2026-11-10 更新】mindmap 方言移交独立脑图编辑面**：flow-editor 渲染入口按 `detectDialect==='mindmap'` 内部分派到脑图编辑面（simple-mind-map 引擎，XMind 级——四主题/键位/大纲/搜索/属性面板/关联线/外框；方案正本 [mind-editor-redesign/plan.md](mind-editor-redesign/plan.md)），registry/「打开方式」/mermaid-viewer 只读面零改动；**flow-editor 保留 flowchart/sequence/architecture 三方言**
+> - 三方言全可编辑 ✅（2026-10-27 终态，脑图子行已被上行取代）：flow-editor 升格为 graph TD 流程图 + sequenceDiagram 时序图 + architecture-beta 架构图的可视化编辑器（不新增独立应用）：
+>   - 脑图：缩进树解析/单根序列化/装饰往返/添加分支自动挂选中节点（一百四十七番）——【2026-11-10 起失效】X6 脑图编辑面已被脑图编辑器重写取代（见首条）
 >   - 时序图：participant=节点、消息=边（箭头 kind `->>`/`-->>` 保真）；alt/else/end/Note 块语句整行透传保真（X6 呈现为图，非泳道渲染；位置不持久化）
 >   - 架构图：service=节点（icon/group 经 dialectData 往返）、连接=边（:端口 剥离、箭头 `--/-->/<-->` 保真）；group 行整行透传
 >   - 序列化均为 raw 优先（未编辑行零 diff）；原始行语义等价时原样输出（端口/装饰保留）
@@ -26,7 +27,7 @@
 
 | 图 | 源格式 | 兜底渲染 | 编辑形态 | 编辑引擎 | 一句话定位 |
 | --- | --- | --- | --- | --- | --- |
-| **脑图** | mermaid `mindmap` | mermaid.js | **拖拽树编辑** | mind-elixir（首选，MIT）/ simple-mind-map（备选，功能全） | 层级树=脑图语义，AI 读改零失真 |
+| **脑图** | mermaid `mindmap` | mermaid.js | **拖拽树编辑**（【2026-11-10 起】独立脑图编辑面，见头注与 §2.4 注记） | simple-mind-map（终选，MIT，0.14.x；mind-elixir 因仅左右布局/无概要与关联线出局） | 层级树=脑图语义，AI 读改零失真 |
 | **时序图** | mermaid `sequenceDiagram` | mermaid.js | **纯文本编辑**（复用 code-editor 保存链） | 不引入拖拽引擎——消息线性列表，文本即最佳编辑面 | AI 受益最大的图类，文本编辑就是正解 |
 | **架构图** | mermaid `architecture-beta` | mermaid.js | **拓扑编辑**（服务卡片+端口连线） | AntV X6（复用流程图引擎与回写契约） | 语法带方向端口（L/R/T/B），与 X6 端口模型天然同构 |
 
@@ -72,6 +73,7 @@ mindmap
 
 `mind-editor`（ext: mmd/mermaid 中 mindmap 语法文件；edit）。路由判定：同一扩展名下按首行语法关键字分发（`mindmap` / `graph` / `sequenceDiagram` / `architecture`），未知语法 → `mermaid-viewer` 兜底。
 **【终态 2026-10-31】独立 `mind-editor` 应用未创建**——mindmap 已并入 flow-editor 四方言（`detectDialect` 分派，见头注），本节保留为选型档案。
+**【更新 2026-11-10】脑图编辑器重写落地**——mindmap 编辑面已从 flow-editor X6 面拆出为独立脑图编辑面（仍不新增 registry 应用条目：渲染器内按 `detectDialect==='mindmap'` 动态分派）；引擎终裁=simple-mind-map@0.14.x（开放问题 1 随之关闭），能力面见 [mind-editor-redesign/plan.md](mind-editor-redesign/plan.md) 与用户手册脑图章。本节继续保留为选型档案。
 
 ---
 

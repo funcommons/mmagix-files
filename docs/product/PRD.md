@@ -47,6 +47,7 @@
 | FR-16 | 传输中心（暂停/继续/重试/取消/清除；预览头传输钮+角标/⌘K/弹窗传输页签三入口；顶缘拖高 96–480px 持久化） | ✅ v1.3.0 | `files/ui/UploadPanel.vue`、`views/Home.vue` |
 | FR-17 | 版本能力门控（client 方法+桶 Versioning 状态探测；无能力时回收站/历史版本整入口隐藏而非报错） | ✅ v1.3.0 | `views/Home.vue`（detectVersionCapable）、`files/ui/TreePanel.vue` |
 | FR-18 | 多数据源（S3｜WebDAV）：**范围**——连接向导 WebDAV 分支（类型段/服务��地址/根路径/Basic 凭证成对/分块续写开关）、目录树+列表+搜索浏览、基础操作（mkdir/rename/remove，collection 目录语义分流）、上传矩阵（chunkedWrite 分块续写｜缺省整包降级+maxUploadSize 上限）、zip 在线解压（`getObjectRange` 第二 RangeReader）、能力门控降级面（回收站/历史版本/分享/直链自动隐藏）；**非目标（v1 缺席）**——回收站、历史版本、信封分享、上传直链（WebDAV 无桶版本与预签名概念） | ✅ v1.4.0 已发布（2026-11-03） | `sdk/webdav/`（client/parse）、`sdk/types.ts`（`WebDavBackend`/`WorkspaceBackend`）、`files/setup.ts`、`files/tree-store.ts`、`files/ui/ConnectWizard.vue` |
+| FR-19 | 脑图编辑器（mindmap 方言，对标 XMind）：**范围（P0+P1+P2 已交付）**——simple-mind-map 引擎独立编辑面（flow-editor 渲染入口按 `detectDialect` 内部分派，registry/「打开方式」/mermaid-viewer 零改动）、四套 XMind 风主题+布局（`_mindview` meta 持久化；七布局/四主题下拉切换）、XMind 键位（Enter/Tab/双击/拖拽重挂/折叠/撤销重做/多选/子树复制粘贴/缩放平移）、属性面板（备注/图片 URL/链接/标签/概要）、大纲视图、搜索定位（Ctrl+F）、关联线与外框（插件+meta 持久化数据链）、两闸脏门控（未编辑保存字节级零 diff）、导出（PNG/SVG/JSON/OPML）、`.xmind` 导入（替换当前内容走脏保存链）、模板库（项目管理/头脑风暴/产品发布三套）、主题样式面板（节点填充色/线条颜色/线型，`custom` 字段随文件持久化）、mermaid 主存不动（AI 语料链零中断）；**待裁（embed-demo parity）**——embed-demo 工作树由 site2 工作线占用，建议其落地后单独立批 | ✅ P0/P1/P2 已交付（2026-11-11，embed parity 待 site2 落地后单独立批；未发版） | `apps/mind/`（meta/convert/themes/decorations/outline/opml/xmindImport/templates/themePanel）、`apps/renderers/mindEditor.ts`（+`mindPanel.ts`/`mindSearch.ts`/`mindOutline.ts`）、`apps/renderers/flow-editor.ts`（方言分派）；方案正本 `docs/design/mind-editor-redesign/plan.md` |
 
 ### 3.2 内置应用（14，注册序=默认优先级）
 
@@ -57,7 +58,7 @@
 | audio-player | mp3/wav/ogg/flac/m4a | 预览 | 同上 |
 | pdf-viewer | pdf | 预览 | pdf.js（直链 Range） |
 | markdown-renderer | md/markdown | 预览 | 5MiB 限额 |
-| flow-editor | mmd/mermaid | 编辑 | **四方言**：graph TD 流程图 + mindmap 脑图（位置持久化 meta 通道）+ sequenceDiagram 时序图 + architecture-beta 架构图（X6 可视化编辑；其余 mermaid 语法降级只读） |
+| flow-editor | mmd/mermaid | 编辑 | graph TD 流程图 + sequenceDiagram 时序图 + architecture-beta 架构图三方言 X6 可视化编辑（其余 mermaid 语法降级只读）；**mindmap 脑图已移交独立脑图编辑面**（同应用渲染入口按方言分派，见 FR-19） |
 | mermaid-viewer | mmd/mermaid | 预览 | 全 mermaid 语法只读 |
 | csv-table | csv/tsv | 预览 | papaparse 表格化；20MiB 限额（超线拒绝+下载提示） |
 | html-viewer | html/htm | 预览 | 净化沙箱（srcdoc 剥脚本面）+ 跳转代理确认新 tab；20MiB |

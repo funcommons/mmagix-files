@@ -146,6 +146,36 @@ export const flowEditorRenderer: AppDefinition['renderer'] = async (el, file, ct
 
   const text = await blob.text()
 
+  // ── mindmap 方言分派（MC1 契约，正本：.claude/mind-loop-state.md「MC1 契约（分派接线，锁定）」节）──
+  // 任何 DOM 构建（style/root/canvas）之前嗅探（委派瞬间 el 零子节点=零残留零浪费；X6 canvas 创建
+  // 在守卫之前，守卫后分派会留下空 canvas）：mindmap 且 parse 后 nodes>0 → 动态 import('./mindEditor')
+  // 委派 MindEditor 面（引擎不进 X6 面测试链 + 引擎 chunk 分割），返回其 AppInstance（dispose/
+  // beforeDispose 透传）。守卫前置复用同一 parseMindmap——空 mindmap（nodes=0）或解析失败不分派，
+  // 落到下方既有 mermaid 只读降级 / buildFailTip 分支（flowchart/sequence/architecture 行为零变化）。
+  // onDirty/onReadonly 显式置 undefined（7 键全集，键必须在场禁 spread 缺键）：既有 dirty 红点
+  // （markDirty/renderBadge）与 4305 只读闩锁（setReadonly）是 DOM+工具栏装配后的实例内闭包，
+  // 分派点尚不存在；两条链路由 MindEditor 面内自理（自 flow-editor 保存链逐条镜像，行为同口径）。
+  if (detectDialect(text) === 'mindmap') {
+    let mindmapOk = false
+    try {
+      mindmapOk = parseMindmap(text).nodes.size > 0
+    } catch {
+      // 解析失败不在此处置：不分派，落下方守卫 try/catch → buildFailTip（与未接线前一致）
+    }
+    if (mindmapOk) {
+      const { createMindEditorSurface } = await import('./mindEditor')
+      return createMindEditorSurface({
+        el,
+        text,
+        ctx,
+        file,
+        t: ctx.t,
+        onDirty: undefined,
+        onReadonly: undefined,
+      })
+    }
+  }
+
   // absolute inset 填充宿主（防塌陷，code-editor 同口径），dispose 还原 el 内联样式
   const prevElPos = el.style.position
   el.style.position = 'relative'

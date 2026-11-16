@@ -11,8 +11,9 @@ const i18n = createI18n({
   messages: {
     'zh-CN': zhCN,
     'en-US': enUS,
-    // 别名: vue-i18n 9.x fallback 时会把 'en-US' 拆成 ['en-US', 'en'] 依次尝试,
-    // 注册 'en' 避免缺失警告.
+    // 别名: vue-i18n 9.x fallback 时会把 'zh-CN'/'en-US' 拆成 ['zh-CN', 'zh'] /
+    // ['en-US', 'en'] 依次尝试, 注册 'zh'/'en' 避免缺失警告.
+    'zh': zhCN,
     'en': enUS,
   },
   // 导演台的非通用 pose 标签走 t(key, rawLabel) 兜底, raw label 从 pose.json 里拿.

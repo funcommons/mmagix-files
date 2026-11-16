@@ -153,7 +153,8 @@ export function nodeToken(node: Pick<FlowNode, 'id' | 'label' | 'shape' | 'bare'
 
 // ───────────────────────── 解析 ─────────────────────────
 
-const META_RE = /^\s*%%\s*meta:\s*(\S+)(?:\s+(.*))?$/
+/** meta 行匹配正字面（MC0-V P2-3 裁决：单一正本 export——apps/mind/meta.ts import 同一字面，禁双处维护） */
+export const META_RE = /^\s*%%\s*meta:\s*(\S+)(?:\s+(.*))?$/
 const HEADER_RE = /^\s*(graph|flowchart)\s+(TD|TB|LR)\s*$/
 const EDGE_ARROW = '-->'
 

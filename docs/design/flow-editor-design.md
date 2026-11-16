@@ -5,6 +5,7 @@
 > 2. **口径演进**：布局缓存旁路键 → `%% meta: _layout` 伪节点（随源持久化）；graph LR 可进编辑器（布局强制 TD，保存保留 LR 头行）；subgraph 仅行透传不建组；meta 重复静默覆盖（不告警）
 > 3. **X6 v2 适配（代码已踩平，本文按 v1 撰写）**：DEF-1 zoom 增量陷阱（读-算-写绝对值）、DEF-2 mousewheel 配置失效（ctrl+滚轮手工监听）、DEF-3 无 toSVG（画布 SVG 序列化导出）、DEF-6 removeCell 级联删边（applyNodeCell 补回相邻边）——见 `flow-editor.ts` 文件头
 > 4. **【2026-10-31 更新】四方言终态**：§六脑图「不进本期」已过时——mindmap/sequenceDiagram/architecture-beta 均已随 v1.2.0 进 X6 可视化编辑（实现口径与终态见 [diagram-roadmap.md](diagram-roadmap.md) 头注与 `files/flow-model.ts` parseMindmap/parseSequence/parseArchitecture）；候选库 simple-mind-map/mind-elixir 均未引入（统一用 X6）；MVP-②/验收所提 `apps-demo/diagrams/*.mmd` seed 未落仓（E2E 用内联 fixture，`e2e/fixtures/s3-mock.ts`）
+> 5. **【2026-11-10 更新】方言拆分——mindmap 移出 X6 面**：脑图方言已移交独立脑图编辑面（`renderers/mindEditor.ts`，simple-mind-map 引擎；flow-editor 渲染入口 `detectDialect(text)==='mindmap'` → 动态 import 分派，registry/打开方式菜单/preview 链零改动）——上文注记 4 与 §六「脑图（附带口径）」行中「X6 脑图编辑/统一 X6/不引入 simple-mind-map」口径随之失效，flow-editor 保留 flowchart/sequence/architecture 三方言；**本文 §三 `%% meta:` 注释通道契约正本地位不变**（脑图超集数据沿用同一契约，扩展形态见 [mind-editor-redesign/plan.md](mind-editor-redesign/plan.md) §四）
 
 
 ## 〇、头表

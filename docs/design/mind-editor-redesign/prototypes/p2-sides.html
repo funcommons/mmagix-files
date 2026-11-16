@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>p2-sides · 思维导图布局·雾蓝主题（xm-blue）</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  header { position: fixed; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: #fff; border-bottom: 1px solid #e5e7eb; z-index: 10; }
+  header .tag { font-size: 12px; font-weight: 600; color: #fff; background: #2563eb; border-radius: 4px; padding: 2px 8px; }
+  header .name { font-size: 14px; font-weight: 600; color: #111827; }
+  header .hint { font-size: 12px; color: #6b7280; margin-left: auto; }
+  #canvas { position: fixed; top: 44px; left: 0; right: 0; bottom: 0; }
+  #canvas p { margin: 0; }
+</style>
+</head>
+<body>
+<header><span class="tag">p2-sides</span><span class="name">思维导图布局·雾蓝主题（xm-blue）</span><span class="hint">左右分布：多主干不挤一侧</span></header>
+<div id="canvas"></div>
+<script src="./proto-common.js"></script>
+<script>mountMindMap('mindMap', 'xm-blue')</script>
+</body>
+</html>

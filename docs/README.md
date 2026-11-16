@@ -7,7 +7,7 @@
 
 | 文档 | 内容 |
 |---|---|
-| [PRD](product/PRD.md) | 需求规格：产品定位、用户/场景、功能需求清单 FR-1~18（含实现状态与代码锚）、非功能需求、边界（基线 v1.4.0） |
+| [PRD](product/PRD.md) | 需求规格：产品定位、用户/场景、功能需求清单 FR-1~19（含实现状态与代码锚）、非功能需求、边界（基线 v1.4.0） |
 | [竞品对标 v1.3.0](product/competitive-analysis-v1.3.0.md) | TOP5 Star 同类项目功能大表 + 差异化结论 + 下一波升级建议（2026-10-31 调研） |
 
 ## 设计
@@ -23,8 +23,9 @@
 | [插件样例](design/plugin-sample.md) | 可运行样例（examples/plugins/*.js，有单测护航） |
 | [样式隔离](design/style-isolation.md) | 应用打开防样式污染机制（含 v1.3 现状盘点注记） |
 | [流程图编辑器设计](design/flow-editor-design.md) | mermaid graph TD 子集 + X6（含 v2 适配 DEF 修复记录；四方言终态见注记 4） |
-| [图示类路线图](design/diagram-roadmap.md) | 脑图/时序图/架构图——**四方言已全部落地 flow-editor**（头注=终态；独立应用规划节保留为选型档案） |
+| [图示类路线图](design/diagram-roadmap.md) | 脑图/时序图/架构图——**三方言（流程图/时序图/架构图）X6 可编辑，mindmap 脑图已移交独立脑图编辑面**（2026-11-10 头注=现状；独立应用规划节保留为选型档案） |
 | [WebDAV 协议支持方案](design/webdav-support-design.md) | 多数据源方案正本：协议边界判定（FTP/SMB 为何出局）、W1–W6 裁决、CORS 闸、上传降级矩阵、门控矩阵（**已随 v1.4.0 发布，2026-11-03**） |
+| [脑图重写方案](design/mind-editor-redesign/plan.md) | 对标 XMind 级脑图软件的重写方案正本：mermaid 主存不动+meta 通道扩展、simple-mind-map 引擎选型、身份键口径、方言拆分（渲染器内分派）（**P0/P1/P2 三期全部落地收口（P0/P1=2026-11-10、P2=2026-11-11）；embed parity 请裁——建议 site2 落地后单独立批**；实现账正本 `.claude/mind-loop-state.md`） |
 
 ## 插件设计（frontend/plugins/*）
 

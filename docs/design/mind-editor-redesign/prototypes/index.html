@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>脑图重写原型总览 · mind-editor-redesign</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; background: #f3f4f6; font-family: system-ui, sans-serif; color: #111827; }
+  header { padding: 32px 40px 8px; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  header p { margin: 0; color: #6b7280; font-size: 14px; line-height: 1.7; }
+  header code { background: #e5e7eb; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 24px; padding: 24px 40px 48px; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+  .card img { display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; border-bottom: 1px solid #e5e7eb; }
+  .card .body { padding: 14px 18px 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .tag { font-size: 11px; font-weight: 600; color: #fff; background: #2563eb; border-radius: 4px; padding: 2px 7px; }
+  .card p { margin: 0; font-size: 13px; color: #6b7280; line-height: 1.6; }
+  .card a { color: #2563eb; text-decoration: none; font-size: 13px; }
+  .card a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>脑图重写原型总览</h1>
+  <p>真引擎渲染（simple-mind-map@0.14.0-fix.3 · MIT），同一棵示例树 × 六个视图。定案与契约见 <code>../plan.md</code>；点卡片进 <code>*.html</code> 可交互（双击改文案 / 拖画布 / 滚轮缩放，CDN 需联网）。</p>
+</header>
+<div class="grid">
+  <div class="card">
+    <img src="png/p1-logic.png" alt="逻辑结构">
+    <div class="body">
+      <h2><span class="tag">p1</span>逻辑结构 · 青绿主题</h2>
+      <p>XMind 主视图同款：中央主题 + 右展开 + 有机曲线枝 + 无框叶子。<a href="p1-logic.html">打开原型</a></p>
+    </div>
+  </div>
+  <div class="card">
+    <img src="png/p2-sides.png" alt="思维导图布局">
+    <div class="body">
+      <h2><span class="tag">p2</span>思维导图布局 · 雾蓝主题</h2>
+      <p>左右分布：多主干不挤一侧，重脑暴场景常用。<a href="p2-sides.html">打开原型</a></p>
+    </div>
+  </div>
+  <div class="card">
+    <img src="png/p3-org.png" alt="组织结构图">
+    <div class="body">
+      <h2><span class="tag">p3</span>组织结构图 · 石墨主题</h2>
+      <p>自上而下：汇报线 / 团队树 / 分解结构常用。<a href="p3-org.html">打开原型</a></p>
+    </div>
+  </div>
+  <div class="card">
+    <img src="png/p4-fishbone.png" alt="鱼骨图">
+    <div class="body">
+      <h2><span class="tag">p4</span>鱼骨图 · 青绿主题</h2>
+      <p>因果归因：问题 → 原因链（同一棵树换布局即得）。<a href="p4-fishbone.html">打开原型</a></p>
+    </div>
+  </div>
+  <div class="card">
+    <img src="png/p5-timeline.png" alt="时间轴">
+    <div class="body">
+      <h2><span class="tag">p5</span>时间轴 · 琥珀主题</h2>
+      <p>里程碑横向铺开：计划 / 排期 / 路线图常用。<a href="p5-timeline.html">打开原型</a></p>
+    </div>
+  </div>
+  <div class="card">
+    <img src="png/p0-live.png" alt="交互基线">
+    <div class="body">
+      <h2><span class="tag">p0</span>交互基线 · 缺省主题</h2>
+      <p>引擎装好即得：双击改文案、拖画布、滚轮缩放。<a href="p0-live.html">打开原型</a></p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

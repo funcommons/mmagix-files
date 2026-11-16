@@ -2,6 +2,42 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+主题：**脑图编辑器重写（mindmap 方言）——对标 XMind 的独立编辑面**（方案正本
+[mind-editor-redesign/plan.md](docs/design/mind-editor-redesign/plan.md)）。mermaid 主存不动，
+`%% meta:` 注释通道扩展承载视图态与超集数据；flow-editor 渲染入口按方言内部分派，
+registry/「打开方式」/mermaid-viewer 零改动，协议无变更。
+
+### 新增
+
+- **脑图编辑器（mindmap 方言）**：simple-mind-map@0.14.x（MIT）引擎替换脑图编辑面
+  （flowchart/sequence/architecture 三方言仍走 X6；`detectDialect==='mindmap'` 渲染器内
+  动态分派，引擎 chunk 分割）
+  - **引擎与外观**：四套 XMind 风主题（xm-green/xm-blue/xm-slate/xm-amber，
+    `defineTheme` 自注册，缺省青绿）；布局缺省逻辑结构图；布局/主题经 `_mindview`
+    meta 行持久化
+  - **多布局与主题切换**：工具栏「布局/主题」下拉——七种布局（逻辑结构/思维导图/组织结构/
+    鱼骨图/时间轴/垂直时间轴/目录组织）×四主题（青绿/雾蓝/石墨/琥珀），切换即生效并标脏，
+    经 `_mindview` meta 行随文件持久化（换设备重开不丢）
+  - **键位与交互（对标 XMind）**：Enter 加兄弟、Shift+Tab 加父级、Tab/Insert 加子级、双击/F2 改文案、
+    Del/Backspace 删节点、拖拽重挂（子/前/后挂载指示）、节点按钮或 `/` 键折叠展开、
+    Ctrl/⌘+Z·Y 撤销重做、Ctrl/⌘+A 全选+Ctrl/⌘ 点选加选+框选多选、Ctrl/⌘+C/V 子树复制粘贴、
+    滚轮/拖画布缩放平移
+  - **属性面板/大纲/搜索**：节点面板五字段（备注/图片 URL〔仅 http(s) 与相对路径〕/链接/标签/概要）；
+    画布/大纲视图切换（行点击定位节点）；Ctrl+F 搜索浮条（Enter 定位/同词再按=下一个/
+    Shift+Enter 上一个/计数）
+  - **关联线与外框**：AssociativeLine/OuterFrame 插件启用，`_assoc` 伪节点与每节点装饰字段
+    meta 持久化（载入注入/保存反提往返）
+  - **脏门控双闸**：初始渲染基线闩+内容闸（保存同源序列化比较）——未编辑保存字节级零 diff，
+    禁合成缺省 meta 行；meta 持久化走 raw 优先纪律（未编辑行零 diff，AI 读树不受注释噪声影响）
+  - **导出与导入**：导出 PNG/SVG/JSON/OPML 四格式（OPML 由大纲树生成，下载文件名=当前
+    文件名去扩展名）；`.xmind` 导入（zip 内 content.json，解析后替换当前内容走脏保存链；
+    解析失败仅告警零写入，只读/保存中/导入中多闸防竞态）
+  - **模板库与主题样式面板**：内置三套模板（项目管理/头脑风暴/产品发布，选中即载入标脏）；
+    主题样式面板自定义节点填充色/线条颜色/线型（实线/虚线），随 `_mindview` meta `custom`
+    字段持久化（重开回放；自定义主题名随编辑器销毁回收，防跨文件串味）
+
 ## [1.4.0] — 2026-11-03
 
 主题：**多数据源（S3｜WebDAV）——WebDAV 协议支持全链落地 + embed demo 官网化**（PRD FR-18，
