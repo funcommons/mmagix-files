@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S04 · 演示引导四步 — MMagiX Files 站点 v2 原型</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper-deep); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    display: grid; place-items: center;
+    padding: 32px 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .stage {
+    width: 1440px; height: 900px;
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .labelbar {
+    height: 28px; flex: none;
+    display: flex; align-items: center; gap: var(--space-5);
+    padding: 0 var(--space-4);
+    font-size: 12px; color: var(--ink-faint);
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap; overflow: hidden;
+  }
+  .labelbar b { color: var(--ink-soft); font-weight: 600; }
+
+  a { color: var(--signal); text-decoration: none; }
+  a:hover { color: var(--signal-deep); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+    height: 38px; padding: 0 var(--space-5);
+    border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 500; font-family: inherit;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-solid { background: var(--signal); color: var(--paper-raised); }
+  .btn-solid:hover { background: var(--signal-deep); }
+  .icon { width: 16px; height: 16px; flex: none; }
+
+  /* 页头 + 四段进度条 */
+  .head { flex: none; padding: 30px 56px 20px; }
+  .head h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.3px; }
+  .progress { margin-top: var(--space-4); display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+  .seg-track { height: 4px; border-radius: 999px; background: var(--hairline); }
+  .seg-track.done { background: var(--signal); }
+  .seg-label { margin-top: 6px; font-size: 12px; color: var(--ink-faint); }
+  .seg-label.cur { color: var(--ink); font-weight: 600; }
+
+  /* 主体 4:8 */
+  .body {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 4fr 8fr; gap: var(--space-6);
+    padding: var(--space-4) 56px 32px;
+  }
+
+  /* 左：竖步骤条 */
+  .rail { padding-top: var(--space-2); }
+  .rstep {
+    position: relative;
+    display: flex; gap: var(--space-3);
+    padding: 14px 14px 14px 20px;
+    border-left: 3px solid transparent;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .rstep.cur { border-left-color: var(--signal); background: var(--signal-wash); }
+  .rnum {
+    width: 26px; height: 26px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--hairline); background: var(--paper-raised);
+    font-size: 13px; color: var(--ink-soft);
+  }
+  .rstep.cur .rnum { background: var(--signal); border-color: var(--signal); color: var(--paper-raised); font-weight: 600; }
+  .rname { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+  .rcap { margin-top: 2px; font-size: 12px; color: var(--ink-soft); }
+  .skip {
+    margin-top: var(--space-5); padding: var(--space-4) 20px;
+    border-top: 1px solid var(--hairline);
+    font-size: 13px; color: var(--ink-soft);
+  }
+
+  /* 右：当前步详情面板 */
+  .panel {
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-5);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .panel-head h2 { font-size: 18px; font-weight: 700; }
+  .panel-head .cap { margin-top: 2px; font-size: 13px; color: var(--ink-soft); }
+
+  /* 步骤 1：存储类型二选一卡 */
+  .types { margin-top: var(--space-4); display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+  .type-card {
+    position: relative;
+    padding: var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    background: var(--paper-raised);
+    cursor: pointer;
+  }
+  .type-card:hover { border-color: var(--ink-faint); }
+  .type-card.sel { background: var(--signal-wash); border-color: var(--signal); }
+  .type-card .sel-dot {
+    position: absolute; top: 12px; right: 12px;
+    width: 18px; height: 18px; border-radius: 999px;
+    display: grid; place-items: center;
+    background: var(--signal); color: var(--paper-raised);
+  }
+  .type-head { display: flex; align-items: center; gap: var(--space-2); }
+  .type-head svg { width: 22px; height: 22px; color: var(--ink-soft); flex: none; }
+  .type-head h3 { font-size: 15.5px; font-weight: 700; }
+  .type-card .q { margin-top: var(--space-1); font-size: 12px; color: var(--ink-faint); }
+  .type-card .eg { margin-top: var(--space-2); font-size: 13px; color: var(--ink-soft); line-height: 1.6; }
+  .type-card .code { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px dashed var(--hairline); font-size: 11px; color: var(--ink-faint); }
+
+  /* 步骤 2–4：收起行 */
+  .next-steps { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--hairline); }
+  .next-steps details { border-bottom: 1px dashed var(--hairline); }
+  .next-steps details:last-of-type { border-bottom: 0; }
+  .next-steps summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: 10px 4px; font-size: 13.5px; color: var(--ink); font-weight: 500;
+  }
+  .next-steps summary::-webkit-details-marker { display: none; }
+  .next-steps summary .chev { width: 14px; height: 14px; color: var(--ink-faint); }
+  .next-steps details[open] summary .chev { transform: rotate(90deg); }
+  .ns-body { padding: 4px 4px 14px 20px; font-size: 13px; color: var(--ink-soft); line-height: 1.7; }
+
+  /* 最小必需项表单（步骤 2 展开示意） */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3) var(--space-4); }
+  .field { min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .field input {
+    width: 100%; height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    background: var(--paper-raised);
+    font-size: 13px; font-family: inherit; color: var(--ink);
+  }
+  .field input:hover { border-color: var(--ink-faint); }
+  .field input:focus { outline: none; }
+  .field .help { margin-top: 3px; font-size: 11.5px; color: var(--ink-faint); }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .adv-sum { margin-top: var(--space-2); font-size: 12px; color: var(--ink-faint); line-height: 1.6; }
+  details.adv summary {
+    list-style: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px; margin-top: var(--space-2);
+    border: 1px solid var(--hairline); border-radius: 999px;
+    font-size: 12.5px; color: var(--ink-soft); background: var(--paper-raised);
+  }
+  details.adv summary::-webkit-details-marker { display: none; }
+  details.adv summary:hover { border-color: var(--ink-faint); color: var(--ink); }
+  details.adv summary svg { width: 13px; height: 13px; }
+  .adv-list { margin-top: var(--space-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm); }
+  .adv-row { display: grid; grid-template-columns: 200px 1fr; gap: var(--space-3); padding: 7px 12px; font-size: 12.5px; }
+  .adv-row + .adv-row { border-top: 1px dashed var(--hairline); }
+  .adv-row .k { color: var(--ink); font-weight: 500; }
+  .adv-row .k .mono { font-weight: 400; color: var(--ink-faint); font-size: 11px; }
+  .adv-row .v { color: var(--ink-soft); }
+
+  /* 面板脚：唯一主按钮 */
+  .panel-foot {
+    margin-top: var(--space-4); padding-top: var(--space-3);
+    border-top: 1px solid var(--hairline);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-foot .note { font-size: 12px; color: var(--ink-faint); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .btn, .type-card, .rstep, a, details.adv summary, .field input { transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+    .next-steps summary .chev { transition: transform .15s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="labelbar">
+    <b>S04</b><span>演示引导四步</span><span>路由 /guide</span><span>Phase A</span>
+    <span>借鉴：Cloudflare R2 凭证三件套同屏 +「仅显示一次」· Alist「Mount Path=对外显示的名称」</span>
+  </div>
+
+  <!-- 页头：标题 + 四段进度条（当前=第 1 步） -->
+  <header class="head">
+    <h1>五分钟连上你自己的桶</h1>
+    <div class="progress" role="img" aria-label="四步进度：当前第 1 步">
+      <div>
+        <div class="seg-track done"></div>
+        <div class="seg-label cur">1 选存储类型</div>
+      </div>
+      <div>
+        <div class="seg-track"></div>
+        <div class="seg-label">2 填最小必需项</div>
+      </div>
+      <div>
+        <div class="seg-track"></div>
+        <div class="seg-label">3 连接</div>
+      </div>
+      <div>
+        <div class="seg-track"></div>
+        <div class="seg-label">4 进入文件浏览</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- 左：竖步骤条 -->
+    <aside class="rail">
+      <div class="rstep cur">
+        <span class="rnum">1</span>
+        <div>
+          <div class="rname">选存储类型</div>
+          <div class="rcap">你要连到哪里——S3 或 WebDAV</div>
+        </div>
+      </div>
+      <div class="rstep">
+        <span class="rnum">2</span>
+        <div>
+          <div class="rname">填最小必需项</div>
+          <div class="rcap">3 项就能连，其余全收进高级选项</div>
+        </div>
+      </div>
+      <div class="rstep">
+        <span class="rnum">3</span>
+        <div>
+          <div class="rname">连接</div>
+          <div class="rcap">点一下测试，失败了有分诊</div>
+        </div>
+      </div>
+      <div class="rstep">
+        <span class="rnum">4</span>
+        <div>
+          <div class="rname">进入文件浏览</div>
+          <div class="rcap">直接落在文件管理器</div>
+        </div>
+      </div>
+      <p class="skip">已有现成服务器？<a href="s05-connect-diagnostics.html">跳过引导直接填 →</a></p>
+    </aside>
+
+    <!-- 右：当前步详情面板 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>第 1 步 · 选存储类型</h2>
+        <p class="cap">你要连到哪里？二选一——选完只出现该类型需要的字段。</p>
+      </div>
+
+      <!-- 二选一卡：S3 选中 -->
+      <div class="types">
+        <div class="type-card sel">
+          <span class="sel-dot">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+          </span>
+          <div class="type-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14l-1.5 12a2 2 0 0 1-2 1.8h-7A2 2 0 0 1 6.5 19L5 7z"/><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3"/></svg>
+            <h3>S3 对象存储</h3>
+          </div>
+          <p class="q">连到哪里——</p>
+          <p class="eg">AWS / 阿里云 OSS / MinIO / Cloudflare R2</p>
+          <p class="code mono">对照：backend.type = "s3"</p>
+        </div>
+        <div class="type-card">
+          <div class="type-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+            <h3>WebDAV 服务器</h3>
+          </div>
+          <p class="q">连到哪里——</p>
+          <p class="eg">Synology NAS / 坚果云 / alist 网关</p>
+          <p class="code mono">对照：backend.type = "webdav"</p>
+        </div>
+      </div>
+
+      <!-- 步骤 2–4 收起行（步骤 2 以展开态画出表单） -->
+      <div class="next-steps">
+        <details open>
+          <summary>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            第 2 步 · 填最小必需项——S3 只需 3 项（展开示意）
+          </summary>
+          <div class="ns-body">
+            <div class="form-grid">
+              <div class="field wide">
+                <label>服务器地址</label>
+                <input type="text" value="http://localhost:9000">
+                <p class="help">对象存储的访问入口，含端口（对照 endpoint）</p>
+              </div>
+              <div class="field">
+                <label>存储空间</label>
+                <input type="text" value="mmagic-demo">
+                <p class="help">桶的名字（对照 bucket）</p>
+              </div>
+              <div class="field">
+                <label>访问密钥</label>
+                <div class="keys">
+                  <input type="text" value="rag_flow" aria-label="访问密钥 ID">
+                  <input type="password" placeholder="仅显示一次" aria-label="访问密钥">
+                </div>
+                <p class="help">成对申请，关掉这页就再也看不到（对照 accessKeyId / accessKeySecret）</p>
+              </div>
+            </div>
+            <details class="adv">
+              <summary>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h10M18 8h2M14 6v4M4 16h4M10 14v4M14 16h6"/></svg>
+                高级选项（11 项，可不管）
+              </summary>
+              <div class="adv-list">
+                <div class="adv-row"><span class="k">区域标识 <span class="mono">region</span></span><span class="v">按厂商文档填；多数 S3 兼容实现 us-east-1 或 auto 可用</span></div>
+                <div class="adv-row"><span class="k">文件夹（可选，默认根目录） <span class="mono">prefix</span></span><span class="v">只看这个前缀下的内容</span></div>
+                <div class="adv-row"><span class="k">会话密钥（可留空） <span class="mono">sessionToken</span></span><span class="v">临时凭证；本地密钥模式不需要</span></div>
+                <div class="adv-row"><span class="k">挂载路径 <span class="mono">mountPath</span></span><span class="v">=你将看到的名字；默认取存储空间名</span></div>
+                <div class="adv-row"><span class="k">大文件自动分段、断点续传 <span class="mono">chunkedWrite</span></span><span class="v">默认开</span></div>
+                <div class="adv-row"><span class="k">缓存有效期 <span class="mono">ttl</span></span><span class="v">列表多久自动刷新；默认 3600 秒</span></div>
+                <div class="adv-row"><span class="k">界面外观 <span class="mono">appearance</span></span><span class="v">浅色 / 深色 / 跟随系统</span></div>
+                <div class="adv-row"><span class="k">界面语言 <span class="mono">language</span></span><span class="v">中文 / English</span></div>
+                <div class="adv-row"><span class="k">目录树形态 <span class="mono">treeMode</span></span><span class="v">侧边栏 / 抽屉</span></div>
+                <div class="adv-row"><span class="k">Markdown 打开方式 <span class="mono">mdMode</span></span><span class="v">自动 / 源码 / 双栏 / 预览</span></div>
+                <div class="adv-row"><span class="k">插件 <span class="mono">plugins</span></span><span class="v">6 个官方插件按需启用</span></div>
+              </div>
+              <p class="adv-sum">其余 11 项全部收进这里——必填的只有上面 3 项。</p>
+            </details>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            第 3 步 · 连接
+          </summary>
+          <div class="ns-body">点一下「测试连接」。连不上不是一句红字——会给出三类原因的分诊与修复步骤（<a href="s05-connect-diagnostics.html">见下一屏诊断</a>）。</div>
+        </details>
+
+        <details>
+          <summary>
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            第 4 步 · 进入文件浏览
+          </summary>
+          <div class="ns-body">连接成功直接落在文件管理器：网格浏览、拖拽上传、右侧详情（<a href="s06-browse-grid.html">见文件浏览屏</a>）。</div>
+        </details>
+      </div>
+
+      <!-- 面板脚：唯一主按钮 -->
+      <div class="panel-foot">
+        <span class="note">下一步会只出现 S3 需要的字段；换选 WebDAV 则改问用户名和密码。</span>
+        <button type="button" class="btn btn-solid">下一步</button>
+      </div>
+    </section>
+
+  </div>
+
+</div>
+</body>
+</html>

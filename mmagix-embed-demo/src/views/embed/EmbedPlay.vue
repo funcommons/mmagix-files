@@ -6,7 +6,7 @@ import type { UploadUserFile } from "element-plus";
 import { FcButton, FcSegmented, FcSelect, FcSection } from "@/components/sdk";
 import LogPanel from "@/components/LogPanel.vue";
 import { OEM_CONFIG } from "@/config/oem";
-import { buildConfigUrl, useMmagixFilesClient } from "@/composables/useMmagixFilesClient";
+import { buildConfigUrl, useMmagixFilesClient, type MmxWorkspaceConfig } from "@/composables/useMmagixFilesClient";
 import {
   buildWorkspaceConfig,
   maskConfigForPreview,
@@ -27,6 +27,40 @@ const {
   destroy,
   on,
 } = useMmagixFilesClient();
+
+// ── 站点引导交接（读侧；契约正本：src/views/site2/Guide2.vue 文件头「步骤 4 交接契约」）──
+// sessionStorage['mmagic.site2.handoff'] = JSON.stringify(MmxWorkspaceConfig)（完整 #config，含凭证）。
+// 一次性手递手：读即 removeItem（无论挂载成败均不重放）；无键/坏 JSON/形状不符=常态，静默跳过零提示。
+const HANDOFF_KEY = "mmagic.site2.handoff";
+/** 本会话来自 /guide 步骤 4 交接：挂载后顶条追加「返回站点引导」入口（仅展示位，不参与挂载协议） */
+const fromGuide = ref(false);
+
+/** 读并消费交接键：合法 workspace 配置或 null（无键/坏 JSON/形状不符一律 null，键必被清除） */
+function readHandoffConfig(): MmxWorkspaceConfig | null {
+  try {
+    const raw = sessionStorage.getItem(HANDOFF_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(HANDOFF_KEY); // 取用即清（读方契约：防残留重放）
+    const cfg = JSON.parse(raw) as MmxWorkspaceConfig;
+    return cfg && cfg.mode === "workspace" && cfg.backend ? cfg : null;
+  } catch {
+    return null;
+  }
+}
+
+// 现有时机最前注册：从 /guide 第 4 步跳转过来时自动挂载（表单不回填，保持用户上次表单状态）；
+// 状态条沿用既有 ready/mounting/error 展示，挂载成败的收尾订阅与手动挂载共用 afterMounted。
+onMounted(async () => {
+  const cfg = readHandoffConfig();
+  if (!cfg) return;
+  fromGuide.value = true;
+  try {
+    await mount(cfg, OEM_CONFIG.filesBase);
+    afterMounted();
+  } catch {
+    /* 日志区已记录；error 状态由 client 状态机置位 */
+  }
+});
 
 // ── 浏览器内全屏（顶级文档）：iframe 发 previewFullscreen 事件，宿主把舞台容器铺满本页视口 ──
 const stageFs = ref(false);
@@ -117,6 +151,20 @@ const configPreview = computed(() => maskConfigForPreview(buildWorkspaceConfig(f
 
 const configUrlPreview = computed(() => buildConfigUrl(OEM_CONFIG.filesBase, buildWorkspaceConfig(form)));
 
+/** mount 成功后的公共收尾（手动挂载与引导交接自动挂载共用）：接 iframe 全屏事件 + 到期自毁订阅 */
+function afterMounted() {
+  // mount 后 host 实例就绪：接 iframe 的全屏事件（重复挂载先解旧绑）
+  offPreviewFs?.();
+  offPreviewFs = on("previewFullscreen", (payload) => {
+    stageFs.value = Boolean((payload as { on?: boolean })?.on);
+  });
+  // 会话到期（前端自毁线到点）：提示并自动整页刷新重建会话（此前无 handler=僵尸 UI 的直接原因）
+  on("expired", () => {
+    ElMessage.warning(t("demo.embed.msg.expired"));
+    setTimeout(() => window.location.reload(), 1500);
+  });
+}
+
 async function onMount() {
   const err = validateForm(form);
   if (err) {
@@ -125,16 +173,7 @@ async function onMount() {
   }
   try {
     await mount(buildWorkspaceConfig(form), OEM_CONFIG.filesBase);
-    // mount 后 host 实例就绪：接 iframe 的全屏事件（重复挂载先解旧绑）
-    offPreviewFs?.();
-    offPreviewFs = on("previewFullscreen", (payload) => {
-      stageFs.value = Boolean((payload as { on?: boolean })?.on);
-    });
-    // 会话到期（前端自毁线到点）：提示并自动整页刷新重建会话（此前无 handler=僵尸 UI 的直接原因）
-    on("expired", () => {
-      ElMessage.warning(t("demo.embed.msg.expired"));
-      setTimeout(() => window.location.reload(), 1500);
-    });
+    afterMounted();
   } catch {
     /* 日志区已记录 */
   }
@@ -497,6 +536,10 @@ const mdModeOptions = computed(() => [
         <div class="stage-head">
           <span class="status-dot" :data-status="status"></span>
           <span>{{ statusLabel }}</span>
+          <template v-if="fromGuide && status !== 'idle'">
+            <span class="handoff-note">{{ t("demo.embed.handoff.banner") }}</span>
+            <RouterLink class="handoff-back" to="/guide">{{ t("demo.embed.handoff.backToGuide") }}</RouterLink>
+          </template>
           <span class="src">
             iframe origin: <code>{{ iframeOrigin }}</code>
             {{ t("demo.embed.autoOrigin") }}
@@ -679,6 +722,19 @@ const mdModeOptions = computed(() => [
     border-bottom: 1px solid var(--app-separator);
     font-size: 13px;
     color: var(--app-text-secondary);
+
+    /* 站点引导交接（fromGuide）：会话来源提示 + 返回 /guide 入口（只读展示位，不碰挂载协议） */
+    .handoff-note {
+      font-size: 12px;
+      color: var(--app-text-tertiary);
+    }
+    .handoff-back {
+      font-size: 12px;
+      color: var(--app-text-secondary);
+      &:hover {
+        color: var(--app-text-primary);
+      }
+    }
 
     .src {
       margin-left: auto;

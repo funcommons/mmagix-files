@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S07 · 预览双栏 preview-split</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--paper-deep); padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--ink); font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+svg.ic { width: 24px; height: 24px; flex: 0 0 auto; }
+svg.ic-s { width: 18px; height: 18px; flex: 0 0 auto; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+.frame {
+  width: 1440px; height: 900px; flex: 0 0 auto;
+  background: var(--paper); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.tagbar {
+  flex: 0 0 28px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline);
+  color: var(--ink-faint); font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.tagbar .sep { color: var(--hairline); }
+.tagbar .note { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+
+.app { flex: 1; display: flex; min-height: 0; }
+
+/* 左窄列表 */
+.list { flex: 0 0 272px; border-right: 1px solid var(--hairline); display: flex; flex-direction: column; }
+.list-head {
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  display: flex; align-items: baseline; gap: var(--space-2);
+}
+.list-head strong { font-size: 13px; }
+.list-head span { font-size: 12px; color: var(--ink-faint); margin-left: auto; }
+.frow {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3); margin: 1px var(--space-2);
+  border-radius: var(--radius-sm); text-align: left; width: calc(100% - 16px);
+  position: relative;
+}
+.frow .fico { color: var(--ink-soft); }
+.frow .fbody { min-width: 0; flex: 1; }
+.frow .fname { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.frow .fmeta { font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+.frow:hover { background: var(--paper-deep); }
+.frow.sel { background: var(--signal-wash); }
+.frow.sel::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 2px; background: var(--signal);
+}
+.frow.sel .fico { color: var(--signal); }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--ink-soft);
+  border: 1px solid var(--hairline); border-radius: 999px; padding: 0 7px; height: 20px;
+  white-space: nowrap;
+}
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--current, var(--ink-faint)); }
+/* 预览主区 */
+.preview { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--paper-raised); }
+.pv-bar {
+  flex: 0 0 56px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline);
+}
+.pv-bar .fico { color: var(--signal); }
+.pv-bar strong { font-size: 14px; }
+.pv-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.vline { width: 1px; height: 22px; background: var(--hairline); margin: 0 2px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 var(--space-3); border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.btn-outline { border: 1px solid var(--hairline); background: var(--paper-raised); color: var(--ink); }
+.btn-ghost { color: var(--ink-soft); padding: 0 var(--space-2); }
+.btn-icon { width: 32px; padding: 0; justify-content: center; color: var(--ink-soft); }
+
+.hint { position: relative; display: inline-flex; }
+.tip {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+  display: none; white-space: nowrap;
+  background: var(--paper-raised); border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm); padding: 5px 10px;
+  font-size: 12px; color: var(--ink-soft);
+}
+.hint:hover .tip, .hint:focus-within .tip { display: block; }
+
+/* Markdown 排版 */
+.md { flex: 1; overflow: hidden; padding: var(--space-6) 56px; }
+.md-inner { max-width: 680px; }
+.md h1 { font-size: 24px; font-weight: 700; letter-spacing: 0.2px; margin-bottom: var(--space-4); }
+.md p { margin: var(--space-3) 0; color: var(--ink); }
+.md ul { margin: var(--space-3) 0; padding-left: 22px; }
+.md li { margin: 6px 0; color: var(--ink); }
+.md code.inline {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: var(--paper-deep); border-radius: 4px; padding: 1px 6px;
+}
+.md .block {
+  margin: var(--space-4) 0; border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm); background: var(--paper); padding: var(--space-3) var(--space-4);
+}
+.md .block code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; color: var(--ink); }
+.md .block .cm { color: var(--ink-faint); }
+
+/* 右缘信息面板 */
+.info { flex: 0 0 316px; border-left: 1px solid var(--hairline); display: flex; flex-direction: column; }
+.tabs { flex: 0 0 44px; display: flex; padding: 0 var(--space-4); gap: var(--space-4); border-bottom: 1px solid var(--hairline); }
+.tab {
+  display: inline-flex; align-items: center; height: 43px; padding: 0 2px;
+  font-size: 13px; color: var(--ink-soft); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--signal); font-weight: 600; border-bottom-color: var(--signal); }
+.tab .n { font-size: 11px; color: var(--ink-faint); margin-left: 4px; }
+.info-body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+.meta-row { display: flex; gap: var(--space-3); font-size: 13px; }
+.meta-row .k { flex: 0 0 72px; color: var(--ink-faint); }
+.meta-row .v { color: var(--ink); min-width: 0; }
+.info-sec {
+  margin-top: var(--space-2); border-top: 1px solid var(--hairline); padding-top: var(--space-3);
+}
+.info-sec .t { font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: var(--space-2); }
+.open-row { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; padding: 3px 0; color: var(--ink); }
+.open-row svg { color: var(--ink-faint); }
+.open-row span { color: var(--ink-faint); font-size: 12px; margin-left: auto; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .frow, .tab { transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tagbar">
+    <span>S07 · 预览双栏 preview-split</span><span class="sep">|</span>
+    <span>路由 /docs 新壳 + SPA 提案</span><span class="sep">|</span>
+    <span>Phase A/B</span><span class="sep">|</span>
+    <span>借鉴：Nextcloud 详情侧栏 · OneDrive hovercard</span>
+    <span class="note">文档壳复用：同一布局，顶部换成文档面包屑——slug 沿 manifest 十条</span>
+  </div>
+  <div class="app">
+
+    <!-- 左窄列表 -->
+    <aside class="list">
+      <div class="list-head"><strong class="mono">sessions/demo/</strong><span>5 个文件</span></div>
+
+      <button class="frow">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m6.5 16.5 4-4 3 3 2-2 2 2"/></svg>
+        <div class="fbody"><div class="fname">logo.svg</div><div class="fmeta">6.8 KB · 2026-10-28 10:05</div></div>
+      </button>
+
+      <button class="frow sel">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+        <div class="fbody"><div class="fname">hello.md</div><div class="fmeta">287 B · 2026-11-04 09:12</div></div>
+      </button>
+
+      <button class="frow">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10h16M10 10v9"/></svg>
+        <div class="fbody"><div class="fname">demo.csv</div><div class="fmeta">18 KB · 2026-10-28 10:05</div></div>
+      </button>
+
+      <button class="frow">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+        <div class="fbody">
+          <div class="fname">notes/meeting.md
+            <span class="chip"><svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l2.8-2.8a3.5 3.5 0 1 0-5-5l-1.4 1.4"/><path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-2.8 2.8a3.5 3.5 0 1 0 5 5l1.4-1.4"/></svg>已分享</span>
+          </div>
+          <div class="fmeta">3.4 KB · 2026-11-03 18:40</div>
+        </div>
+      </button>
+
+      <button class="frow">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+        <div class="fbody">
+          <div class="fname">notes/草稿 v2.md
+            <span class="chip">3 个版本</span>
+          </div>
+          <div class="fmeta">2.1 KB · 2026-11-04 08:05</div>
+        </div>
+      </button>
+    </aside>
+
+    <!-- 右大预览 -->
+    <main class="preview">
+      <div class="pv-bar">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+        <strong>hello.md</strong>
+        <button class="btn btn-ghost">用 Markdown 编辑器打开</button>
+        <div class="pv-actions">
+          <button class="btn btn-outline">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 19h14"/></svg>
+            下载
+          </button>
+          <button class="btn btn-outline">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="17" cy="6.5" r="2.2"/><circle cx="17" cy="17.5" r="2.2"/><path d="m8 11 7-3.5M8 13l7 3.5"/></svg>
+            分享
+          </button>
+          <span class="hint">
+            <button class="btn btn-outline">
+              <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+              版本
+            </button>
+            <span class="tip">→ 见 S09 版本时间线</span>
+          </span>
+          <button class="btn btn-icon btn-outline" aria-label="更多操作">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>
+          </button>
+          <span class="vline"></span>
+          <button class="btn btn-icon btn-ghost" aria-label="关闭预览">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></svg>
+          </button>
+        </div>
+      </div>
+      <article class="md">
+        <div class="md-inner">
+          <h1>你好，MMagiX</h1>
+          <p>这是一个纯前端的文件工作台：浏览器直连你自己的 S3 桶或 WebDAV 服务器，凭证只保存在你的浏览器里，不经过任何业务后端。</p>
+          <ul>
+            <li>浏览、上传、分享，全程本地完成</li>
+            <li>大文件自动分段，断点续传——关掉浏览器再打开，从上次的进度继续</li>
+            <li>四种具名预设一键分享：只读 / 可编辑 / 投递箱 / 隐藏下载</li>
+          </ul>
+          <p>上传走分块写入，核心只是一句 <code class="inline">putObject</code>；每一段传完即落桶，所以进度可以随时保存。</p>
+          <div class="block"><pre class="mono" style="margin:0;white-space:pre-wrap"><code><span class="cm">// 分段上传最后一段</span>
+const etag = await client.putObject("hello.md", lastChunk);</code></pre></div>
+        </div>
+      </article>
+
+    </main>
+    <!-- 右缘信息面板 -->
+    <aside class="info">
+      <div class="tabs">
+        <button class="tab on">信息</button>
+        <button class="tab">分享<span class="n">1</span></button>
+        <button class="tab">版本<span class="n">3</span></button>
+      </div>
+      <div class="info-body">
+        <div class="meta-row"><div class="k">类型</div><div class="v mono">text/markdown</div></div>
+        <div class="meta-row"><div class="k">大小</div><div class="v">287 B</div></div>
+        <div class="meta-row"><div class="k">修改于</div><div class="v">2026-11-04 09:12</div></div>
+        <div class="meta-row"><div class="k">位置</div><div class="v mono">sessions/demo/</div></div>
+
+        <div class="info-sec">
+          <div class="t">最近打开</div>
+          <div class="open-row">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+            今天 09:12<span>预览</span>
+          </div>
+          <div class="open-row">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+            昨天 18:40<span>预览</span>
+          </div>
+        </div>
+
+        <div class="info-sec">
+          <div class="t">版本</div>
+          <div class="open-row">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+            v3 · 2026-11-04 09:12<span>当前</span>
+          </div>
+          <div class="open-row">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+            v2 · 2026-11-03 18:40
+          </div>
+          <div class="open-row">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+            v1 · 2026-11-02 10:05
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+</div>
+</body>
+</html>

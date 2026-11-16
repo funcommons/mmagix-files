@@ -1,7 +1,11 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  // site2 路由冒烟的 push 会真实 import .vue 懒加载组件（组件级用例也要挂载 .vue）——
+  // vitest.config.ts 存在时整体取代 vite.config.ts（插件同样不继承），vue 插件须在此显式镜像
+  plugins: [vue()],
   // vitest.config.ts 存在时整体取代 vite.config.ts（alias 不继承），须镜像三条件：
   // `/vue` 必须排在裸名前（rollup alias 语义是前缀匹配，顺序即优先级）
   resolve: {

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S10 · 分享向导 share-wizard</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  min-height: 100vh; display: flex; align-items: flex-start; justify-content: center;
+  background: var(--paper-deep); padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--ink); font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+svg.ic { width: 24px; height: 24px; flex: 0 0 auto; }
+svg.ic-s { width: 18px; height: 18px; flex: 0 0 auto; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+.frame {
+  width: 1440px; flex: 0 0 auto;
+  background: var(--paper); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.tagbar {
+  flex: 0 0 28px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline);
+  color: var(--ink-faint); font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.tagbar .sep { color: var(--hairline); }
+.tagbar .note { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+
+/* 步骤指示器（吸顶） */
+.steps {
+  position: sticky; top: 0; z-index: 40;
+  height: 64px; display: flex; align-items: center; justify-content: center; gap: var(--space-4);
+  background: var(--paper); border-bottom: 1px solid var(--hairline);
+}
+.step { display: flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--ink-faint); }
+.step .num {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--hairline); font-size: 13px;
+}
+.step.now { color: var(--ink); font-weight: 600; }
+.step.now .num { background: var(--signal); border-color: var(--signal); color: var(--paper-raised); font-weight: 600; }
+.step.done { color: var(--ok); }
+.step.done .num { border-color: var(--ok); color: var(--ok); }
+.sline { width: 72px; height: 1.5px; background: var(--hairline); }
+.sline.done { background: var(--ok); }
+
+/* 画布主体 */
+.wiz { width: 900px; margin: 0 auto; padding: var(--space-6) 0 var(--space-6); }
+.sblock { padding: var(--space-5) 0 var(--space-6); }
+.sblock + .sblock { border-top: 1px solid var(--hairline); }
+.shead { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.shead .badge { font-size: 12px; border-radius: 999px; padding: 2px 10px; font-weight: 600; white-space: nowrap; }
+.badge.done { color: var(--ok); border: 1px solid var(--ok); }
+.badge.now { color: var(--paper-raised); background: var(--signal); }
+.badge.todo { color: var(--ink-faint); border: 1px solid var(--hairline); }
+.shead strong { font-size: 16px; }
+.shead .sub { font-size: 12.5px; color: var(--ink-faint); }
+
+/* 步1 已完成态 */
+.objcard { display: flex; align-items: center; gap: var(--space-3); }
+.objcard svg { color: var(--ink-soft); }
+.objcard .n { font-size: 14px; font-weight: 600; }
+.objcard .m { font-size: 12px; color: var(--ink-faint); }
+.tagchip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-soft); border: 1px solid var(--hairline); border-radius: 999px; padding: 1px 8px; }
+.chg { margin-left: auto; color: var(--signal); font-size: 13px; }
+.chg:hover { text-decoration: underline; }
+
+/* 步2 预设卡 2×2 */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.pcard {
+  position: relative; text-align: left;
+  border: 1.5px solid var(--hairline); border-radius: var(--radius);
+  background: var(--paper-raised); padding: var(--space-4) var(--space-5);
+}
+.pcard:hover { transform: translateY(-2px); border-color: var(--ink-faint); }
+.pcard.sel { border-color: var(--signal); background: var(--signal-wash); }
+.pcard .ph { display: flex; align-items: center; gap: var(--space-2); }
+.pcard .ph svg { color: var(--ink-soft); }
+.pcard.sel .ph svg { color: var(--signal); }
+.pcard .ph strong { font-size: 15px; }
+.pcard .desc { font-size: 13px; color: var(--ink); margin-top: var(--space-2); }
+.pcard .scene { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+.pcard .radio {
+  position: absolute; top: var(--space-4); right: var(--space-4);
+  width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--hairline); background: var(--paper-raised);
+}
+.pcard.sel .radio { border-color: var(--signal); }
+.pcard.sel .radio::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--signal);
+}
+/* 步3 加固 */
+.field { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; }
+.field .lab { flex: 0 0 88px; font-size: 13.5px; font-weight: 600; }
+.field .lab .en { display: block; font-size: 11px; color: var(--ink-faint); font-weight: 400; }
+.toggle { display: inline-flex; align-items: center; gap: var(--space-2); }
+.toggle .pill { width: 40px; height: 22px; border-radius: 999px; background: var(--signal); position: relative; }
+.toggle .pill::after { content: ""; position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper-raised); }
+.pw { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 15px; letter-spacing: 3px; }
+.faint { font-size: 12px; color: var(--ink-faint); }
+.warnbar {
+  display: flex; align-items: center; gap: var(--space-2);
+  border: 1px solid var(--warn); border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3); font-size: 13px; margin: var(--space-2) 0 0 88px;
+}
+.warnbar svg { color: var(--warn); }
+.select {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  height: 36px; padding: 0 var(--space-3); min-width: 240px;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised); font-size: 13.5px;
+}
+.select svg { color: var(--ink-faint); }
+.select .cv { margin-left: auto; }
+.textarea {
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised);
+  padding: var(--space-2) var(--space-3); font-size: 13.5px; min-height: 56px; max-width: 560px;
+}
+.acts { display: flex; align-items: center; margin-top: var(--space-4); }
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--space-5);
+  font-size: 14px; font-weight: 600; border-radius: var(--radius-sm);
+  background: var(--signal); color: var(--paper-raised); border: 1px solid var(--signal);
+}
+.btn-primary:hover { background: var(--signal-deep); border-color: var(--signal-deep); }
+.linkbar {
+  display: flex; align-items: center; gap: var(--space-3);
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: var(--paper-raised); padding: var(--space-3) var(--space-4); margin-top: var(--space-5);
+}
+.linkbar svg.lk { color: var(--signal); }
+.linkbar .url { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; }
+.linkbar .copied {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 var(--space-3); border-radius: var(--radius-sm);
+  border: 1px solid var(--ok); color: var(--ok); font-size: 13px; font-weight: 600;
+}
+.okchip { font-size: 11.5px; color: var(--ok); border: 1px solid var(--ok); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pcard, .btn-primary, .chg { transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tagbar">
+    <span>S10 · 分享向导 share-wizard</span><span class="sep">|</span>
+    <span>SPA 提案（frontend）</span><span class="sep">|</span>
+    <span>Phase B · 未实施</span><span class="sep">|</span>
+    <span>借鉴：Nextcloud 分享四预设 · Synology File Request 具名化</span>
+    <span class="note">长画布：三步纵向排布，当前步=第 2 步，步骤指示器吸顶</span>
+  </div>
+
+  <div class="steps">
+    <div class="step done"><span class="num"><svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5.5 12.5 4 4 9-9"/></svg></span>选对象</div>
+    <span class="sline done"></span>
+    <div class="step now"><span class="num">2</span>选预设</div>
+    <span class="sline"></span>
+    <div class="step"><span class="num">3</span>加固并完成</div>
+  </div>
+
+  <div class="wiz">
+    <!-- 步 1 · 已完成态 -->
+    <section class="sblock">
+      <div class="shead">
+        <span class="badge done">已完成</span><strong>选择对象</strong>
+        <span class="sub">要分享谁</span>
+      </div>
+      <div class="objcard">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+        <div>
+          <div class="n mono">notes/meeting.md</div>
+          <div class="m">3.4 KB · 2026-11-03 18:40</div>
+        </div>
+        <span class="tagchip">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l2.8-2.8a3.5 3.5 0 1 0-5-5l-1.4 1.4"/><path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-2.8 2.8a3.5 3.5 0 1 0 5 5l1.4-1.4"/></svg>
+          已分享 · 只读 · 至 2026-11-11
+        </span>
+        <button class="chg">更改</button>
+      </div>
+    </section>
+
+    <!-- 步 2 · 当前：四具名预设 -->
+    <section class="sblock">
+      <div class="shead">
+        <span class="badge now">进行中</span><strong>选择具名预设</strong>
+        <span class="sub">四选一——名字即权限，不用记矩阵</span>
+      </div>
+      <div class="grid">
+
+        <button class="pcard sel">
+          <span class="radio"></span>
+          <div class="ph">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12S6.5 6.5 12 6.5 20.5 12 20.5 12 17.5 17.5 12 17.5 3.5 12 3.5 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            <strong>只读</strong>
+          </div>
+          <div class="desc">只能看和下载</div>
+          <div class="scene">发纪要、发附件，看完即走</div>
+        </button>
+
+        <button class="pcard">
+          <span class="radio"></span>
+          <div class="ph">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19l1-4L16.5 4.5a2 2 0 0 1 3 3L9 18z"/><path d="M14.5 6.5l3 3"/></svg>
+            <strong>可编辑</strong>
+          </div>
+          <div class="desc">能改能传</div>
+          <div class="scene">和同事共同整理一份文档</div>
+        </button>
+
+        <button class="pcard">
+          <span class="radio"></span>
+          <div class="ph">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13.5h4l1.5 2.5h5l1.5-2.5h4"/><path d="M4 13.5V17a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 17v-3.5"/><path d="M12 4v6.5"/><path d="m9.5 8.5 2.5 2.5 2.5-2.5"/></svg>
+            <strong>投递箱</strong>
+          </div>
+          <div class="desc">只进不出——向这个文件夹收文件</div>
+          <div class="scene">对方只能上传，看不到已有文件</div>
+        </button>
+
+        <button class="pcard">
+          <span class="radio"></span>
+          <div class="ph">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12S6.5 6.5 12 6.5 20.5 12 20.5 12 17.5 17.5 12 17.5 3.5 12 3.5 12z"/><circle cx="12" cy="12" r="2.5"/><path d="m5 5 14 14"/></svg>
+            <strong>隐藏下载</strong>
+          </div>
+          <div class="desc">看得见，下载按钮藏起来</div>
+          <div class="scene">在线预览，文件不落地</div>
+        </button>
+
+      </div>
+    </section>
+    <!-- 步 3 · 加固并完成 -->
+    <section class="sblock">
+      <div class="shead">
+        <span class="badge todo">待完成</span><strong>加固并完成</strong>
+        <span class="sub">密码与有效期都不是必填</span>
+      </div>
+
+      <div class="field">
+        <div class="lab">密码<span class="en">4 位数字</span></div>
+        <span class="toggle"><span class="pill"></span></span>
+        <span class="pw">••••</span>
+        <span class="faint">仅显示一次，关掉这页就再也看不到</span>
+      </div>
+      <div class="warnbar">
+        <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 20.5 19h-17z"/><path d="M12 10v4"/><circle cx="12" cy="16.4" r="0.9" fill="currentColor" stroke="none"/></svg>
+        密码只显示这一次——请当场复制给对方
+      </div>
+
+      <div class="field" style="margin-top:var(--space-4)">
+        <div class="lab">有效期</div>
+        <span class="select">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="14" rx="1.5"/><path d="M4 10h16M8.5 4v3.5M15.5 4v3.5"/></svg>
+          至 2026-11-11
+          <svg class="ic-s cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg>
+        </span>
+        <span class="faint">到期后链接自动失效</span>
+      </div>
+
+      <div class="field">
+        <div class="lab">备注<span class="en">给对方的一句话</span></div>
+        <div class="textarea">会议纪要，看完可删。</div>
+      </div>
+
+      <div class="acts">
+        <span class="faint">创建后可随时在「分享」里停用</span>
+        <button class="btn-primary" style="margin-left:auto">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l2.8-2.8a3.5 3.5 0 1 0-5-5l-1.4 1.4"/><path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-2.8 2.8a3.5 3.5 0 1 0 5 5l1.4-1.4"/></svg>
+          创建分享链接
+        </button>
+      </div>
+
+      <div class="linkbar">
+        <svg class="ic lk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l2.8-2.8a3.5 3.5 0 1 0-5-5l-1.4 1.4"/><path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-2.8 2.8a3.5 3.5 0 1 0 5 5l1.4-1.4"/></svg>
+        <span class="url">https://demo.mmagix.app/?share=8f3k</span>
+        <span class="okchip">已创建</span>
+        <span class="copied">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.5 2.5 4.8-5"/></svg>
+          已复制
+        </span>
+      </div>
+    </section>
+
+  </div>
+</div>
+</body>
+</html>

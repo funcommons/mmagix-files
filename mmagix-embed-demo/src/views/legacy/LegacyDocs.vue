@@ -49,7 +49,7 @@ watch(slug, () => void load(), { immediate: true });
     <aside class="toc">
       <div v-for="g in groups" :key="g.key" class="toc-group">
         <p class="toc-title">{{ t(g.key) }}</p>
-        <RouterLink v-for="d in g.items" :key="d.slug" :to="`/docs/${d.slug}`" class="toc-link" :class="{ active: d.slug === slug }">
+        <RouterLink v-for="d in g.items" :key="d.slug" :to="`/legacy/docs/${d.slug}`" class="toc-link" :class="{ active: d.slug === slug }">
           {{ t(`docs.doc.${d.slug}`) }}
         </RouterLink>
       </div>
@@ -66,7 +66,7 @@ watch(slug, () => void load(), { immediate: true });
 
 <style scoped lang="scss">
 .docs-page {
-  // 次级墨阶（同 Home/SiteLayout）继承自 .site-layout；此处只管布局
+  // 次级墨阶（同 LegacyHome/LegacySiteLayout）继承自 .site-layout；此处只管布局
   display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: var(--space-xl); align-items: start;
   width: 100%; max-width: var(--container, 1360px); margin: 0 auto; padding: var(--space-xl) var(--space-lg);
 }

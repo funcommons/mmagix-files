@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S02 · 场景三卡 — MMagiX Files 站点 v2 原型</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper-deep); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    display: grid; place-items: center;
+    padding: 32px 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .stage {
+    width: 1440px; height: 900px;
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .labelbar {
+    height: 28px; flex: none;
+    display: flex; align-items: center; gap: var(--space-5);
+    padding: 0 var(--space-4);
+    font-size: 12px; color: var(--ink-faint);
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap; overflow: hidden;
+  }
+  .labelbar b { color: var(--ink-soft); font-weight: 600; }
+
+  a { color: var(--signal); text-decoration: none; }
+  a:hover { color: var(--signal-deep); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+    height: 40px; padding: 0 var(--space-5);
+    border-radius: var(--radius-sm);
+    font-size: 14.5px; font-weight: 500; font-family: inherit;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-solid { background: var(--signal); color: var(--paper-raised); }
+  .btn-solid:hover { background: var(--signal-deep); }
+  .icon { width: 18px; height: 18px; flex: none; }
+
+  /* 页头 */
+  .head {
+    flex: none;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 44px 56px 28px;
+  }
+  .head h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.3px; }
+  .head .sub { margin-top: var(--space-2); font-size: 15px; color: var(--ink-soft); }
+
+  /* 三等分卡栅格 */
+  .cards {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-5);
+    padding: 0 56px 40px;
+  }
+  .card {
+    display: flex; flex-direction: column;
+    padding: var(--space-5) var(--space-5) var(--space-4);
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+  }
+  .art {
+    height: 156px; flex: none;
+    display: grid; place-items: center;
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    color: var(--ink-soft);
+    margin-bottom: var(--space-4);
+  }
+  .card h3 { font-size: 19px; font-weight: 700; }
+  .card .desc { margin-top: var(--space-2); font-size: 14px; line-height: 1.65; color: var(--ink-soft); }
+
+  .uses { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--hairline); }
+  .uses-cap { font-size: 12px; color: var(--ink-faint); margin-bottom: var(--space-2); }
+  .use-row { display: flex; align-items: center; gap: var(--space-2); height: 26px; font-size: 13px; }
+  .use-row .k { color: var(--ink-faint); flex: none; }
+  .use-row .v {
+    padding: 2px 8px; border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    background: var(--paper); font-size: 12.5px; color: var(--ink);
+    white-space: nowrap;
+  }
+  .more {
+    margin-top: auto; padding-top: var(--space-4);
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 14px; font-weight: 600;
+  }
+  .more .icon { width: 15px; height: 15px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card, .btn, a { transition: transform .18s ease, box-shadow .18s ease, background-color .15s ease, color .15s ease, border-color .15s ease; }
+    /* 关键交互点：卡 hover 抬升 2px（reduced-motion 降级为无动画） */
+    .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="labelbar">
+    <b>S02</b><span>场景三卡</span><span>路由 / 第二屏</span><span>Phase A</span>
+    <span>借鉴：Cloudflare R2 按意图选路径 · Synology File Request 具名化</span>
+  </div>
+
+  <!-- 页头：唯一主按钮在此 -->
+  <header class="head">
+    <div>
+      <h1>它适合谁？</h1>
+      <p class="sub">三种最常见的打开方式——先认场景，再见表单。</p>
+    </div>
+    <a class="btn btn-solid" href="s04-guide-steps.html">打开在线演示</a>
+  </header>
+
+  <main class="cards">
+
+    <!-- 场景一：家庭 NAS 照片库 -->
+    <article class="card">
+      <div class="art" role="img" aria-label="线稿插画：房子里的硬盘与照片堆">
+        <svg width="180" height="120" viewBox="0 0 180 120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 104h156"/>
+          <path d="M28 58L90 24l62 34"/>
+          <path d="M40 52v44h100V52"/>
+          <!-- 照片堆 -->
+          <rect x="54" y="58" width="36" height="26" rx="2"/>
+          <rect x="60" y="62" width="36" height="26" rx="2"/>
+          <circle cx="69" cy="70" r="2.5"/>
+          <path d="M64 82l8-9 6 6 4-4 8 8"/>
+          <!-- 硬盘 -->
+          <rect x="108" y="62" width="42" height="26" rx="3"/>
+          <circle cx="116" cy="75" r="3"/>
+          <path d="M124 69h18M124 75h14M124 81h18"/>
+        </svg>
+      </div>
+      <h3>家庭 NAS 照片库</h3>
+      <p class="desc">Synology / 坚果云开 WebDAV，浏览器直接管家里的文件。</p>
+      <div class="uses">
+        <div class="uses-cap">你会用到</div>
+        <div class="use-row"><span class="k">服务器地址</span><span class="v mono">http://localhost:5240</span></div>
+        <div class="use-row"><span class="k">挂载路径</span><span class="v mono">/nas</span></div>
+      </div>
+      <a class="more" href="s04-guide-steps.html">照此配置
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </article>
+
+    <!-- 场景二：团队只读分发 -->
+    <article class="card">
+      <div class="art" role="img" aria-label="线稿插画：书架与两个人">
+        <svg width="180" height="120" viewBox="0 0 180 120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 104h156"/>
+          <!-- 书架 -->
+          <rect x="28" y="26" width="64" height="70" rx="2"/>
+          <path d="M28 58h64"/>
+          <path d="M40 58V42M50 58V44M60 58V42M70 58V45"/>
+          <path d="M76 58l5-16"/>
+          <path d="M40 96V72M48 96V70M56 96V74M64 96V72M74 96V73"/>
+          <!-- 两个人 -->
+          <circle cx="130" cy="52" r="9"/>
+          <path d="M114 88a16 16 0 0 1 32 0"/>
+          <circle cx="156" cy="64" r="7"/>
+          <path d="M144 90a12 12 0 0 1 24 0"/>
+        </svg>
+      </div>
+      <h3>团队只读分发</h3>
+      <p class="desc">对象存储当官网附件库，发一个只读链接。</p>
+      <div class="uses">
+        <div class="uses-cap">你会用到</div>
+        <div class="use-row"><span class="k">存储空间</span><span class="v mono">mmagic-demo</span></div>
+        <div class="use-row"><span class="k">具名预设</span><span class="v">只读——只能看和下载</span></div>
+      </div>
+      <a class="more" href="s04-guide-steps.html">照此配置
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </article>
+
+    <!-- 场景三：向客户收文件 -->
+    <article class="card">
+      <div class="art" role="img" aria-label="线稿插画：托盘与上传箭头">
+        <svg width="180" height="120" viewBox="0 0 180 120" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 104h156"/>
+          <!-- 上传箭头 -->
+          <path d="M90 66V28"/>
+          <path d="M76 42L90 28l14 14"/>
+          <!-- 托盘（开盖箱子） -->
+          <path d="M50 72v22a6 6 0 0 0 6 6h68a6 6 0 0 0 6-6V72"/>
+          <path d="M50 72L36 62M130 72l14-10"/>
+          <!-- 托盘里的文件 -->
+          <rect x="76" y="80" width="28" height="16" rx="2"/>
+          <path d="M82 86h16M82 91h10"/>
+        </svg>
+      </div>
+      <h3>向客户收文件</h3>
+      <p class="desc">发一个投递箱链接，对方只进不出。</p>
+      <div class="uses">
+        <div class="uses-cap">你会用到</div>
+        <div class="use-row"><span class="k">具名预设</span><span class="v">投递箱——只进不出</span></div>
+        <div class="use-row"><span class="k">有效期</span><span class="v mono">至 2026-11-11</span></div>
+      </div>
+      <a class="more" href="s04-guide-steps.html">照此配置
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </article>
+
+  </main>
+
+</div>
+</body>
+</html>

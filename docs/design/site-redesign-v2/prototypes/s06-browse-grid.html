@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S06 · 文件浏览网格（提案） — MMagiX Files 站点 v2 原型</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper-deep); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    display: grid; place-items: center;
+    padding: 32px 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .stage {
+    width: 1440px; height: 900px;
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .labelbar {
+    height: 28px; flex: none;
+    display: flex; align-items: center; gap: var(--space-5);
+    padding: 0 var(--space-4);
+    font-size: 12px; color: var(--ink-faint);
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap; overflow: hidden;
+  }
+  .labelbar b { color: var(--ink-soft); font-weight: 600; }
+
+  a { color: var(--signal); text-decoration: none; }
+  a:hover { color: var(--signal-deep); }
+  button { font-family: inherit; }
+
+  .shell { flex: 1; min-height: 0; display: flex; }
+
+  /* 左：虚拟视图栏 220px */
+  .rail {
+    width: 220px; flex: none;
+    background: var(--paper-raised);
+    border-right: 1px solid var(--hairline);
+    padding: var(--space-3) var(--space-2);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .rail-cap { font-size: 11px; color: var(--ink-faint); padding: 4px 10px 8px; }
+  .ritem {
+    display: flex; align-items: center; gap: var(--space-2);
+    height: 34px; padding: 0 10px;
+    border-left: 3px solid transparent;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 13.5px; color: var(--ink-soft);
+  }
+  .ritem svg { width: 16px; height: 16px; color: var(--ink-faint); flex: none; }
+  .ritem:hover { background: var(--paper); color: var(--ink); }
+  .ritem.on { background: var(--signal-wash); border-left-color: var(--signal); color: var(--ink); font-weight: 600; }
+  .ritem.on svg { color: var(--signal); }
+  .ritem .count {
+    margin-left: auto;
+    min-width: 20px; height: 18px; padding: 0 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; background: var(--paper-deep);
+    font-size: 11px; color: var(--ink-faint);
+  }
+  .ritem.on .count { background: var(--paper-raised); color: var(--signal); }
+
+  /* 主区 */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+
+  /* 工具条 */
+  .toolbar {
+    flex: none; height: 54px;
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: 0 var(--space-4);
+    border-bottom: 1px solid var(--hairline);
+    background: var(--paper-raised);
+  }
+  .crumbs { display: flex; align-items: center; gap: 4px; font-size: 13.5px; }
+  .crumbs .c { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: var(--radius-sm); color: var(--ink-soft); }
+  .crumbs .c svg { width: 15px; height: 15px; color: var(--ink-faint); }
+  .crumbs .c:hover { background: var(--paper); color: var(--ink); }
+  .crumbs .c.cur { background: var(--signal-wash); color: var(--ink); font-weight: 600; }
+  .crumbs .c.cur svg { color: var(--signal); }
+  .crumbs .sep { color: var(--ink-faint); font-size: 12px; }
+  .tb-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 34px; padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-solid { background: var(--signal); color: var(--paper-raised); }
+  .btn-solid:hover { background: var(--signal-deep); }
+  .btn-ghost { background: var(--paper-raised); border-color: var(--hairline); color: var(--ink); }
+  .btn-ghost:hover { border-color: var(--ink-faint); background: var(--paper); }
+  .btn svg { width: 15px; height: 15px; }
+  .search {
+    display: flex; align-items: center; gap: 6px;
+    width: 200px; height: 34px; padding: 0 10px;
+    border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    background: var(--paper-raised);
+    font-size: 12.5px; color: var(--ink-faint);
+  }
+  .search svg { width: 14px; height: 14px; }
+  .segbar { display: flex; border: 1px solid var(--hairline); border-radius: var(--radius-sm); overflow: hidden; }
+  .segbtn {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 12px;
+    background: var(--paper-raised); border: 0; cursor: pointer;
+    font-size: 12.5px; color: var(--ink-soft);
+  }
+  .segbtn + .segbtn { border-left: 1px solid var(--hairline); }
+  .segbtn svg { width: 14px; height: 14px; }
+  .segbtn:hover { background: var(--paper); }
+  .segbtn.on { background: var(--signal-wash); color: var(--signal); font-weight: 600; }
+  .segbtn i.dot { width: 4px; height: 4px; border-radius: 999px; background: var(--signal); }
+
+  /* 工作区：网格 + 右侧详情 */
+  .workspace { flex: 1; min-height: 0; display: flex; }
+  .gridarea { flex: 1; min-width: 0; padding: var(--space-4) var(--space-4) 72px; overflow: hidden; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
+
+  .card {
+    position: relative;
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .thumb {
+    height: 96px;
+    display: grid; place-items: center;
+    background: var(--paper);
+    border-bottom: 1px solid var(--hairline);
+    color: var(--ink-faint);
+  }
+  .card-info { padding: var(--space-2) var(--space-3) var(--space-3); }
+  .card-info .name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-info .meta { margin-top: 3px; font-size: 11.5px; color: var(--ink-faint); }
+  .badge {
+    position: absolute; top: 8px; right: 8px;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px;
+    background: var(--paper-raised); border: 1px solid var(--hairline);
+    border-radius: 999px;
+    font-size: 11px; color: var(--ink-soft);
+  }
+  .badge svg { width: 11px; height: 11px; color: var(--signal); }
+  .badge-new { background: var(--signal-wash); border-color: transparent; color: var(--signal); font-weight: 600; }
+
+  /* 右：详情侧栏 320px */
+  .detail {
+    width: 320px; flex: none;
+    background: var(--paper-raised);
+    border-left: 1px solid var(--hairline);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .detail-thumb {
+    height: 118px; flex: none;
+    display: grid; place-items: center;
+    background: var(--paper);
+    border-bottom: 1px solid var(--hairline);
+    color: var(--ink-faint);
+  }
+  .detail-head { padding: var(--space-3) var(--space-4) 0; }
+  .detail-head .name { font-size: 15px; font-weight: 700; }
+  .detail-head .meta { margin-top: 2px; font-size: 12px; color: var(--ink-faint); }
+  .tabs { margin-top: var(--space-3); display: flex; gap: var(--space-4); padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline); }
+  .tab {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 8px 2px;
+    background: none; border: 0; cursor: pointer;
+    font-size: 13px; color: var(--ink-soft);
+  }
+  .tab:hover { color: var(--ink); }
+  .tab .cnt {
+    min-width: 16px; height: 16px; padding: 0 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; background: var(--paper-deep);
+    font-size: 10.5px; color: var(--ink-faint);
+  }
+  .tab.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--signal); }
+  .acts { padding: var(--space-2) var(--space-4); display: grid; gap: 2px; }
+  .act { display: flex; gap: var(--space-2); padding: 8px 6px; border-radius: var(--radius-sm); }
+  .act:hover { background: var(--paper); }
+  .act svg { width: 15px; height: 15px; color: var(--ink-faint); flex: none; margin-top: 2px; }
+  .act .t { font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+  .act .when { margin-top: 2px; font-size: 11px; color: var(--ink-faint); }
+
+  /* 底部聚合传输条 + hover 变体 + 无活动对照 */
+  .transfer {
+    position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 6;
+  }
+  .tpill {
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    height: 40px; padding: 0 var(--space-4);
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    box-shadow: var(--shadow-card);
+    font-size: 13px;
+  }
+  .tpill svg { width: 15px; height: 15px; color: var(--ink-soft); }
+  .tpill b { font-weight: 600; }
+  .tpill .sep { color: var(--ink-faint); }
+  .tpill a { font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+  .tpill a svg { width: 13px; height: 13px; color: var(--signal); }
+  .tghost {
+    position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%) translateY(-2px);
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    height: 40px; padding: 0 var(--space-4);
+    border: 1.5px dashed var(--ink-faint);
+    border-radius: 999px;
+    font-size: 13px; color: var(--ink-faint);
+    background: transparent;
+    pointer-events: none;
+  }
+  .tghost svg { width: 15px; height: 15px; }
+  .tnote {
+    position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
+    font-size: 11px; color: var(--ink-faint); white-space: nowrap;
+  }
+  .noact {
+    position: absolute; right: var(--space-4); bottom: 18px;
+    width: 168px; padding: 10px 12px;
+    border: 1.5px dashed var(--ink-faint);
+    border-radius: var(--radius-sm);
+    font-size: 11px; color: var(--ink-faint); line-height: 1.6;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .noact .mini {
+    align-self: flex-start;
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 24px; padding: 0 10px;
+    border: 1px solid var(--hairline); border-radius: 999px;
+    background: var(--paper-raised);
+    font-size: 11px; color: var(--ink-soft);
+  }
+  .noact .mini svg { width: 11px; height: 11px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card, .ritem, .btn, .segbtn, .tab, .crumbs .c, a, input { transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .18s ease, box-shadow .18s ease; }
+    /* 卡片 hover 抬升 ≤2px */
+    .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="labelbar">
+    <b>S06</b><span>文件浏览网格</span><span>frontend SPA · 提案（未来态，动工另立契约）</span><span>Phase B</span>
+    <span>借鉴：Nextcloud 网格/虚拟视图/叠印徽章/详情侧栏 · MinIO「有活动才出现」 · Dropbox 两层状态模型</span>
+  </div>
+
+  <div class="shell">
+
+    <!-- 左：虚拟视图栏 -->
+    <aside class="rail">
+      <div class="rail-cap">视图</div>
+      <div class="ritem on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+        全部文件<span class="count">5</span>
+      </div>
+      <div class="ritem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        最近<span class="count">3</span>
+      </div>
+      <div class="ritem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3z"/></svg>
+        收藏<span class="count">2</span>
+      </div>
+      <div class="ritem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M17.5 13.6a6.5 6.5 0 0 1 4 6.4"/></svg>
+        共享<span class="count">1</span>
+      </div>
+      <div class="ritem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13M10 11v6M14 11v6"/></svg>
+        回收站<span class="count">2</span>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <section class="main">
+
+      <!-- 工具条：面包屑 + 上传/新建/搜索 + 视图切换 -->
+      <div class="toolbar">
+        <nav class="crumbs" aria-label="面包屑">
+          <span class="c">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+            根目录
+          </span>
+          <span class="sep">›</span>
+          <span class="c cur">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+            notes
+          </span>
+        </nav>
+        <div class="tb-right">
+          <button type="button" class="btn btn-solid">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            上传
+          </button>
+          <button type="button" class="btn btn-ghost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M12 10v6M9 13h6"/></svg>
+            新建文件夹
+          </button>
+          <span class="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+            搜索当前文件夹
+          </span>
+          <span class="segbar" role="group" aria-label="视图切换">
+            <button type="button" class="segbtn on"><i class="dot"></i>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>
+              网格
+            </button>
+            <button type="button" class="segbtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+              列表
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <div class="workspace">
+
+        <!-- 网格区：5 张卡 -->
+        <div class="gridarea">
+          <div class="grid">
+            <article class="card">
+              <div class="thumb">
+                <svg width="64" height="48" viewBox="0 0 64 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="6" width="56" height="36" rx="3"/><circle cx="20" cy="18" r="4"/><path d="M60 34L44 20 20 42"/></svg>
+              </div>
+              <div class="card-info">
+                <div class="name">logo.svg</div>
+                <div class="meta mono">6.8 KB · 2026-10-28 10:05</div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="thumb">
+                <svg width="34" height="42" viewBox="0 0 24 30" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 14h8M8 18h8M8 22h5"/></svg>
+              </div>
+              <div class="card-info">
+                <div class="name">hello.md</div>
+                <div class="meta mono">1.2 KB · 2026-11-04 09:12</div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="thumb">
+                <svg width="56" height="44" viewBox="0 0 56 44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="44" height="32" rx="2"/><path d="M6 16h44M6 26h44M20 6v32M34 6v32"/></svg>
+              </div>
+              <div class="card-info">
+                <div class="name">demo.csv</div>
+                <div class="meta mono">18 KB · 2026-10-28 10:05</div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="thumb">
+                <svg width="34" height="42" viewBox="0 0 24 30" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 14h8M8 18h8M8 22h5"/></svg>
+              </div>
+              <div class="card-info">
+                <div class="name">meeting.md</div>
+                <div class="meta mono">3.4 KB · 2026-11-03 18:40</div>
+              </div>
+              <span class="badge" title="已链接分享">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                已分享
+              </span>
+            </article>
+
+            <article class="card">
+              <div class="thumb">
+                <svg width="34" height="42" viewBox="0 0 24 30" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8 14h8M8 18h8M8 22h5"/></svg>
+              </div>
+              <div class="card-info">
+                <div class="name">草稿 v2.md</div>
+                <div class="meta mono">2.1 KB · 2026-11-04 08:05</div>
+              </div>
+              <span class="badge badge-new">新</span>
+            </article>
+          </div>
+        </div>
+
+        <!-- 右：详情侧栏（当前 tab=活动） -->
+        <aside class="detail">
+          <div class="detail-thumb">
+            <svg width="120" height="72" viewBox="0 0 120 72" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="10" y="8" width="100" height="56" rx="3"/><path d="M10 26h100M10 44h100M45 8v56M80 8v56"/></svg>
+          </div>
+          <div class="detail-head">
+            <div class="name">demo.csv</div>
+            <div class="meta mono">18 KB · 2026-10-28 10:05 · notes/</div>
+          </div>
+          <div class="tabs">
+            <button type="button" class="tab on">活动</button>
+            <button type="button" class="tab">分享<span class="cnt">1</span></button>
+            <button type="button" class="tab">版本</button>
+          </div>
+          <div class="acts">
+            <div class="act">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <div>
+                <div class="t">你创建了分享链接——只读 · 有效期至 2026-11-11</div>
+                <div class="when">今天 10:26</div>
+              </div>
+            </div>
+            <div class="act">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <div>
+                <div class="t">你在网格里预览了这个文件</div>
+                <div class="when">今天 09:30</div>
+              </div>
+            </div>
+            <div class="act">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              <div>
+                <div class="t">上传——初始版本</div>
+                <div class="when">2026-10-28 10:05</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- 底部聚合传输条（有活动才出现）+ hover 态示意 -->
+      <div class="transfer">
+        <span class="tnote">hover 态示意：抬升 2px + 加深阴影（虚线为对比）</span>
+        <span class="tghost" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          <b>2 个传输中</b><span class="sep">·</span>查看传输
+        </span>
+        <div class="tpill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          <b>2 个传输中</b>
+          <span class="sep">·</span>
+          <a href="s06-browse-grid.html">查看传输
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- 无活动对照小图 -->
+      <div class="noact">
+        <span class="mini">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          传输 2
+        </span>
+        无活动时不出现——队列空了，这枚徽章连同本条一起消失。
+      </div>
+
+    </section>
+  </div>
+
+</div>
+</body>
+</html>

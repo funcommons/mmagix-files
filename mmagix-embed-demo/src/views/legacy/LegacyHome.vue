@@ -65,10 +65,10 @@ const protocol = [
 ];
 
 const docLinks = [
-  { to: "/docs/user-guide", key: "site.doclink.guide" },
-  { to: "/docs/deployment", key: "site.doclink.deploy" },
-  { to: "/docs/webdav", key: "site.doclink.webdav" },
-  { to: "/docs/jsdk-api", key: "site.doclink.jsdk" },
+  { to: "/legacy/docs/user-guide", key: "site.doclink.guide" },
+  { to: "/legacy/docs/deployment", key: "site.doclink.deploy" },
+  { to: "/legacy/docs/webdav", key: "site.doclink.webdav" },
+  { to: "/legacy/docs/jsdk-api", key: "site.doclink.jsdk" },
 ];
 
 /** pnpm dev 复制键:clipboard API,仅在写成功后才变成功文案（不假成功） */
@@ -96,7 +96,7 @@ async function copyDev(): Promise<void> {
         <p class="lede">{{ t("site.hero.lede") }}</p>
         <div class="front-actions">
           <FcButton variant="primary" size="lg" @click="go('/play/workspace')">{{ t("site.hero.primary") }}</FcButton>
-          <FcButton variant="secondary" size="lg" @click="go('/docs')">{{ t("site.hero.secondary") }}</FcButton>
+          <FcButton variant="secondary" size="lg" @click="go('/legacy/docs')">{{ t("site.hero.secondary") }}</FcButton>
         </div>
       </div>
 
@@ -196,7 +196,7 @@ async function copyDev(): Promise<void> {
 /* Hallmark · shape: Long Document · hero: corridor · nav: banner over a retracting bar · footer: index columns · theme: cobalt (mapped to project tokens) · draw: c4f075 · genre: modern-minimal · job: try · imagery: none · signature: config-in workspace-out twin panes · posture: restrained */
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: S, hero could be any dev tool; led with the real #config fragment and the WebDAV method table instead of a stock dashboard */
 
-/* 多根模板：ink 墨阶与容器宽度 token 由 SiteLayout 的 .site-layout 统一定义,此处继承。
+/* 多根模板：ink 墨阶与容器宽度 token 由 LegacySiteLayout 的 .site-layout 统一定义,此处继承。
    本组件零 transition/animation（Hallmark 27 无需兜底）;动效收敛在 SiteLayout 的 veil opacity */
 .container { width: 100%; max-width: var(--container, 1360px); margin: 0 auto; padding-left: var(--space-lg); padding-right: var(--space-lg); }
 h1, h2 { text-wrap: balance; overflow-wrap: break-word; min-width: 0; }

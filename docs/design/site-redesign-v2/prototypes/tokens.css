@@ -1,0 +1,45 @@
+/* ============================================================
+   站点 v2 原型共享 token；落地实现以 frontend/src/styles/variables.scss 为准
+   （契约来源：本目录 README.md §三；值沿 Cobalt 方向映射，非落地值）
+   硬编码 hex 仅允许出现在本文件——所有屏一律引用下列变量。
+   ============================================================ */
+
+:root {
+  /* 面 */
+  --paper: #f7f8fa;          /* 纸面（页面底） */
+  --paper-raised: #ffffff;   /* 浮起面（面板/卡） */
+  --paper-deep: #eef0f3;     /* 更深一档（画框外围、井底） */
+  /* 墨 */
+  --ink: #1f1f1f;            /* 主文本 */
+  --ink-soft: #5e5e5e;       /* 次文本 */
+  --ink-faint: #909399;      /* 弱文本/标签条 */
+  /* 钴蓝信号（唯一强调色） */
+  --signal: #2563eb;
+  --signal-deep: #1d4ed8;    /* hover/按下 */
+  --signal-wash: rgba(37, 99, 235, 0.08);  /* 一行 wash / 选中底 */
+  /* 状态（仅这三处允许语义色） */
+  --ok: #15803d;
+  --warn: #ff7d00;           /* = 现站 brand-orange，仅用于传输进行态/警示 */
+  --danger: #dc2626;
+  /* 线与形 */
+  --hairline: #dcdfe6;       /* 发丝线 */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow-card: 0 1px 2px rgba(31, 31, 31, 0.06), 0 8px 24px rgba(31, 31, 31, 0.08);
+  /* 距离 */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 40px;
+}
+
+/* —— 公共规则一：focus-visible 必须可见 —— */
+*:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* —— 公共规则二：一切过渡动画包在 prefers-reduced-motion 门控里 —— */
+/* （各屏的 transition / @keyframes 一律写在下面这个 media 块内） */
+@media (prefers-reduced-motion: no-preference) {
+  /* 示例占位：各屏把自己的动画塞进各自文件的同名 media 块；此处保持空主体，
+     仅作为「动画必须门控」的书写样板。 */
+}

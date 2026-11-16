@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>站点 v2 · 12 屏原型总览</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--paper-deep); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-5) var(--space-6);
+  }
+
+  /* —— 头部 —— */
+  header { margin-bottom: var(--space-6); }
+  header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  header .lede { margin-top: var(--space-2); font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+  header .lede a { color: var(--signal); text-decoration: none; border-bottom: 1px solid var(--signal-wash); }
+  header .lede a:hover { border-bottom-color: var(--signal); }
+
+  /* —— 缩略卡网格 —— */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: var(--space-5);
+  }
+  figure.card {
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1440 / 900;
+    object-fit: contain;
+    background: var(--paper-deep);
+    border-bottom: 1px solid var(--hairline);
+  }
+  figcaption { padding: var(--space-4) var(--space-4) var(--space-4); }
+  figcaption .name { font-size: 15px; font-weight: 700; }
+  figcaption .name .no {
+    display: inline-block;
+    min-width: 34px;
+    font-size: 12px; font-weight: 600;
+    color: var(--ink-faint);
+  }
+  figcaption .meta { margin-top: 4px; font-size: 12px; color: var(--ink-faint); }
+  figcaption .from {
+    margin-top: var(--space-2);
+    font-size: 12px; color: var(--ink-soft); line-height: 1.6;
+  }
+  figcaption .open {
+    display: inline-block;
+    margin-top: var(--space-3);
+    font-size: 13px; font-weight: 600;
+    color: var(--signal); text-decoration: none;
+  }
+  figcaption .open:hover { color: var(--signal-deep); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* —— 页脚 —— */
+  footer {
+    margin-top: var(--space-6);
+    font-size: 12px; color: var(--ink-faint); line-height: 1.8;
+  }
+  footer a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--hairline); }
+  footer a:hover { color: var(--signal); border-bottom-color: var(--signal); }
+
+  /* sloplint：动画一律门控；hover 抬升 ≤2px */
+  @media (prefers-reduced-motion: no-preference) {
+    figure.card { transition: transform 120ms ease, border-color 120ms ease; }
+    figure.card:hover { transform: translateY(-1px); border-color: #c9cdd6; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>站点 v2 · 12 屏原型总览</h1>
+    <p class="lede">
+      静态截图（1440×900 @2x 高清；S10 为整页长画布）。确认流程：逐屏看，
+      再到 <a href="../plan.md">plan.md §屏清单</a>（确认状态表）上反馈「改 / 留」；
+      单屏细节与契约见 <a href="README.md">prototypes/README.md</a>。
+    </p>
+  </header>
+
+  <div class="grid">
+
+    <figure class="card">
+      <img class="thumb" src="png/s01-home-hero.png" alt="S01 首页 Hero 截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S01</span>首页 Hero</div>
+        <div class="meta">/ · Phase A</div>
+        <div class="from">借鉴：Cloudflare R2 按意图先行的 CTA · Nextcloud 实景界面叙事</div>
+        <a class="open" href="s01-home-hero.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s02-scenarios.png" alt="S02 场景三卡截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S02</span>场景三卡</div>
+        <div class="meta">/ 第二屏 · Phase A</div>
+        <div class="from">借鉴：Cloudflare R2 按意图选路径 · Synology File Request 具名化</div>
+        <a class="open" href="s02-scenarios.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s03-feature-map.png" alt="S03 功能地图截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S03</span>功能地图</div>
+        <div class="meta">/ 第三屏 · Phase A</div>
+        <div class="from">借鉴：OneDrive / Dropbox 图标官方释义封闭集 · Cloudflare R2 Next steps 渐进披露</div>
+        <a class="open" href="s03-feature-map.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s04-guide-steps.png" alt="S04 演示引导四步截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S04</span>演示引导四步</div>
+        <div class="meta">/guide · Phase A</div>
+        <div class="from">借鉴：Cloudflare R2 凭证三件套同屏 +「仅显示一次」· Alist「Mount Path=对外显示的名称」</div>
+        <a class="open" href="s04-guide-steps.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s05-connect-diagnostics.png" alt="S05 连接诊断截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S05</span>连接诊断</div>
+        <div class="meta">/guide step2 · Phase A</div>
+        <div class="from">借鉴：Cyberduck 诊断内联失败态 · Alist 选项内联权衡提示 · Cloudflare R2 region 口径</div>
+        <a class="open" href="s05-connect-diagnostics.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s06-browse-grid.png" alt="S06 文件浏览网格截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S06</span>文件浏览网格（提案）</div>
+        <div class="meta">frontend SPA 提案 · Phase B</div>
+        <div class="from">借鉴：Nextcloud 网格 / 虚拟视图 / 叠印徽章 / 详情侧栏 · MinIO「有活动才出现」· Dropbox 两层状态模型</div>
+        <a class="open" href="s06-browse-grid.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s07-preview-split.png" alt="S07 预览双栏截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S07</span>预览双栏 preview-split</div>
+        <div class="meta">/docs 新壳 + SPA 提案复用 · Phase A/B</div>
+        <div class="from">借鉴：Nextcloud 详情侧栏 · OneDrive hovercard</div>
+        <a class="open" href="s07-preview-split.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s08-transfer-center.png" alt="S08 传输中心截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S08</span>传输中心 transfer-center</div>
+        <div class="meta">SPA 提案 · Phase B</div>
+        <div class="from">借鉴：Synology 底部停靠传输队列 · MinIO「有活动才出现」</div>
+        <a class="open" href="s08-transfer-center.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s09-versions-timeline.png" alt="S09 版本时间线截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S09</span>版本时间线 versions-timeline</div>
+        <div class="meta">SPA 提案 · Phase B</div>
+        <div class="from">借鉴：MinIO Rewind · Nextcloud 版本 tab</div>
+        <a class="open" href="s09-versions-timeline.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s10-share-wizard.png" alt="S10 分享向导截图（整页长画布）" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S10</span>分享向导 share-wizard</div>
+        <div class="meta">SPA 提案 · Phase B · 整页长画布</div>
+        <div class="from">借鉴：Nextcloud 分享四预设 · Synology File Request 具名化</div>
+        <a class="open" href="s10-share-wizard.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s11-sources-panel.png" alt="S11 数据源面板截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S11</span>数据源 sources-panel</div>
+        <div class="meta">/sources · Phase A</div>
+        <div class="from">借鉴：Cyberduck 书签卡+状态灯 · Alist 驱动按用途分组</div>
+        <a class="open" href="s11-sources-panel.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+    <figure class="card">
+      <img class="thumb" src="png/s12-mobile.png" alt="S12 移动端双视图截图" loading="lazy">
+      <figcaption>
+        <div class="name"><span class="no mono">S12</span>移动端双视图 mobile</div>
+        <div class="meta">全站响应式基线 · Phase A/B</div>
+        <div class="from">借鉴：Dropbox 两层状态模型</div>
+        <a class="open" href="s12-mobile.html">打开可交互版 →</a>
+      </figcaption>
+    </figure>
+
+  </div>
+
+  <footer>
+    截图为本目录 12 个 HTML 原型的 2x 高清静态快照（chromium 1440×900 视口）；
+    tokens 与画框契约见 <a href="README.md">README.md</a>，色板见 <a href="tokens.css">tokens.css</a>。
+  </footer>
+
+</div>
+</body>
+</html>

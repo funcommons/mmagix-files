@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// 官网骨架：sticky 头部（滚动收窄：padding 换挡不动画 + 发丝线 opacity 淡入）+ index-columns footer。
+// 旧站骨架（/legacy 专用，站点 v2 并存期保持原样）：sticky 头部（滚动收窄：padding 换挡不动画 + 发丝线 opacity 淡入）+ index-columns footer。
 // 主题/品牌归 App.vue 的 FcThemeProvider；语言切换沿用 AppLayout 口径（fc-demo-locale 持久化）。
+// 站内链接一律指回 /legacy/*（新站占用了 / 与 /docs），/play/* 不变。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
@@ -10,8 +11,8 @@ const { t, locale } = useI18n();
 const route = useRoute();
 
 const navs = computed(() => [
-  { path: "/", label: t("site.nav.home"), exact: true },
-  { path: "/docs", label: t("site.nav.docs"), exact: false },
+  { path: "/legacy", label: t("site.nav.home"), exact: true },
+  { path: "/legacy/docs", label: t("site.nav.docs"), exact: false },
   { path: "/play/workspace", label: t("site.nav.play"), exact: false },
 ]);
 
@@ -42,27 +43,27 @@ const columns = computed(() => [
   {
     title: t("site.footer.product"),
     links: [
-      { label: t("site.nav.home"), to: "/" },
+      { label: t("site.nav.home"), to: "/legacy" },
       { label: t("site.nav.play"), to: "/play/workspace" },
-      { label: t("site.footer.capabilities"), to: "/#capabilities" },
+      { label: t("site.footer.capabilities"), to: "/legacy/#capabilities" },
     ],
   },
   {
     title: t("site.footer.docs"),
     links: [
-      { label: t("site.doclink.guide"), to: "/docs/user-guide" },
-      { label: t("site.doclink.deploy"), to: "/docs/deployment" },
-      { label: t("site.doclink.webdav"), to: "/docs/webdav" },
-      { label: t("docs.doc.changelog"), to: "/docs/changelog" },
+      { label: t("site.doclink.guide"), to: "/legacy/docs/user-guide" },
+      { label: t("site.doclink.deploy"), to: "/legacy/docs/deployment" },
+      { label: t("site.doclink.webdav"), to: "/legacy/docs/webdav" },
+      { label: t("docs.doc.changelog"), to: "/legacy/docs/changelog" },
     ],
   },
   {
     title: t("site.footer.protocol"),
     links: [
-      { label: t("site.doclink.jsdk"), to: "/docs/jsdk-api" },
-      { label: t("docs.doc.architecture"), to: "/docs/architecture" },
-      { label: t("docs.doc.plugin-system"), to: "/docs/plugin-system" },
-      { label: t("docs.doc.readme"), to: "/docs/readme" },
+      { label: t("site.doclink.jsdk"), to: "/legacy/docs/jsdk-api" },
+      { label: t("docs.doc.architecture"), to: "/legacy/docs/architecture" },
+      { label: t("docs.doc.plugin-system"), to: "/legacy/docs/plugin-system" },
+      { label: t("docs.doc.readme"), to: "/legacy/docs/readme" },
     ],
   },
 ]);

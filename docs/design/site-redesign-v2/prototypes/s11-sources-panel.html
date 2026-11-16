@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S11 · 数据源 sources-panel</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--paper-deep); padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--ink); font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+svg.ic { width: 24px; height: 24px; flex: 0 0 auto; }
+svg.ic-s { width: 18px; height: 18px; flex: 0 0 auto; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+.frame {
+  width: 1440px; height: 900px; flex: 0 0 auto;
+  background: var(--paper); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.tagbar {
+  flex: 0 0 28px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline);
+  color: var(--ink-faint); font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.tagbar .sep { color: var(--hairline); }
+.tagbar .note { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+
+.content { flex: 1; padding: var(--space-5) var(--space-6); overflow: hidden; }
+
+/* 页头 */
+.phead { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-5); }
+.phead h1 { font-size: 22px; font-weight: 700; }
+.phead .sub { font-size: 13px; color: var(--ink-faint); }
+.phead .right { margin-left: auto; }
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--space-4);
+  font-size: 14px; font-weight: 600; border-radius: var(--radius-sm);
+  background: var(--signal); color: var(--paper-raised); border: 1px solid var(--signal);
+}
+.btn-primary:hover { background: var(--signal-deep); border-color: var(--signal-deep); }
+.btn-outline { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--space-3); font-size: 12.5px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised); }
+.btn-outline:hover { border-color: var(--signal); color: var(--signal); }
+.tbtn { color: var(--ink-soft); font-size: 12.5px; }
+.tbtn:hover { color: var(--ink); text-decoration: underline; }
+.tbtn.sig { color: var(--signal); }
+.tbtn.sig:hover { text-decoration: underline; }
+.tbtn.dang { color: var(--danger); }
+.tbtn.dang:hover { text-decoration: underline; }
+
+.sec-t { display: flex; align-items: baseline; gap: var(--space-2); font-size: 13px; font-weight: 600; color: var(--ink-soft); margin: var(--space-4) 0 var(--space-3); }
+.sec-t .n { font-size: 12px; color: var(--ink-faint); font-weight: 400; }
+.sec-t:first-of-type { margin-top: 0; }
+
+/* 书签卡 */
+.src {
+  display: flex; align-items: center; gap: var(--space-4);
+  border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: var(--paper-raised); padding: var(--space-4) var(--space-5);
+  max-width: 1180px;
+}
+.src + .src { margin-top: var(--space-3); }
+.src:hover { transform: translateY(-2px); border-color: var(--ink-faint); }
+.lamp { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.lamp.ok { background: var(--ok); }
+.lamp.busy { background: var(--warn); }
+.lamp.off { background: var(--ink-faint); }
+.lamp.err { background: var(--danger); }
+.src .fico { color: var(--ink-soft); }
+.src .body { min-width: 0; }
+.src .nrow { display: flex; align-items: center; gap: var(--space-2); }
+.src .nrow strong { font-size: 14.5px; }
+.typetag { font-size: 11px; color: var(--ink-faint); border: 1px solid var(--hairline); border-radius: 999px; padding: 0 8px; height: 20px; display: inline-flex; align-items: center; }
+.src .vrow { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
+.src .vrow .k { color: var(--ink-faint); }
+.src .mrow { font-size: 12.5px; margin-top: 3px; }
+.src .mrow .k { color: var(--ink-faint); }
+.src .mrow .hint { color: var(--ink-faint); font-size: 11.5px; }
+.src .right { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.st.ok { color: var(--ok); }
+.st.busy { color: var(--warn); }
+.st.off { color: var(--ink-faint); font-weight: 400; }
+.st.err { color: var(--danger); }
+.ops { display: flex; align-items: center; gap: var(--space-3); }
+.ops .sp { width: 1px; height: 14px; background: var(--hairline); }
+/* 按用途分组添加 */
+.addwrap { display: flex; gap: var(--space-5); margin-top: var(--space-2); }
+.group { }
+.group .gt { font-size: 12px; color: var(--ink-faint); margin-bottom: var(--space-2); }
+.group .cards { display: flex; gap: var(--space-3); }
+.g-a { flex: 2; }
+.g-b { flex: 1; }
+.addcard {
+  flex: 1; display: flex; align-items: center; gap: var(--space-3); text-align: left;
+  border: 1px dashed var(--ink-faint); border-radius: var(--radius);
+  background: var(--paper); padding: var(--space-3) var(--space-4);
+}
+.addcard:hover { transform: translateY(-2px); border-color: var(--signal); }
+.addcard svg { color: var(--ink-soft); }
+.addcard .t { font-size: 13.5px; font-weight: 600; }
+.addcard .d { font-size: 12px; color: var(--ink-faint); }
+.addcard .go { margin-left: auto; color: var(--ink-faint); }
+.addcard:hover .go { color: var(--signal); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .src, .addcard, .btn-primary, .btn-outline, .tbtn { transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tagbar">
+    <span>S11 · 数据源 sources-panel</span><span class="sep">|</span>
+    <span>路由 /sources</span><span class="sep">|</span>
+    <span>Phase A</span><span class="sep">|</span>
+    <span>借鉴：Cyberduck 书签卡+状态灯 · Alist 驱动按用途分组</span>
+    <span class="note">状态灯四态：绿=已连空闲 · 橙=传输中 · 灰=未连 · 红=连不上</span>
+  </div>
+  <div class="content">
+
+    <div class="phead">
+      <h1>数据源</h1>
+      <span class="sub">连你自己的桶与 NAS——凭证只存在本机浏览器里</span>
+      <span class="right">
+        <button class="btn-primary">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg>
+          添加数据源
+        </button>
+      </span>
+    </div>
+
+    <div class="sec-t">已连接 <span class="n">4 个</span></div>
+    <div class="src">
+      <span class="lamp ok"></span>
+      <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.5" rx="7" ry="2.5"/><path d="M5 6.5v11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-11"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>
+      <div class="body">
+        <div class="nrow"><strong>公司 S3</strong><span class="typetag">S3 对象存储</span></div>
+        <div class="vrow"><span class="k">服务器地址</span> <span class="mono">http://localhost:9000</span> · <span class="k">存储空间</span> <span class="mono">mmagic-demo</span></div>
+        <div class="mrow"><span class="k">挂载路径</span> 团队资料 <span class="hint">= 你将看到的文件夹名</span></div>
+      </div>
+      <div class="right">
+        <span class="st ok"><span class="lamp ok"></span>已连接 · 空闲</span>
+        <div class="ops">
+          <button class="tbtn sig">打开</button><span class="sp"></span>
+          <button class="tbtn">编辑</button><span class="sp"></span>
+          <button class="tbtn">移除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="src">
+      <span class="lamp busy"></span>
+      <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/><circle cx="7.5" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="7.5" cy="16" r="0.9" fill="currentColor" stroke="none"/></svg>
+      <div class="body">
+        <div class="nrow"><strong>家庭 NAS WebDAV</strong><span class="typetag">WebDAV</span></div>
+        <div class="vrow"><span class="k">服务器地址</span> <span class="mono">http://localhost:5240</span> · <span class="k">用户名</span> <span class="mono">dav-user</span></div>
+        <div class="mrow"><span class="k">挂载路径</span> <span class="mono">/nas</span> <span class="hint">= 你将看到的文件夹名</span></div>
+      </div>
+      <div class="right">
+        <span class="st busy"><span class="lamp busy"></span>传输中 · 1 项</span>
+        <div class="ops">
+          <button class="tbtn sig">打开</button><span class="sp"></span>
+          <button class="tbtn">编辑</button><span class="sp"></span>
+          <button class="tbtn">移除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="src">
+      <span class="lamp off"></span>
+      <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.5" rx="7" ry="2.5"/><path d="M5 6.5v11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-11"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>
+      <div class="body">
+        <div class="nrow"><strong>测试桶</strong><span class="typetag">S3 对象存储</span></div>
+        <div class="vrow"><span class="k">服务器地址</span> <span class="mono">http://localhost:9000</span> · <span class="k">存储空间</span> <span class="mono">mmagic-demo</span></div>
+        <div class="mrow"><span class="k">挂载路径</span> <span class="mono">/demo</span> <span class="hint">= 你将看到的文件夹名</span></div>
+      </div>
+      <div class="right">
+        <span class="st off"><span class="lamp off"></span>未连接</span>
+        <div class="ops">
+          <button class="btn-outline">连接</button><span class="sp"></span>
+          <button class="tbtn">编辑</button><span class="sp"></span>
+          <button class="tbtn">移除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="src">
+      <span class="lamp err"></span>
+      <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.5" rx="7" ry="2.5"/><path d="M5 6.5v11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-11"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>
+      <div class="body">
+        <div class="nrow"><strong>备份 S3</strong><span class="typetag">S3 对象存储</span></div>
+        <div class="vrow"><span class="k">服务器地址</span> <span class="mono">http://localhost:9000</span></div>
+        <div class="mrow" style="color:var(--danger)">服务器无法访问——检查服务是否启动、地址是否打错</div>
+      </div>
+      <div class="right">
+        <span class="st err"><span class="lamp err"></span>连不上</span>
+        <div class="ops">
+          <button class="tbtn sig">诊断</button><span class="sp"></span>
+          <button class="tbtn">编辑</button><span class="sp"></span>
+          <button class="tbtn">移除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-t" style="margin-top:var(--space-6)">按用途添加 <span class="n">选型即分组——先想用途，再选协议</span></div>
+    <div class="addwrap">
+      <div class="group g-a">
+        <div class="gt">对象存储（S3 / R2 / OSS / MinIO）</div>
+        <div class="cards">
+          <button class="addcard">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.5" rx="7" ry="2.5"/><path d="M5 6.5v11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-11"/><path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>
+            <div><div class="t">S3 对象存储</div><div class="d">连 AWS、阿里云 OSS、MinIO 等兼容桶</div></div>
+            <svg class="ic-s go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 6.5 5.5 5.5-5.5 5.5"/></svg>
+          </button>
+          <button class="addcard">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5h10.2a3.8 3.8 0 0 0 .5-7.6 5.3 5.3 0 0 0-10.4-1.2A4.1 4.1 0 0 0 7 18.5z"/><path d="M12 15.5v-5"/><path d="m9.8 12.7 2.2-2.2 2.2 2.2"/></svg>
+            <div><div class="t">Cloudflare R2</div><div class="d">零出口流量费的 S3 兼容桶</div></div>
+            <svg class="ic-s go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 6.5 5.5 5.5-5.5 5.5"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="group g-b">
+        <div class="gt">NAS 与网关（WebDAV）</div>
+        <div class="cards">
+          <button class="addcard">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="6" rx="1.5"/><rect x="4" y="13" width="16" height="6" rx="1.5"/><circle cx="7.5" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="7.5" cy="16" r="0.9" fill="currentColor" stroke="none"/></svg>
+            <div><div class="t">WebDAV 服务器</div><div class="d">连 Synology NAS、坚果云、alist 网关</div></div>
+            <svg class="ic-s go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 6.5 5.5 5.5-5.5 5.5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

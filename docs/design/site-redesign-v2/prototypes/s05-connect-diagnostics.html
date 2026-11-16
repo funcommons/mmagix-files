@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S05 · 连接诊断 — MMagiX Files 站点 v2 原型</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper-deep); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    display: grid; place-items: center;
+    padding: 32px 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .stage {
+    width: 1440px; height: 900px;
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .labelbar {
+    height: 28px; flex: none;
+    display: flex; align-items: center; gap: var(--space-5);
+    padding: 0 var(--space-4);
+    font-size: 12px; color: var(--ink-faint);
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap; overflow: hidden;
+  }
+  .labelbar b { color: var(--ink-soft); font-weight: 600; }
+
+  a { color: var(--signal); text-decoration: none; }
+  a:hover { color: var(--signal-deep); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+    height: 36px; padding: 0 var(--space-4);
+    border-radius: var(--radius-sm);
+    font-size: 13.5px; font-weight: 500; font-family: inherit;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn-solid { background: var(--signal); color: var(--paper-raised); }
+  .btn-solid:hover { background: var(--signal-deep); }
+  .btn-ghost { background: var(--paper-raised); border-color: var(--hairline); color: var(--ink); }
+  .btn-ghost:hover { border-color: var(--ink-faint); background: var(--paper); }
+  .icon { width: 15px; height: 15px; flex: none; }
+
+  /* 页头 */
+  .head { flex: none; padding: 26px 56px 14px; }
+  .head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
+  .head .sub { margin-top: 4px; font-size: 13.5px; color: var(--ink-soft); }
+
+  /* 主体 5:7 */
+  .body {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 5fr 7fr; gap: var(--space-6);
+    padding: var(--space-3) 56px 32px;
+  }
+
+  /* 左：连接表单（可见字段只有 5 个） */
+  .form-card {
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-5);
+    display: flex; flex-direction: column;
+  }
+  .field { margin-bottom: var(--space-3); }
+  .field > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .field input[type="text"], .field input[type="password"] {
+    width: 100%; height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    background: var(--paper-raised);
+    font-size: 13px; font-family: inherit; color: var(--ink);
+  }
+  .field input:hover { border-color: var(--ink-faint); }
+  .field input:focus { outline: none; }
+  .field .help { margin-top: 3px; font-size: 11.5px; color: var(--ink-faint); }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+  .seg-chip {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    height: 36px; border-radius: var(--radius-sm);
+    border: 1px solid var(--hairline); background: var(--paper-raised);
+    font-size: 13px; color: var(--ink-soft);
+  }
+  .seg-chip svg { width: 15px; height: 15px; color: var(--ink-faint); }
+  .seg-chip:hover { border-color: var(--ink-faint); }
+  .seg-chip.sel { background: var(--signal-wash); border-color: var(--signal); color: var(--ink); font-weight: 600; }
+  .seg-chip.sel svg { color: var(--signal); }
+  .seg-chip .tick { display: none; width: 13px; height: 13px; }
+  .seg-chip.sel .tick { display: block; }
+
+  /* 底部：高级选项折叠 */
+  details.adv { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--hairline); }
+  details.adv summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--ink-soft); font-weight: 500;
+    padding: 6px 0;
+  }
+  details.adv summary::-webkit-details-marker { display: none; }
+  details.adv summary:hover { color: var(--ink); }
+  details.adv summary .chev { width: 13px; height: 13px; color: var(--ink-faint); }
+  details.adv[open] summary .chev { transform: rotate(90deg); }
+  .adv-row { display: grid; grid-template-columns: 170px 1fr; gap: var(--space-3); padding: 7px 0; font-size: 12.5px; }
+  .adv-row + .adv-row { border-top: 1px dashed var(--hairline); }
+  .adv-row .k { color: var(--ink); font-weight: 500; }
+  .adv-row .k .mono { font-weight: 400; font-size: 11px; color: var(--ink-faint); }
+  .adv-row .v { color: var(--ink-soft); }
+
+  /* 右：诊断步骤条——三态 */
+  .results { display: flex; flex-direction: column; gap: var(--space-4); min-height: 0; }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+  .state { padding-top: var(--space-2); }
+  .state + .state, .fail-zone { border-top: 0; }
+  .state-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; color: var(--ink-soft);
+    margin-bottom: var(--space-2);
+  }
+  .state-tag i { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+  .dot-run { background: var(--warn); }
+  .dot-ok { background: var(--ok); }
+  .dot-fail { background: var(--danger); }
+
+  /* 五步条 */
+  .steps { display: flex; align-items: flex-start; }
+  .st { flex: none; width: 62px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .st-ball {
+    width: 28px; height: 28px; border-radius: 999px;
+    display: grid; place-items: center;
+    border: 1.5px solid var(--hairline); background: var(--paper-raised);
+    font-size: 12px; color: var(--ink-faint);
+  }
+  .st-done .st-ball { border-color: var(--ok); color: var(--ok); }
+  .st-cur .st-ball { border-color: var(--signal); color: var(--signal); }
+  .st-fail .st-ball { border-color: var(--danger); color: var(--danger); }
+  .st svg { width: 14px; height: 14px; }
+  .st-name { font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
+  .st-fail .st-name { color: var(--danger); font-weight: 600; }
+  .st-line { flex: 1; height: 2px; margin-top: 13px; background: var(--hairline); border-radius: 999px; }
+  .st-line.done { background: var(--ok); }
+  .state .caption { margin-top: var(--space-2); font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; }
+  .state .caption b { color: var(--ink); font-weight: 600; }
+  .caption-ok b { color: var(--ok); }
+  .caption-fail b { color: var(--danger); }
+
+  /* 失败态：内联诊断卡 */
+  .diag-card {
+    margin-top: var(--space-2);
+    background: var(--paper-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-4) var(--space-5);
+  }
+  .diag-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .diag-head i.red { width: 9px; height: 9px; border-radius: 999px; background: var(--danger); display: inline-block; }
+  .diag-head strong { font-size: 14.5px; }
+  .diag-tag {
+    margin-left: auto;
+    padding: 2px 10px; border: 1px solid var(--danger); border-radius: 999px;
+    font-size: 11.5px; font-weight: 600; color: var(--danger);
+    white-space: nowrap;
+  }
+  .check-head { margin-top: var(--space-3); font-size: 12.5px; color: var(--ink-soft); }
+  .check-list { margin-top: var(--space-2); display: grid; gap: 6px; }
+  .check-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.6; }
+  .check-row svg { width: 14px; height: 14px; color: var(--danger); flex: none; transform: translateY(2px); }
+  .check-row .code { padding: 1px 6px; background: var(--paper-deep); border-radius: 4px; font-size: 12px; color: var(--ink); white-space: nowrap; }
+  .check-row .why { color: var(--ink-faint); font-size: 12px; }
+
+  .snippet { margin-top: var(--space-3); }
+  .snippet-head { display: flex; align-items: center; justify-content: space-between; }
+  .snippet-head span { font-size: 12px; color: var(--ink-faint); }
+  .copy-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 26px; padding: 0 10px;
+    border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+    background: var(--paper-raised); color: var(--ink-soft);
+    font-size: 12px; font-family: inherit; cursor: pointer;
+  }
+  .copy-btn:hover { border-color: var(--ink-faint); color: var(--ink); }
+  .copy-btn svg { width: 12px; height: 12px; }
+  pre {
+    margin-top: 6px; padding: 10px 14px;
+    background: var(--paper-deep);
+    border-radius: var(--radius-sm);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px; line-height: 1.7; color: var(--ink);
+    overflow-x: auto;
+  }
+
+  /* 另外两类原因（收起的分诊） */
+  .triage { margin-top: var(--space-2); border-top: 1px dashed var(--hairline); }
+  .triage details { border-bottom: 1px dashed var(--hairline); }
+  .triage details:last-child { border-bottom: 0; }
+  .triage summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 0; font-size: 13px; color: var(--ink); font-weight: 500;
+  }
+  .triage summary::-webkit-details-marker { display: none; }
+  .triage summary .chev { width: 13px; height: 13px; color: var(--ink-faint); }
+  .triage .t-body { padding: 0 0 12px 19px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.7; }
+  .triage .t-body .code { padding: 1px 6px; background: var(--paper-deep); border-radius: 4px; font-size: 11.5px; color: var(--ink); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .btn, .seg-chip, .copy-btn, a, input, details.adv summary, .triage summary { transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+    .triage summary .chev, details.adv summary .chev { transition: transform .15s ease; }
+    /* 进行中：第 3 步转圈 */
+    .spin { animation: spin 1s linear infinite; transform-origin: center; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="labelbar">
+    <b>S05</b><span>连接诊断</span><span>路由 /guide step2</span><span>Phase A</span>
+    <span>借鉴：Cyberduck 诊断内联失败态 · Alist 选项内联权衡提示 · Cloudflare R2 region 口径</span>
+  </div>
+
+  <header class="head">
+    <h1>测试连接</h1>
+    <p class="sub">填最少的信息——其余都在高级选项里；失败会告诉你卡在哪一步、怎么修。</p>
+  </header>
+
+  <div class="body">
+
+    <!-- 左：连接表单（本屏可见字段只有 5 个） -->
+    <section class="form-card">
+      <div class="field">
+        <label>存储类型</label>
+        <div class="seg">
+          <span class="seg-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14l-1.5 12a2 2 0 0 1-2 1.8h-7A2 2 0 0 1 6.5 19L5 7z"/><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3"/></svg>
+            S3 对象存储
+          </span>
+          <span class="seg-chip sel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+            WebDAV 服务器
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+          </span>
+        </div>
+        <p class="help">连到哪里——二选一（对照 backend.type）</p>
+      </div>
+
+      <div class="field">
+        <label>服务器地址</label>
+        <input type="text" value="http://localhost:9000">
+        <p class="help">服务器的根地址，含端口（对照 endpoint）</p>
+      </div>
+
+      <div class="field">
+        <label>访问密钥 ID</label>
+        <input type="text" value="rag_flow">
+        <p class="help">公开的标识，和访问密钥成对申请（对照 accessKeyId）</p>
+      </div>
+
+      <div class="field">
+        <label>访问密钥</label>
+        <input type="password" placeholder="仅显示一次">
+        <p class="help">关掉这页就再也看不到（对照 accessKeySecret）</p>
+      </div>
+
+      <div class="field">
+        <label>挂载路径</label>
+        <input type="text" value="/demo">
+        <p class="help">=你将看到的名字（对照 mountPath）</p>
+      </div>
+
+      <!-- 全屏唯一主按钮 -->
+      <button type="button" class="btn btn-solid" style="width:100%; height:40px; margin-top:var(--space-2)">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V8zM12 16v5"/></svg>
+        测试连接
+      </button>
+
+      <!-- 底部：高级选项折叠（不占必见面字段数） -->
+      <details class="adv">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          高级（可选）——区域标识 · 文件夹 · 会话密钥 · 缓存有效期
+        </summary>
+        <div class="adv-row"><span class="k">区域标识 <span class="mono">region</span></span><span class="v">按厂商文档填；多数实现 us-east-1 可用</span></div>
+        <div class="adv-row"><span class="k">文件夹 <span class="mono">prefix</span></span><span class="v mono">sessions/demo/</span></div>
+        <div class="adv-row"><span class="k">会话密钥 <span class="mono">sessionToken</span></span><span class="v">临时凭证，可留空</span></div>
+        <div class="adv-row"><span class="k">缓存有效期 <span class="mono">ttl</span></span><span class="v">3600 秒——列表多久自动刷新</span></div>
+      </details>
+    </section>
+
+    <!-- 右：诊断步骤条（同一流程的三态示例） -->
+    <section class="results">
+      <div class="duo">
+        <!-- 状态一：进行中 -->
+        <div class="state">
+          <span class="state-tag"><i class="dot-run"></i>进行中 · 第 3 步</span>
+          <div class="steps" role="img" aria-label="诊断五步：解析地址、安全预检已完成，身份验证进行中，列目录与完成待执行">
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">解析地址</span>
+            </div>
+            <span class="st-line done"></span>
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">安全预检</span>
+            </div>
+            <span class="st-line"></span>
+            <div class="st st-cur">
+              <span class="st-ball">
+                <svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="38 18"/></svg>
+              </span>
+              <span class="st-name">身份验证</span>
+            </div>
+            <span class="st-line"></span>
+            <div class="st">
+              <span class="st-ball">4</span>
+              <span class="st-name">列目录</span>
+            </div>
+            <span class="st-line"></span>
+            <div class="st">
+              <span class="st-ball">5</span>
+              <span class="st-name">完成</span>
+            </div>
+          </div>
+          <p class="caption">正在核对访问密钥——已通过 <b>解析地址</b> 与 <b>安全预检</b>。</p>
+        </div>
+
+        <!-- 状态二：成功 -->
+        <div class="state">
+          <span class="state-tag"><i class="dot-ok"></i>成功</span>
+          <div class="steps" role="img" aria-label="诊断五步全部通过">
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">解析地址</span>
+            </div>
+            <span class="st-line done"></span>
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">安全预检</span>
+            </div>
+            <span class="st-line done"></span>
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">身份验证</span>
+            </div>
+            <span class="st-line done"></span>
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">列目录</span>
+            </div>
+            <span class="st-line done"></span>
+            <div class="st st-done">
+              <span class="st-ball"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg></span>
+              <span class="st-name">完成</span>
+            </div>
+          </div>
+          <p class="caption caption-ok"><b>五步全绿</b>——挂载为 /demo，文件列表已就绪。</p>
+          <a class="btn btn-ghost" href="s06-browse-grid.html" style="margin-top:var(--space-2)">进入文件
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <!-- 状态三：失败（本屏主角） -->
+      <div class="fail-zone">
+        <span class="state-tag"><i class="dot-fail"></i>失败 · 卡在第 2 步「安全预检」</span>
+        <div class="diag-card">
+          <div class="diag-head">
+            <i class="red"></i>
+            <strong>连不上 <span class="mono">http://localhost:9000</span></strong>
+            <span class="diag-tag">已定位：跨域（CORS）未放行</span>
+          </div>
+
+          <p class="check-head">浏览器在「安全预检」被挡住。到存储的控制台（或网关）补齐四项：</p>
+          <div class="check-list">
+            <div class="check-row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+              <span><span class="code mono">AllowedOrigins</span> 加 <span class="code mono">http://localhost:5200</span> <span class="why">——演示站就跑在这个地址</span></span>
+            </div>
+            <div class="check-row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+              <span><span class="code mono">AllowedMethods</span> 放行 <span class="code mono">GET · PUT · POST · DELETE · HEAD</span></span>
+            </div>
+            <div class="check-row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+              <span><span class="code mono">AllowedHeaders</span> 设为 <span class="code mono">*</span></span>
+            </div>
+            <div class="check-row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+              <span><span class="code mono">ExposeHeaders</span> 加 <span class="code mono">ETag</span> <span class="why">——缺这条，大文件上传必败</span></span>
+            </div>
+          </div>
+
+          <div class="snippet">
+            <div class="snippet-head">
+              <span>网关侧等效配置示例（nginx）</span>
+              <button type="button" class="copy-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制
+              </button>
+            </div>
+<pre>location / {
+    add_header Access-Control-Allow-Origin  "http://localhost:5200";
+    add_header Access-Control-Allow-Methods "GET, PUT, POST, DELETE, HEAD";
+    add_header Access-Control-Allow-Headers  "*";
+    add_header Access-Control-Expose-Headers "ETag";
+}</pre>
+          </div>
+
+          <!-- 另外两类原因（收起的分诊） -->
+          <div class="triage">
+            <details>
+              <summary>
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                也可能是「凭证被拒」
+              </summary>
+              <div class="t-body">检查访问密钥 ID 与访问密钥是否成对；密钥仅显示一次，丢了就到控制台重新签发。</div>
+            </details>
+            <details>
+              <summary>
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                也可能是「服务器没开或地址打错」
+              </summary>
+              <div class="t-body">演示服务没起？跑 <span class="code mono">pnpm dev:webdav</span>（端口 5240），再核对地址里的协议与端口。</div>
+            </details>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+</div>
+</body>
+</html>

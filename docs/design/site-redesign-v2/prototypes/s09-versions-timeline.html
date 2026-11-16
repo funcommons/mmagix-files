@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S09 · 版本时间线 versions-timeline</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--paper-deep); padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--ink); font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+svg.ic { width: 24px; height: 24px; flex: 0 0 auto; }
+svg.ic-s { width: 18px; height: 18px; flex: 0 0 auto; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+.frame {
+  width: 1440px; height: 900px; flex: 0 0 auto;
+  background: var(--paper); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.tagbar {
+  flex: 0 0 28px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline);
+  color: var(--ink-faint); font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.tagbar .sep { color: var(--hairline); }
+.tagbar .note { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+
+.content { flex: 1; padding: var(--space-5) var(--space-6); display: flex; flex-direction: column; min-height: 0; }
+
+/* 文件头 */
+.fhead { display: flex; align-items: center; gap: var(--space-3); padding-bottom: var(--space-4); border-bottom: 1px solid var(--hairline); }
+.fhead .fico { color: var(--signal); }
+.fhead strong { font-size: 16px; }
+.fhead .meta { font-size: 12.5px; color: var(--ink-faint); }
+.fhead .right { margin-left: auto; display: flex; align-items: center; gap: var(--space-4); }
+
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.chip.cur { background: var(--signal-wash); color: var(--signal); font-weight: 600; }
+.chip.del { border: 1px solid var(--hairline); color: var(--ink-soft); }
+
+.toggle { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--ink-soft); }
+.toggle .pill { width: 40px; height: 22px; border-radius: 999px; background: var(--signal); position: relative; }
+.toggle .pill::after { content: ""; position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper-raised); }
+
+.btn-outline { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--space-3); font-size: 13px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised); }
+.btn-outline:hover { border-color: var(--signal); color: var(--signal); }
+.btn-ghost { color: var(--ink-soft); display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--space-2); font-size: 13px; }
+.btn-ghost:hover { color: var(--ink); }
+.btn-sm { height: 28px; padding: 0 var(--space-3); font-size: 12.5px; }
+.btn-primary { background: var(--signal); color: var(--paper-raised); border: 1px solid var(--signal); }
+.btn-primary:hover { background: var(--signal-deep); border-color: var(--signal-deep); color: var(--paper-raised); }
+.btn-danger-t { color: var(--danger); font-size: 12.5px; }
+.btn-danger-t:hover { text-decoration: underline; }
+.btn-dis { color: var(--ink-faint); border: 1px solid var(--hairline); background: var(--paper-raised); cursor: default; }
+.linklike { color: var(--signal); font-size: 12.5px; display: inline-flex; align-items: center; }
+.linklike:hover { text-decoration: underline; }
+
+/* 主体两栏 */
+.cols { flex: 1; display: flex; gap: var(--space-6); padding-top: var(--space-5); min-height: 0; }
+.col-l { flex: 1.15; min-width: 0; }
+.col-r { flex: 1; min-width: 0; }
+
+/* 时间线 */
+.tl-title { font-size: 13px; font-weight: 600; color: var(--ink-soft); margin-bottom: var(--space-4); }
+.timeline { position: relative; padding-left: 34px; }
+.timeline::before { content: ""; position: absolute; left: 9px; top: 10px; bottom: 10px; width: 2px; background: var(--signal); }
+.node { position: relative; padding: 0 0 var(--space-5) 0; }
+.node .nd { position: absolute; left: -34px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--paper-raised); border: 2px solid var(--hairline); }
+.node.cur .nd { width: 20px; height: 20px; left: -37px; top: 0; border: 3px solid var(--signal); }
+.node .vh { display: flex; align-items: baseline; gap: var(--space-3); }
+.node .vh .v { font-size: 15px; font-weight: 700; }
+.node.cur .vh .v { color: var(--signal); }
+.node .vh .when { font-size: 12.5px; color: var(--ink-faint); }
+.node .nmeta { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+.node .acts { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+
+.diffchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 2px 8px; background: var(--paper-raised); }
+.diffchip .add { color: var(--signal); font-weight: 600; }
+.diffchip .del { color: var(--danger); font-weight: 600; }
+
+.hint { position: relative; display: inline-flex; }
+.tip { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20; display: none; white-space: nowrap; background: var(--paper-raised); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 5px 10px; font-size: 12px; color: var(--ink-soft); }
+.hint:hover .tip, .hint:focus-within .tip { display: block; }
+/* 右栏：对比预览 + 已删除对象 */
+.sec-t { font-size: 13px; font-weight: 600; color: var(--ink-soft); display: flex; align-items: baseline; gap: var(--space-2); margin-bottom: var(--space-3); }
+.sec-t .sub { font-weight: 400; font-size: 12px; color: var(--ink-faint); }
+.diffbox { border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised); overflow: hidden; margin-bottom: var(--space-2); }
+.dline { display: flex; gap: var(--space-3); padding: 5px 14px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; color: var(--ink-soft); }
+.dline .sign { width: 12px; flex: 0 0 auto; }
+.dline.add { background: var(--signal-wash); color: var(--ink); }
+.dline.add .sign { color: var(--signal); font-weight: 700; }
+.dline.del { background: var(--paper-deep); color: var(--danger); }
+.dline.del .txt { text-decoration: line-through; }
+.dline.del .sign { color: var(--danger); font-weight: 700; }
+.dsum { display: flex; align-items: center; gap: var(--space-3); font-size: 12.5px; color: var(--ink-soft); padding: var(--space-2) 2px; }
+.dsum b { font-weight: 600; color: var(--ink); }
+
+.del-sec { margin-top: var(--space-5); border-top: 1px solid var(--hairline); padding-top: var(--space-4); }
+.delrow { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
+.delrow svg { color: var(--ink-soft); }
+.delrow .n { font-size: 13px; font-weight: 500; }
+.delrow .m { font-size: 12px; color: var(--ink-faint); }
+.delrow .right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.rewindchip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--signal); background: var(--signal-wash); border-radius: 999px; padding: 2px 10px; font-weight: 600; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn-outline, .btn-ghost, .btn-primary, .btn-danger-t, .btn-dis, .linklike, .delrow { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tagbar">
+    <span>S09 · 版本时间线 versions-timeline</span><span class="sep">|</span>
+    <span>SPA 提案（frontend）</span><span class="sep">|</span>
+    <span>Phase B · 未实施</span><span class="sep">|</span>
+    <span>借鉴：MinIO Rewind · Nextcloud 版本 tab</span>
+    <span class="note">注记：文件名是名字，版本是历史——「草稿 v2」有 v1–v3 不矛盾</span>
+  </div>
+  <div class="content">
+
+    <!-- 文件头 -->
+    <div class="fhead">
+      <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+      <strong class="mono">notes/草稿 v2.md</strong>
+      <span class="chip cur">当前版本 v3</span>
+      <span class="meta">2.1 KB · 修改于 2026-11-04 09:12 · 共 3 个版本</span>
+      <div class="right">
+        <button class="toggle"><span class="pill"></span>查看已删除对象</button>
+        <button class="btn-outline">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9.5 7V5.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7"/><path d="M7 7l.8 12a1 1 0 0 0 1 .9h6.4a1 1 0 0 0 1-.9L17 7"/><path d="M10.5 10.5v6M13.5 10.5v6"/></svg>
+          回收站
+        </button>
+      </div>
+    </div>
+    <div class="cols">
+
+      <!-- 左：竖向时间线 -->
+      <div class="col-l">
+        <div class="tl-title">历史版本 · 新→旧</div>
+        <div class="timeline">
+
+          <div class="node cur">
+            <span class="nd"></span>
+            <div class="vh"><span class="v">v3</span><span class="chip cur">当前</span><span class="when">2026-11-04 09:12</span></div>
+            <div class="nmeta">2.1 KB · 补充了行动项</div>
+            <div class="acts">
+              <button class="btn-outline btn-sm btn-dis" aria-disabled="true">恢复到此版本</button>
+              <button class="linklike">下载此版本</button>
+            </div>
+          </div>
+
+          <div class="node hint">
+            <span class="nd"></span>
+            <div class="vh"><span class="v">v2</span><span class="when">2026-11-03 18:40</span>
+              <span class="diffchip"><span class="add">+2 段</span><span class="del">−1 段</span></span>
+            </div>
+            <div class="nmeta">1.8 KB · 改了预算数字</div>
+            <span class="tip">v2 → v3：净增 340 字节（+2 段 −1 段）</span>
+            <div class="acts">
+              <button class="btn-outline btn-sm btn-primary">恢复到此版本</button>
+              <button class="linklike">下载此版本</button>
+            </div>
+          </div>
+
+          <div class="node">
+            <span class="nd"></span>
+            <div class="vh"><span class="v">v1</span><span class="when">2026-11-02 10:05</span></div>
+            <div class="nmeta">1.2 KB · 初稿</div>
+            <div class="acts">
+              <button class="btn-outline btn-sm">恢复到此版本</button>
+              <button class="linklike">下载此版本</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 右：对比预览 + 已删除对象 -->
+      <div class="col-r">
+        <div class="sec-t">对比预览 <span class="sub mono">v2 → v3</span></div>
+        <div class="diffbox">
+          <div class="dline"><span class="sign"> </span><span class="txt">## 预算</span></div>
+          <div class="dline del"><span class="sign">−</span><span class="txt">预算合计 12,400 元</span></div>
+          <div class="dline add"><span class="sign">+</span><span class="txt">预算合计 15,800 元</span></div>
+          <div class="dline add"><span class="sign">+</span><span class="txt">新增「行动项」一节（3 条）</span></div>
+        </div>
+        <div class="dsum"><b>净增 340 字节</b><span>·</span><span class="mono">+2 段 −1 段</span><span>·</span><span>恢复 v2 会丢弃这些改动</span></div>
+
+        <div class="del-sec">
+          <div class="sec-t">已删除对象 <span class="rewindchip">Rewind 模式已开启</span></div>
+
+          <div class="delrow">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg>
+            <div><div class="n mono">reports/2026q4.md</div><div class="m">1.9 KB · 删除于 2026-11-02 14:30</div></div>
+            <div class="right">
+              <button class="btn-outline btn-sm">恢复</button>
+              <button class="btn-danger-t">彻底删除</button>
+            </div>
+          </div>
+
+          <div class="delrow">
+            <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m6.5 16.5 4-4 3 3 2-2 2 2"/></svg>
+            <div><div class="n mono">logo.svg</div><div class="m">6.8 KB · 删除于 2026-10-28 10:05</div></div>
+            <div class="right">
+              <button class="btn-outline btn-sm">恢复</button>
+              <button class="btn-danger-t">彻底删除</button>
+            </div>
+          </div>
+
+          <div style="font-size:12px;color:var(--ink-faint);padding-top:var(--space-2)">回收站里的对象保留 30 天，之后自动清除。</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

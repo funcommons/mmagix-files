@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S08 · 传输中心 transfer-center</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--paper-deep); padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--ink); font-size: 14px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+svg.ic { width: 24px; height: 24px; flex: 0 0 auto; }
+svg.ic-s { width: 18px; height: 18px; flex: 0 0 auto; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+.frame {
+  width: 1440px; height: 900px; flex: 0 0 auto;
+  background: var(--paper); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.tagbar {
+  flex: 0 0 28px; display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-4); border-bottom: 1px solid var(--hairline);
+  color: var(--ink-faint); font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.tagbar .sep { color: var(--hairline); }
+.tagbar .note { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+
+.stage { flex: 1; position: relative; overflow: hidden; }
+
+/* 背景：虚化的文件列表（不抢戏） */
+.bg { position: absolute; inset: 0; padding: var(--space-5) var(--space-6); filter: blur(2px); opacity: 0.5; user-select: none; pointer-events: none; }
+.bg .tools { display: flex; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); color: var(--ink-soft); font-size: 13px; }
+.bg .tools .fake { border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised); padding: 5px 12px; }
+.bg .tools .search { margin-left: auto; width: 260px; color: var(--ink-faint); }
+.bgrow { display: flex; align-items: center; gap: var(--space-3); padding: 9px var(--space-3); border-bottom: 1px solid var(--hairline); background: var(--paper-raised); }
+.bgrow .n { font-size: 13px; font-weight: 500; }
+.bgrow .m { margin-left: auto; font-size: 11.5px; color: var(--ink-faint); }
+.bgrow svg { color: var(--ink-soft); }
+
+/* 顶部拖入确认条（拖拽悬停态） */
+.drop {
+  position: absolute; top: var(--space-5); left: 50%; transform: translateX(-50%);
+  width: 660px; z-index: 30;
+  display: flex; align-items: center; gap: var(--space-3);
+  background: var(--paper-raised); border: 1.5px dashed var(--signal);
+  border-radius: var(--radius); padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+.drop svg { color: var(--signal); }
+.drop .t1 { font-size: 14px; font-weight: 600; }
+.drop .t2 { font-size: 12px; color: var(--ink-faint); }
+.drop .cancel { margin-left: auto; }
+
+/* 右上传输入口 */
+.entry {
+  position: absolute; top: var(--space-5); right: var(--space-6); z-index: 20;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 var(--space-3); font-size: 13px;
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised);
+}
+.entry:hover { border-color: var(--signal); color: var(--signal); }
+.entry .badge {
+  position: absolute; top: -7px; right: -7px; min-width: 17px; height: 17px;
+  border-radius: 999px; background: var(--warn); color: var(--paper-raised);
+  font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+}
+/* 任务卡 */
+.tasks { position: absolute; top: 120px; left: 50%; transform: translateX(-50%); width: 760px; z-index: 25; display: flex; flex-direction: column; gap: var(--space-3); }
+.task {
+  display: flex; align-items: center; gap: var(--space-4);
+  background: var(--paper-raised); border: 1px solid var(--hairline);
+  border-radius: var(--radius); padding: var(--space-4) var(--space-5);
+}
+.task:hover { transform: translateY(-2px); border-color: var(--ink-faint); }
+.task .fico { color: var(--ink-soft); }
+.task .name { font-size: 14px; font-weight: 600; }
+.task .sub { font-size: 12px; color: var(--ink-faint); }
+.state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.state .sd { width: 7px; height: 7px; border-radius: 50%; }
+.state.up { color: var(--warn); } .state.up .sd { background: var(--warn); }
+.state.done { color: var(--ok); } .state.done .sd { background: var(--ok); }
+.state.fail { color: var(--danger); } .state.fail .sd { background: var(--danger); }
+
+/* 进度环 */
+.ring { position: relative; width: 52px; height: 52px; flex: 0 0 auto; }
+.ring svg { width: 52px; height: 52px; transform: rotate(-90deg); }
+.ring .pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+
+/* 分段格子图（分块可视化） */
+.segs { display: flex; gap: 4px; align-items: center; }
+.segs i { width: 18px; height: 12px; border-radius: 3px; background: var(--paper-deep); border: 1px solid var(--hairline); }
+.segs i.f { background: var(--signal); border-color: var(--signal); }
+.segs .lbl { font-size: 12px; color: var(--ink-soft); margin-left: 6px; }
+
+.btn-outline { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 var(--space-3); font-size: 13px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--paper-raised); }
+.btn-outline:hover { border-color: var(--ink-faint); }
+.btn-cancel { color: var(--ink-soft); }
+.btn-cancel:hover { color: var(--ink); }
+.btn-retry { border-color: var(--danger); color: var(--danger); background: var(--paper-raised); }
+.btn-retry:hover { background: var(--paper-deep); }
+.btn-retry svg { color: var(--danger); }
+
+/* 底部停靠条（全局聚合） */
+.dock {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 56px; z-index: 40;
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-5); background: var(--paper-raised);
+  border-top: 1px solid var(--hairline); box-shadow: var(--shadow-card);
+}
+.dock .dt { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.dock .agg { font-size: 12.5px; color: var(--ink-soft); }
+.dock .agg b { color: var(--warn); font-weight: 600; }
+.dock .grow { flex: 1; }
+.dock .minibar { width: 220px; height: 4px; border-radius: 2px; background: var(--paper-deep); overflow: hidden; }
+.dock .minibar i { display: block; width: 62%; height: 100%; background: var(--signal); }
+
+/* 收起态对照小图 */
+.refg { position: absolute; right: var(--space-6); bottom: 76px; z-index: 20; }
+.refg .cap { font-size: 11px; color: var(--ink-faint); margin-bottom: 4px; text-align: right; }
+.refg .box {
+  width: 236px; height: 56px; border: 1px dashed var(--ink-faint); border-radius: var(--radius-sm);
+  display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3);
+  background: var(--paper); color: var(--ink-soft); font-size: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .task, .entry, .btn-outline, .btn-cancel { transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tagbar">
+    <span>S08 · 传输中心 transfer-center</span><span class="sep">|</span>
+    <span>SPA 提案（frontend）</span><span class="sep">|</span>
+    <span>Phase B · 未实施</span><span class="sep">|</span>
+    <span>借鉴：Synology 底部停靠传输队列 · MinIO「有活动才出现」</span>
+    <span class="note">画的是拖拽悬停那一帧；分块进度到段粒度，规避「进度停顿」反例</span>
+  </div>
+  <div class="stage">
+    <!-- 背景：虚化文件列表 -->
+    <div class="bg" aria-hidden="true">
+      <div class="tools">
+        <span class="fake">上传</span><span class="fake">新建文件夹</span>
+        <span class="fake search">搜索文件…</span>
+      </div>
+      <div class="bgrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg><span class="n">hello.md</span><span class="m">287 B · 2026-11-04 09:12</span></div>
+      <div class="bgrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10h16M10 10v9"/></svg><span class="n">demo.csv</span><span class="m">18 KB · 2026-10-28 10:05</span></div>
+      <div class="bgrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m6.5 16.5 4-4 3 3 2-2 2 2"/></svg><span class="n">logo.svg</span><span class="m">6.8 KB · 2026-10-28 10:05</span></div>
+      <div class="bgrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2.5H18.5A1.5 1.5 0 0 1 20 9.5V17a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17z"/></svg><span class="n">notes/</span><span class="m">2 个文件</span></div>
+      <div class="bgrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg><span class="n">notes/meeting.md</span><span class="m">3.4 KB · 2026-11-03 18:40</span></div>
+      <div class="bgrow"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9.5 12.5h5M9.5 16h5"/></svg><span class="n">notes/草稿 v2.md</span><span class="m">2.1 KB · 2026-11-04 08:05</span></div>
+    </div>
+
+    <!-- 顶部拖入确认条：拖拽悬停态 -->
+    <div class="drop" role="status">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V5"/><path d="m8 8.5 4-4 4 4"/><path d="M5 16v2a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 18v-2"/></svg>
+      <div>
+        <div class="t1">松开以上传 3 个文件到 notes/</div>
+        <div class="t2">已识别 3 个文件 · 共 42.8 MB</div>
+      </div>
+      <button class="btn-outline btn-cancel cancel">取消</button>
+    </div>
+
+    <!-- 右上传输口 -->
+    <button class="entry">
+      <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13.5h4l1.5 2.5h5l1.5-2.5h4"/><path d="M4 13.5V17a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 17v-3.5"/><path d="M12 4v6.5"/><path d="m9.5 8.5 2.5 2.5 2.5-2.5"/></svg>
+      传输
+      <span class="badge">2</span>
+    </button>
+    <!-- 主体任务列表：三卡 -->
+    <div class="tasks">
+
+      <div class="task">
+        <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="m6.5 16.5 4-4 3 3 2-2 2 2"/></svg>
+        <div style="min-width:0">
+          <div class="name">logo.svg</div>
+          <div class="sub">已保存进度，中断可续传</div>
+        </div>
+        <span class="state up"><span class="sd"></span>上传中</span>
+        <div style="margin-left:auto"></div>
+        <div class="ring">
+          <svg viewBox="0 0 52 52" fill="none">
+            <circle cx="26" cy="26" r="21" style="stroke:var(--paper-deep)" stroke-width="5"/>
+            <circle cx="26" cy="26" r="21" style="stroke:var(--signal)" stroke-width="5" stroke-linecap="round" stroke-dasharray="81.7 131.9"/>
+          </svg>
+          <span class="pct">62%</span>
+        </div>
+        <div class="sub" style="width:150px">2.4 MB/s<br>剩余 8 秒</div>
+      </div>
+
+      <div class="task">
+        <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 10h16M10 10v9"/></svg>
+        <div style="min-width:0">
+          <div class="name">demo.csv</div>
+          <div class="sub">18 KB</div>
+        </div>
+        <span class="state done"><span class="sd"></span>已完成</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" style="stroke:var(--ok);margin-left:auto" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.5 2.5 2.5 4.8-5"/></svg>
+        <div class="sub" style="width:150px">今天 09:12<br>用时 6 秒</div>
+      </div>
+
+      <div class="task">
+        <svg class="ic fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="6" rx="1.2"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/><path d="M10.5 13.5h3"/></svg>
+        <div style="min-width:0">
+          <div class="name">backup.zip</div>
+          <div class="sub" style="color:var(--danger)">网络中断，已传 3/5 段</div>
+        </div>
+        <span class="state fail"><span class="sd"></span>失败</span>
+        <div style="margin-left:auto"></div>
+        <div class="segs">
+          <i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i>
+          <span class="lbl">分段 3/5</span>
+        </div>
+        <button class="btn-outline btn-retry" style="width:150px;justify-content:center">
+          <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5v5h5"/><path d="M4.6 14a8 8 0 1 0 1.7-8.6L4 8"/></svg>
+          重试
+        </button>
+      </div>
+    </div>
+
+    <!-- 收起态对照小图 -->
+    <div class="refg">
+      <div class="cap">对照：收起态 · 高 56px</div>
+      <div class="box">
+        <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13.5h4l1.5 2.5h5l1.5-2.5h4"/><path d="M4 13.5V17a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 17v-3.5"/><path d="M12 4v6.5"/><path d="m9.5 8.5 2.5 2.5 2.5-2.5"/></svg>
+        传输 · 2 项进行中
+        <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg>
+      </div>
+    </div>
+
+    <!-- 底部停靠条：全局聚合 -->
+    <div class="dock">
+      <span class="dt">
+        <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13.5h4l1.5 2.5h5l1.5-2.5h4"/><path d="M4 13.5V17a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 17v-3.5"/><path d="M12 4v6.5"/><path d="m9.5 8.5 2.5 2.5 2.5-2.5"/></svg>
+        传输
+      </span>
+      <span class="agg"><b>2 项任务进行中</b> · 总速度 2.4 MB/s</span>
+      <span class="grow"></span>
+      <span class="minibar"><i></i></span>
+      <button class="btn-outline btn-cancel">
+        收起
+        <svg class="ic-s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg>
+      </button>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
